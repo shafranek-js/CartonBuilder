@@ -47,6 +47,10 @@ function showStep(step) {
   } else if (step === 'preview') {
     requestAnimationFrame(() => artworkApp.renderPreview());
   }
+
+  if (artworkApp?.artwork.hasArtwork) {
+    artworkApp.persistWorkflowStep(step === 'preview' ? 'preview' : 'artwork');
+  }
 }
 
 const boxApp = createBoxNetApp({
@@ -83,6 +87,7 @@ artworkApp = createArtworkApp({
     stepButtons.find((button) => button.dataset.stepTarget === 'preview').disabled = !snapshot.artwork;
     showStep(snapshot.workflowStep === 'preview' ? 'preview' : 'artwork');
   },
+  getWorkflowStep: () => currentStep,
 });
 
 window.BoxNet = {

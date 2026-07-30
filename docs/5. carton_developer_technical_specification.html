@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Техническая спецификация браузерного приложения Carton: развертка коробки, размещение artwork, 3D preview и экспорт." />
+  <title>Carton — техническая спецификация для разработки</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #647087;
+      --line: #dce3ee;
+      --line-strong: #c4cede;
+      --brand: #2357d9;
+      --brand-dark: #173a96;
+      --brand-soft: #eef3ff;
+      --accent: #a5216f;
+      --accent-soft: #fff0f8;
+      --good: #147a55;
+      --good-soft: #ecfaf4;
+      --warn: #9a6500;
+      --warn-soft: #fff8e8;
+      --danger: #b33a3a;
+      --danger-soft: #fff2f2;
+      --code-bg: #111827;
+      --code-ink: #e7edf8;
+      --shadow: 0 18px 50px rgba(33, 53, 91, 0.10);
+      --radius: 16px;
+      --sidebar: 286px;
+      --content: 1080px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% -8%, rgba(35, 87, 217, .13), transparent 33rem),
+        radial-gradient(circle at 100% 8%, rgba(165, 33, 111, .08), transparent 28rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.58;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--brand-dark); text-decoration-thickness: .08em; text-underline-offset: .18em; }
+    a:hover { color: var(--brand); }
+    code, pre, kbd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+
+    .skip-link {
+      position: fixed;
+      left: 1rem;
+      top: -4rem;
+      z-index: 999;
+      background: var(--ink);
+      color: white;
+      padding: .75rem 1rem;
+      border-radius: 8px;
+      transition: top .2s ease;
+    }
+    .skip-link:focus { top: 1rem; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 28px 20px 32px;
+      border-right: 1px solid rgba(196, 206, 222, .75);
+      background: rgba(248, 250, 253, .90);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      color: white;
+      font-weight: 800;
+      letter-spacing: -.05em;
+      background: linear-gradient(145deg, var(--brand), var(--accent));
+      box-shadow: 0 10px 22px rgba(35, 87, 217, .24);
+    }
+    .brand-copy strong { display: block; font-size: 1rem; }
+    .brand-copy span { display: block; color: var(--muted); font-size: .78rem; }
+
+    .toc-label {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .toc { list-style: none; margin: 0; padding: 0; }
+    .toc li { margin: 2px 0; }
+    .toc a {
+      display: block;
+      padding: 7px 10px;
+      border-radius: 8px;
+      color: #4e5b72;
+      font-size: .86rem;
+      text-decoration: none;
+      transition: background .15s ease, color .15s ease, transform .15s ease;
+    }
+    .toc a:hover, .toc a.active {
+      color: var(--brand-dark);
+      background: var(--brand-soft);
+      transform: translateX(2px);
+    }
+    .toc .sub a { padding-left: 24px; font-size: .80rem; }
+
+    .aside-meta {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .77rem;
+    }
+
+    main { min-width: 0; padding: 42px 42px 84px; }
+    .document { max-width: var(--content); margin: 0 auto; }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 46px 48px 42px;
+      border: 1px solid rgba(196, 206, 222, .72);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: var(--shadow);
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -70px;
+      top: -88px;
+      width: 310px;
+      height: 310px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, rgba(35, 87, 217, .18), rgba(165, 33, 111, .12));
+      filter: blur(2px);
+    }
+    .eyebrow {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 14px;
+      color: var(--brand-dark);
+      font-size: .78rem;
+      font-weight: 850;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 810px;
+      margin: 0;
+      font-size: clamp(2.15rem, 5vw, 4.05rem);
+      line-height: 1.02;
+      letter-spacing: -.045em;
+    }
+    .hero-lead {
+      position: relative;
+      z-index: 1;
+      max-width: 800px;
+      margin: 22px 0 0;
+      color: #4f5e76;
+      font-size: 1.08rem;
+    }
+    .meta-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 30px;
+    }
+    .meta-card {
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(247, 249, 253, .82);
+    }
+    .meta-card span { display: block; color: var(--muted); font-size: .72rem; }
+    .meta-card strong { display: block; margin-top: 2px; font-size: .9rem; }
+
+    section {
+      scroll-margin-top: 18px;
+      margin-top: 34px;
+      padding: 34px 38px 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--paper);
+      box-shadow: 0 8px 26px rgba(33, 53, 91, .055);
+    }
+    section > :first-child { margin-top: 0; }
+    section > :last-child { margin-bottom: 0; }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: 1.72rem;
+      line-height: 1.22;
+      letter-spacing: -.025em;
+    }
+    h3 {
+      margin: 30px 0 12px;
+      font-size: 1.17rem;
+      line-height: 1.3;
+      letter-spacing: -.01em;
+    }
+    h4 { margin: 22px 0 8px; font-size: 1rem; }
+    p { margin: 10px 0 14px; }
+    .muted { color: var(--muted); }
+    .small { font-size: .86rem; }
+    .lead { font-size: 1.04rem; color: #46546d; }
+
+    .decision-grid,
+    .card-grid,
+    .phase-grid,
+    .module-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .decision-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .phase-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .module-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .decision, .card, .phase, .module {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfcfe;
+    }
+    .decision b, .card b, .phase b, .module b { display: block; margin-bottom: 5px; }
+    .decision p, .card p, .phase p, .module p { margin: 0; color: #536079; font-size: .89rem; }
+    .decision .tag { margin-bottom: 10px; }
+
+    .tag, .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .03em;
+      white-space: nowrap;
+    }
+    .tag.primary { color: var(--brand-dark); background: var(--brand-soft); }
+    .tag.good { color: var(--good); background: var(--good-soft); }
+    .tag.warn { color: var(--warn); background: var(--warn-soft); }
+    .tag.accent { color: var(--accent); background: var(--accent-soft); }
+    .status.required { color: var(--good); background: var(--good-soft); }
+    .status.recommended { color: var(--brand-dark); background: var(--brand-soft); }
+    .status.open { color: var(--warn); background: var(--warn-soft); }
+    .status.out { color: #6e5e6a; background: #f4eef2; }
+
+    .callout {
+      margin: 20px 0;
+      padding: 16px 18px;
+      border-left: 4px solid var(--brand);
+      border-radius: 0 10px 10px 0;
+      background: var(--brand-soft);
+    }
+    .callout.good { border-left-color: var(--good); background: var(--good-soft); }
+    .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+    .callout.danger { border-left-color: var(--danger); background: var(--danger-soft); }
+    .callout p { margin: 0; }
+
+    ul, ol { padding-left: 1.25rem; }
+    li { margin: .34rem 0; }
+    .compact li { margin: .18rem 0; }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 9px;
+      align-items: stretch;
+      margin: 22px 0 4px;
+    }
+    .step {
+      position: relative;
+      min-height: 118px;
+      padding: 14px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfcff;
+    }
+    .step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -15px;
+      top: 43%;
+      z-index: 2;
+      color: var(--brand);
+      font-weight: 900;
+    }
+    .step-number {
+      display: grid;
+      place-items: center;
+      width: 27px;
+      height: 27px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      color: white;
+      background: var(--brand);
+      font-size: .78rem;
+      font-weight: 900;
+    }
+    .step strong { display: block; font-size: .86rem; }
+    .step span { display: block; margin-top: 5px; color: var(--muted); font-size: .75rem; line-height: 1.35; }
+
+    .architecture {
+      margin: 24px 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fbfcff, #f5f8fd);
+    }
+    .arch-row {
+      display: grid;
+      grid-template-columns: 175px 1fr;
+      gap: 14px;
+      align-items: stretch;
+      margin: 9px 0;
+    }
+    .arch-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      border-radius: 10px;
+      color: white;
+      text-align: center;
+      font-size: .82rem;
+      font-weight: 850;
+      background: var(--brand);
+    }
+    .arch-label.accent { background: var(--accent); }
+    .arch-label.good { background: var(--good); }
+    .arch-label.dark { background: #2d374b; }
+    .arch-body {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 9px;
+      padding: 10px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 10px;
+      background: white;
+    }
+    .arch-body span {
+      display: grid;
+      place-items: center;
+      min-height: 48px;
+      padding: 7px;
+      border-radius: 8px;
+      color: #42516a;
+      background: #f4f7fb;
+      text-align: center;
+      font-size: .77rem;
+    }
+
+    .table-wrap { overflow-x: auto; margin: 18px 0; }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: .86rem;
+    }
+    th, td {
+      padding: 11px 12px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th:first-child, td:first-child { border-left: 1px solid var(--line); }
+    thead th {
+      color: #34435c;
+      background: #f2f5fa;
+      text-align: left;
+      font-size: .76rem;
+      letter-spacing: .035em;
+      text-transform: uppercase;
+    }
+    thead th:first-child { border-top-left-radius: 10px; }
+    thead th:last-child { border-top-right-radius: 10px; }
+    tbody tr:last-child td:first-child { border-bottom-left-radius: 10px; }
+    tbody tr:last-child td:last-child { border-bottom-right-radius: 10px; }
+    tbody tr:hover td { background: #fcfdff; }
+    .id { color: var(--brand-dark); font-family: "SFMono-Regular", Consolas, monospace; font-size: .78rem; font-weight: 800; white-space: nowrap; }
+
+    pre {
+      position: relative;
+      overflow: auto;
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid #253149;
+      border-radius: 12px;
+      color: var(--code-ink);
+      background: var(--code-bg);
+      font-size: .79rem;
+      line-height: 1.55;
+      tab-size: 2;
+    }
+    code.inline {
+      padding: .12rem .36rem;
+      border: 1px solid #dce3ef;
+      border-radius: 5px;
+      color: #223d7d;
+      background: #f5f7fb;
+      font-size: .87em;
+    }
+    .copy-code {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 7px;
+      color: #dce6f8;
+      background: rgba(255,255,255,.07);
+      padding: 5px 8px;
+      font-size: .68rem;
+      cursor: pointer;
+    }
+    .copy-code:hover { background: rgba(255,255,255,.13); }
+
+    .formula-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .formula {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fafcff;
+    }
+    .formula strong { display: block; margin-bottom: 5px; font-size: .82rem; }
+    .formula code { color: var(--brand-dark); font-size: .82rem; }
+
+    .tree {
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fafcff;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .81rem;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
+    details {
+      margin: 10px 0;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfcfe;
+    }
+    summary {
+      cursor: pointer;
+      padding: 12px 14px;
+      font-weight: 750;
+    }
+    details > div { padding: 0 14px 14px; }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px 20px;
+      margin: 16px 0;
+      padding: 0;
+      list-style: none;
+    }
+    .checklist li {
+      position: relative;
+      padding-left: 28px;
+      margin: 0;
+    }
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: .02rem;
+      display: grid;
+      place-items: center;
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      color: white;
+      background: var(--good);
+      font-size: .68rem;
+      font-weight: 900;
+    }
+
+    .references { columns: 2; column-gap: 34px; padding-left: 1.2rem; }
+    .references li { break-inside: avoid; margin-bottom: .58rem; font-size: .84rem; }
+
+    .footer {
+      margin-top: 34px;
+      padding: 22px 26px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--muted);
+      background: rgba(255,255,255,.82);
+      font-size: .82rem;
+      text-align: center;
+    }
+
+    .back-top {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      color: var(--brand-dark);
+      background: rgba(255,255,255,.94);
+      box-shadow: 0 10px 28px rgba(33, 53, 91, .15);
+      text-decoration: none;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: all .2s ease;
+    }
+    .back-top.visible { opacity: 1; pointer-events: auto; transform: none; }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: 1fr; }
+      aside { position: relative; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .toc { columns: 2; }
+      .aside-meta { display: none; }
+      main { padding-top: 26px; }
+      .workflow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .step:nth-child(3)::after { display: none; }
+      .module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 760px) {
+      main { padding: 16px 12px 70px; }
+      aside { padding: 18px 14px; }
+      .toc { columns: 1; max-height: 280px; overflow: auto; }
+      .hero { padding: 32px 24px; border-radius: 17px; }
+      section { padding: 26px 20px 28px; margin-top: 18px; }
+      .meta-grid, .decision-grid, .card-grid, .phase-grid, .module-grid,
+      .formula-row, .checklist { grid-template-columns: 1fr; }
+      .workflow { grid-template-columns: 1fr; }
+      .step:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -18px; }
+      .arch-row { grid-template-columns: 1fr; }
+      .arch-body { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .references { columns: 1; }
+      .back-top { right: 12px; bottom: 12px; }
+    }
+
+    @media print {
+      :root { --bg: white; }
+      body { background: white; font-size: 10.5pt; }
+      .shell { display: block; }
+      aside, .back-top, .copy-code { display: none !important; }
+      main { padding: 0; }
+      .document { max-width: none; }
+      .hero, section { box-shadow: none; break-inside: avoid; }
+      section { margin-top: 15pt; }
+      a { color: black; text-decoration: none; }
+      a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 7.5pt; word-break: break-all; }
+      pre { white-space: pre-wrap; word-break: break-word; }
+      .workflow, .architecture, table, pre { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Перейти к документу</a>
+  <div class="shell">
+    <aside aria-label="Навигация по документу">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">C</div>
+        <div class="brand-copy">
+          <strong>Carton</strong>
+          <span>Developer specification</span>
+        </div>
+      </div>
+      <p class="toc-label">Содержание</p>
+      <nav>
+        <ul class="toc" id="toc">
+          <li><a href="#summary">1. Резюме</a></li>
+          <li><a href="#scope">2. Scope и workflow</a></li>
+          <li><a href="#principles">3. Архитектурные принципы</a></li>
+          <li><a href="#requirements">4. Функциональные требования</a></li>
+          <li><a href="#architecture">5. Архитектура решения</a></li>
+          <li class="sub"><a href="#modules">5.1. Модули</a></li>
+          <li class="sub"><a href="#state">5.2. State и history</a></li>
+          <li><a href="#model">6. Каноническая модель</a></li>
+          <li><a href="#coordinates">7. Координаты и единицы</a></li>
+          <li><a href="#editor2d">8. 2D Artwork Editor</a></li>
+          <li><a href="#import">9. Импорт файлов</a></li>
+          <li><a href="#preview3d">10. 3D Preview</a></li>
+          <li><a href="#export">11. Экспорт</a></li>
+          <li><a href="#storage">12. Хранение и offline</a></li>
+          <li><a href="#quality">13. Нефункциональные требования</a></li>
+          <li><a href="#testing">14. Тестирование</a></li>
+          <li><a href="#delivery">15. План реализации</a></li>
+          <li><a href="#acceptance">16. Acceptance criteria</a></li>
+          <li><a href="#open-decisions">17. Открытые решения</a></li>
+          <li><a href="#references">18. Технические источники</a></li>
+        </ul>
+      </nav>
+      <div class="aside-meta">
+        <div><strong>Версия:</strong> 1.0</div>
+        <div><strong>Статус:</strong> Draft for Development</div>
+        <div><strong>Дата:</strong> 30.07.2026</div>
+      </div>
+    </aside>
+
+    <main id="main-content">
+      <article class="document">
+        <header class="hero" id="top">
+          <p class="eyebrow">Technical Design Specification</p>
+          <h1>Carton: 2D box net, artwork placement and 3D folded preview</h1>
+          <p class="hero-lead">
+            Спецификация браузерного приложения, в котором развертка коробки является единственным
+            источником геометрической истины, artwork размещается в миллиметрах под dieline, а 3D‑модель
+            и экспорт детерминированно строятся из той же канонической модели.
+          </p>
+          <div class="meta-grid" aria-label="Метаданные документа">
+            <div class="meta-card"><span>Документ</span><strong>Developer specification</strong></div>
+            <div class="meta-card"><span>Версия</span><strong>1.0</strong></div>
+            <div class="meta-card"><span>Статус</span><strong>Draft for Development</strong></div>
+            <div class="meta-card"><span>Дата</span><strong>30 July 2026</strong></div>
+          </div>
+        </header>
+
+        <section id="summary">
+          <h2>1. Резюме и ключевые решения</h2>
+          <p class="lead">
+            Рекомендуемая реализация — <strong>client-first, millimeter-native и 2D-authoritative</strong>.
+            Все размеры, положение artwork и структурная геометрия хранятся в миллиметрах. 3D preview,
+            SVG/canvas‑рендеринг и PDF‑экспорт являются адаптерами одной модели, а не независимыми подсистемами.
+          </p>
+
+          <div class="decision-grid">
+            <div class="decision">
+              <span class="tag primary">Source of truth</span>
+              <b>2D развертка</b>
+              <p>Панели, линии сгиба, линии реза и artwork transform определяются в flat-net space.</p>
+            </div>
+            <div class="decision">
+              <span class="tag good">Units</span>
+              <b>Миллиметры</b>
+              <p>Преобразование в CSS px, raster px и PDF pt выполняется только на границах рендеринга.</p>
+            </div>
+            <div class="decision">
+              <span class="tag accent">3D</span>
+              <b>Derived preview</b>
+              <p>Three.js складывает жесткие панели через hinge pivots; artwork не редактируется в world space.</p>
+            </div>
+            <div class="decision">
+              <span class="tag primary">2D stack</span>
+              <b>SVG-first</b>
+              <p>SVG используется для dieline, selection overlay, clipping/masking и точного vector output.</p>
+            </div>
+            <div class="decision">
+              <span class="tag good">Import / export</span>
+              <b>PDF.js + pdf-lib</b>
+              <p>PDF.js — preview/rasterization входящих PDF; pdf-lib — 1:1 PDF и embedding страниц.</p>
+            </div>
+            <div class="decision">
+              <span class="tag warn">Persistence</span>
+              <b>Local-first</b>
+              <p>IndexedDB хранит проекты и Blob‑ресурсы; Service Worker обеспечивает offline-ready shell.</p>
+            </div>
+          </div>
+
+          <div class="callout good">
+            <p><strong>Главный инвариант:</strong> запрещено отдельно «подгонять» artwork для 3D. UV каждой панели вычисляется из координат той же плоской развертки, поэтому складывание меняет только 3D transforms, но не texture mapping.</p>
+          </div>
+        </section>
+
+        <section id="scope">
+          <h2>2. Scope продукта и пользовательский workflow</h2>
+          <p>
+            Документ описывает следующий этап существующего приложения Carton: после построения полной
+            развертки пользователь загружает artwork, позиционирует его под dieline, проверяет результат в 3D
+            и экспортирует proof/production-ready geometry в согласованном формате.
+          </p>
+
+          <div class="workflow" aria-label="Основной пользовательский процесс">
+            <div class="step"><span class="step-number">1</span><strong>Создать развертку</strong><span>Пользователь формирует 6 панелей с заданными W × H × D.</span></div>
+            <div class="step"><span class="step-number">2</span><strong>Continue</strong><span>Кнопка доступна только при валидном состоянии 6/6.</span></div>
+            <div class="step"><span class="step-number">3</span><strong>Загрузить artwork</strong><span>PNG, JPG или PDF через file picker либо drag-and-drop.</span></div>
+            <div class="step"><span class="step-number">4</span><strong>Разместить</strong><span>Перемещение и пропорциональное масштабирование в 2D.</span></div>
+            <div class="step"><span class="step-number">5</span><strong>Проверить в 3D</strong><span>Складывание, orbit/pan/zoom, выбор панели и инспекция.</span></div>
+            <div class="step"><span class="step-number">6</span><strong>Экспортировать</strong><span>PDF 1:1, SVG dieline или PNG proof согласно выбранному профилю.</span></div>
+          </div>
+
+          <h3>2.1. Existing behavior, который нельзя сломать</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Требование</th><th>Статус</th></tr></thead>
+              <tbody>
+                <tr><td class="id">LEG-001</td><td>Развертка состоит ровно из 6 панелей.</td><td><span class="status required">Preserve</span></td></tr>
+                <tr><td class="id">LEG-002</td><td>Front Panel создается автоматически как W × H и не может быть удалена.</td><td><span class="status required">Preserve</span></td></tr>
+                <tr><td class="id">LEG-003</td><td>Base Panel — первая нижняя панель размером W × D.</td><td><span class="status required">Preserve</span></td></tr>
+                <tr><td class="id">LEG-004</td><td>Цвета редактора: Front — blue, Base — pink, остальные панели — white. Это UI semantics, а не печатные цвета.</td><td><span class="status required">Preserve</span></td></tr>
+                <tr><td class="id">LEG-005</td><td>После каждого add/delete выполняется auto fit-to-view.</td><td><span class="status required">Preserve</span></td></tr>
+                <tr><td class="id">LEG-006</td><td>Continue активна только при валидном состоянии 6/6.</td><td><span class="status required">Preserve</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>2.2. MVP scope</h3>
+          <ul class="checklist">
+            <li>Один artwork asset на проект.</li>
+            <li>PNG, JPEG и PDF import.</li>
+            <li>File picker и drag-and-drop.</li>
+            <li>Move + proportional scale в 2D.</li>
+            <li>Undo/redo для структурных и artwork‑изменений.</li>
+            <li>3D folded preview из текущей net model.</li>
+            <li>Локальное сохранение и восстановление проекта.</li>
+            <li>PDF/SVG/PNG export adapters.</li>
+          </ul>
+
+          <h3>2.3. Не входит в MVP</h3>
+          <ul class="compact">
+            <li>Редактирование artwork непосредственно в 3D world space.</li>
+            <li>Многопользовательская работа, комментарии и cloud collaboration.</li>
+            <li>Полноценный prepress: separations, overprint, trapping, ink coverage, spot-color validation.</li>
+            <li>GxP‑валидация, электронные подписи и regulatory approval workflow.</li>
+            <li>Редактирование произвольных векторных объектов из PDF/SVG.</li>
+            <li>Несколько независимых artwork layers, если это отдельно не будет добавлено в scope.</li>
+          </ul>
+        </section>
+
+        <section id="principles">
+          <h2>3. Архитектурные принципы и инварианты</h2>
+          <div class="card-grid">
+            <div class="card"><b>Single source of truth</b><p>Canvas, SVG DOM и Three.js scene не являются хранилищем состояния. Они только отображают canonical state.</p></div>
+            <div class="card"><b>Deterministic rendering</b><p>Одинаковый project state должен давать одинаковые 2D, 3D и export outputs.</p></div>
+            <div class="card"><b>Flat net first</b><p>Панели описываются в плоской системе координат до создания 3D geometry.</p></div>
+            <div class="card"><b>Immutable history</b><p>Undo/redo хранит snapshots или reversible commands канонического state, а не состояние canvas objects.</p></div>
+            <div class="card"><b>Boundary conversion</b><p>mm → px/pt/raster px выполняется в render/export adapters; business model не знает про DPI и zoom.</p></div>
+            <div class="card"><b>Local processing</b><p>Загруженные pharmaceutical artworks не покидают браузер без явного server-side requirement.</p></div>
+          </div>
+
+          <div class="callout warn">
+            <p><strong>Запрещенный anti-pattern:</strong> хранить отдельно position/scale для 2D image, UV atlas для Three.js и еще один transform для PDF export. Это гарантированно приведет к расхождению визуализации и печатного файла.</p>
+          </div>
+        </section>
+
+        <section id="requirements">
+          <h2>4. Функциональные требования</h2>
+
+          <h3>4.1. Stage transition</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Требование</th><th>Приоритет</th></tr></thead>
+              <tbody>
+                <tr><td class="id">FR-NAV-001</td><td>Нажатие Continue сохраняет текущее состояние net model и переводит приложение в режим Artwork.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-NAV-002</td><td>Переход разрешен только при валидной структуре 6/6 и отсутствии геометрических ошибок.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-NAV-003</td><td>Возврат в Net mode не должен сбрасывать импортированный artwork или его transform.</td><td><span class="status required">Must</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>4.2. Artwork upload</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Требование</th><th>Приоритет</th></tr></thead>
+              <tbody>
+                <tr><td class="id">FR-UPL-001</td><td>Поддерживаются файлы с расширениями .png, .jpg/.jpeg и .pdf; проверяется MIME type и фактическая сигнатура файла.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-UPL-002</td><td>Пользователь может выбрать файл через системный file picker.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-UPL-003</td><td>Пользователь может перетащить файл в drop zone; зона визуально подтверждает drag-enter/drag-over.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-UPL-004</td><td>После успешной загрузки artwork отображается под dieline и получает начальный transform, не меняющий aspect ratio.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-UPL-005</td><td>Повторная загрузка предлагает заменить текущий artwork; замена является undoable action.</td><td><span class="status recommended">Should</span></td></tr>
+                <tr><td class="id">FR-UPL-006</td><td>Ошибки формата, чтения, парсинга PDF и нехватки памяти показываются в DOM‑сообщении с понятным recovery action.</td><td><span class="status required">Must</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>4.3. Artwork manipulation</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Требование</th><th>Приоритет</th></tr></thead>
+              <tbody>
+                <tr><td class="id">FR-ART-001</td><td>Artwork перемещается pointer drag в координатах flat-net workspace.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-ART-002</td><td>Artwork масштабируется только пропорционально; aspect ratio исходного asset сохраняется.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-ART-003</td><td>Transform хранится в миллиметрах: X, Y, width, height; экранный zoom не влияет на значения модели.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-ART-004</td><td>Arrow keys выполняют nudge; Shift+Arrow — увеличенный шаг. Конкретный шаг задается конфигурацией.</td><td><span class="status recommended">Should</span></td></tr>
+                <tr><td class="id">FR-ART-005</td><td>Numeric inspector показывает и позволяет редактировать X, Y, W, H в mm.</td><td><span class="status recommended">Should</span></td></tr>
+                <tr><td class="id">FR-ART-006</td><td>Rotation field допускается в data model для совместимости, но в MVP UI считается disabled до отдельного подтверждения.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">FR-ART-007</td><td>Artwork всегда находится ниже cut/fold lines и выше background/grid.</td><td><span class="status required">Must</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>4.4. 3D preview</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Требование</th><th>Приоритет</th></tr></thead>
+              <tbody>
+                <tr><td class="id">FR-3D-001</td><td>3D geometry строится из текущих panel dimensions и hinge graph, без отдельного 3D data model.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-3D-002</td><td>Texture UV вычисляется из flat-net coordinates и текущего artwork transform.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-3D-003</td><td>Preview поддерживает orbit, pan, zoom и Reset View.</td><td><span class="status required">Must</span></td></tr>
+                <tr><td class="id">FR-3D-004</td><td>Fold slider или команда Open/Fold управляет единым параметром t ∈ [0,1].</td><td><span class="status recommended">Should</span></td></tr>
+                <tr><td class="id">FR-3D-005</td><td>Клик по панели через Raycaster выбирает тот же panelId, что используется в 2D.</td><td><span class="status recommended">Should</span></td></tr>
+                <tr><td class="id">FR-3D-006</td><td>Изменение artwork transform в 2D обновляет 3D texture без перезагрузки проекта.</td><td><span class="status required">Must</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="architecture">
+          <h2>5. Архитектура решения</h2>
+          <p>
+            Рекомендуемая структура разделяет domain model, application state и render/import/export adapters.
+            Компоненты canvas/SVG/Three.js не должны содержать бизнес‑правила и не должны быть источником данных для save/export.
+          </p>
+
+          <div class="architecture" role="img" aria-label="Четырехуровневая архитектура приложения">
+            <div class="arch-row">
+              <div class="arch-label dark">UI / Application</div>
+              <div class="arch-body"><span>Mode navigation</span><span>Toolbar & inspector</span><span>Keyboard / pointer</span><span>ARIA status</span></div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-label">Canonical State</div>
+              <div class="arch-body"><span>BoxNetModel</span><span>ArtworkModel</span><span>ViewState</span><span>HistoryState</span></div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-label accent">Render Adapters</div>
+              <div class="arch-body"><span>SVG 2D renderer</span><span>Three.js preview</span><span>PDF exporter</span><span>PNG/SVG exporter</span></div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-label good">Infrastructure</div>
+              <div class="arch-body"><span>PDF.js</span><span>Web Worker</span><span>IndexedDB</span><span>Service Worker</span></div>
+            </div>
+          </div>
+
+          <h3 id="modules">5.1. Рекомендуемые модули</h3>
+          <div class="module-grid">
+            <div class="module"><b>core/model</b><p>TypeScript interfaces, validation, serialization versioning.</p></div>
+            <div class="module"><b>core/geometry</b><p>Net bounds, panel transforms, hinge graph, UV math, units.</p></div>
+            <div class="module"><b>state</b><p>Commands/reducer, selection, modes, past/present/future.</p></div>
+            <div class="module"><b>editor2d</b><p>SVG scene, artwork handles, pointer mapping, grid/guides.</p></div>
+            <div class="module"><b>preview3d</b><p>Three.js scene, panel meshes, pivots, texture lifecycle.</p></div>
+            <div class="module"><b>io/import</b><p>File validation, raster decode, PDF.js, page metadata.</p></div>
+            <div class="module"><b>io/export</b><p>PDF/SVG/PNG adapters from canonical state.</p></div>
+            <div class="module"><b>storage</b><p>IndexedDB projects/assets, migrations, autosave.</p></div>
+            <div class="module"><b>workers</b><p>PDF render, bitmap normalization, optional raster export.</p></div>
+          </div>
+
+          <div class="tree" aria-label="Предлагаемая структура исходного кода">src/
+├─ app/
+│  ├─ App.tsx
+│  ├─ routes-or-modes.ts
+│  └─ commands/
+├─ core/
+│  ├─ model/
+│  ├─ geometry/
+│  ├─ units/
+│  └─ validation/
+├─ editor2d/
+│  ├─ SvgWorkspace.tsx
+│  ├─ ArtworkLayer.tsx
+│  ├─ DielineLayer.tsx
+│  └─ interaction/
+├─ preview3d/
+│  ├─ scene.ts
+│  ├─ panelGeometry.ts
+│  ├─ foldGraph.ts
+│  └─ textureManager.ts
+├─ io/
+│  ├─ import/
+│  └─ export/
+├─ storage/
+├─ workers/
+└─ tests/</div>
+
+          <h3 id="state">5.2. State management и undo/redo</h3>
+          <p>
+            Undo/redo должен оборачивать canonical project state. Разрешены два подхода: immutable snapshots
+            для MVP или command pattern с inverse operations для крупных файлов. Canvas objects и Three.js objects
+            не сериализуются в history.
+          </p>
+          <pre><button class="copy-code" type="button">Copy</button><code>interface HistoryState&lt;T&gt; {
+  past: T[];
+  present: T;
+  future: T[];
+}
+
+// Любая domain-команда:
+// 1. получает present;
+// 2. возвращает новый immutable state;
+// 3. очищает future;
+// 4. никогда не читает state обратно из SVG/Three.js.</code></pre>
+        </section>
+
+        <section id="model">
+          <h2>6. Каноническая data model</h2>
+          <p>
+            Ниже приведен минимальный контракт. Он должен быть независим от React, SVG, canvas и Three.js.
+            Blob‑данные artwork хранятся отдельно, а модель содержит стабильный <code class="inline">resourceId</code>.
+          </p>
+
+          <pre><button class="copy-code" type="button">Copy</button><code>type Millimeters = number;
+type Degrees = number;
+
+type PanelRole =
+  | 'front' | 'back' | 'left' | 'right'
+  | 'top' | 'bottom' | 'flap' | 'glue-tab';
+
+type EdgeName = 'left' | 'right' | 'top' | 'bottom';
+
+interface PointMm {
+  x: Millimeters;
+  y: Millimeters;
+}
+
+interface PanelModel {
+  id: string;
+  role: PanelRole;
+  xMm: Millimeters;
+  yMm: Millimeters;
+  widthMm: Millimeters;
+  heightMm: Millimeters;
+  rotationDeg: Degrees;          // flat-net rotation
+  polygon?: PointMm[];           // for non-rectangular flaps
+  hingeTo?: string;
+  hingeEdge?: EdgeName;
+  foldAngleClosedDeg?: Degrees;
+  deletable: boolean;
+  editorColorRole: 'front' | 'base' | 'default';
+}
+
+interface ArtworkModel {
+  id: string;
+  resourceId: string;            // Blob key in IndexedDB
+  sourceType: 'png' | 'jpeg' | 'pdf';
+  originalFileName: string;
+  sourceWidthPx?: number;
+  sourceHeightPx?: number;
+  pdfPageIndex?: number;
+  xMm: Millimeters;
+  yMm: Millimeters;
+  widthMm: Millimeters;
+  heightMm: Millimeters;
+  rotationDeg: Degrees;          // reserved; 0 in MVP unless enabled
+  opacity: number;               // default 1
+  preservePdfVector: boolean;
+}
+
+interface BoxNetModel {
+  unit: 'mm';
+  boxType: string;
+  widthMm: Millimeters;
+  heightMm: Millimeters;
+  depthMm: Millimeters;
+  boardThicknessMm?: Millimeters;
+  bleedMm?: Millimeters;
+  safeAreaMm?: Millimeters;
+  panels: PanelModel[];
+  cutPaths: PointMm[][];
+  foldPaths: PointMm[][];
+}
+
+interface ProjectModel {
+  schemaVersion: 1;
+  projectId: string;
+  projectName: string;
+  createdAtIso: string;
+  updatedAtIso: string;
+  net: BoxNetModel;
+  artwork?: ArtworkModel;
+}
+
+interface ViewState {
+  mode: 'net' | 'artwork' | 'preview3d' | 'export';
+  selectedPanelId?: string;
+  tool: 'select' | 'pan' | 'zoom' | 'measure' | 'nudge';
+  zoom: number;
+  panPx: { x: number; y: number };
+  foldProgress: number;          // 0..1
+}</code></pre>
+
+          <h3>6.1. Validation invariants</h3>
+          <ul class="compact">
+            <li><code class="inline">net.unit === 'mm'</code> для всех поддерживаемых schema versions.</li>
+            <li>Все dimensions конечны, больше нуля и не являются <code class="inline">NaN</code>.</li>
+            <li>Каждый <code class="inline">panel.id</code> уникален; каждый <code class="inline">hingeTo</code> ссылается на существующую панель.</li>
+            <li>Hinge graph не содержит циклов, если folding implementation основан на parent-child hierarchy.</li>
+            <li>Artwork width/height положительны; aspect ratio соответствует исходному asset с допустимой floating-point погрешностью.</li>
+            <li>View state не сериализуется как часть production geometry, кроме пользовательских UI preferences.</li>
+          </ul>
+        </section>
+
+        <section id="coordinates">
+          <h2>7. Координатные системы и единицы</h2>
+          <p>
+            Каноническая система координат 2D использует origin в левом верхнем углу workspace,
+            <strong>X вправо, Y вниз</strong>. Это удобно для SVG/canvas и должно быть явно преобразовано при PDF export.
+          </p>
+
+          <div class="formula-row">
+            <div class="formula"><strong>Screen layout</strong><code>cssPx = mm × 96 / 25.4</code></div>
+            <div class="formula"><strong>PDF</strong><code>pt = mm × 72 / 25.4</code></div>
+            <div class="formula"><strong>Raster export</strong><code>px = mm × dpi / 25.4</code></div>
+          </div>
+
+          <pre><button class="copy-code" type="button">Copy</button><code>const MM_PER_INCH = 25.4;
+const CSS_PX_PER_INCH = 96;
+const PDF_PT_PER_INCH = 72;
+
+export const mmToCssPx = (mm: number) =>
+  mm * CSS_PX_PER_INCH / MM_PER_INCH;
+
+export const mmToPt = (mm: number) =>
+  mm * PDF_PT_PER_INCH / MM_PER_INCH;
+
+export const mmToRasterPx = (mm: number, dpi: number) =>
+  mm * dpi / MM_PER_INCH;
+
+export const topLeftMmToPdfY = (
+  yMm: number,
+  objectHeightMm: number,
+  pageHeightMm: number,
+) => pageHeightMm - yMm - objectHeightMm;</code></pre>
+
+          <div class="callout">
+            <p><strong>Важно:</strong> CSS millimeters на мониторе не гарантируют физический размер 1:1. Точность относится к модели и export output. Экранная линейка требует отдельной calibration feature и не должна быть обещана по умолчанию.</p>
+          </div>
+
+          <h3>7.1. Pointer mapping</h3>
+          <p>
+            Pointer coordinates переводятся из viewport pixels в workspace millimeters через обратную матрицу
+            текущего pan/zoom. Любая операция drag должна работать с одной snapshot‑матрицей, зафиксированной
+            на <code class="inline">pointerdown</code>, чтобы исключить drift при обновлении UI.
+          </p>
+        </section>
+
+        <section id="editor2d">
+          <h2>8. 2D Artwork Editor</h2>
+          <h3>8.1. SVG scene composition</h3>
+          <p>Рекомендуемый порядок слоев снизу вверх:</p>
+          <ol>
+            <li>Workspace background / optional grid.</li>
+            <li>Artwork image group с canonical transform.</li>
+            <li>Optional panel-union mask или per-panel clip paths для preview/export parity.</li>
+            <li>Panel fills, если они нужны для режима structure editing.</li>
+            <li>Cut lines и fold lines.</li>
+            <li>Selection frame, resize handles, guides и numeric overlays.</li>
+          </ol>
+
+          <pre><button class="copy-code" type="button">Copy</button><code>&lt;svg viewBox="0 0 {workspaceWidthMm} {workspaceHeightMm}"&gt;
+  &lt;defs&gt;
+    &lt;clipPath id="net-union"&gt;
+      {panelShapes}
+    &lt;/clipPath&gt;
+  &lt;/defs&gt;
+
+  &lt;g id="artwork-layer" clip-path="url(#net-union)"&gt;
+    &lt;image
+      href={artworkObjectUrl}
+      x={artwork.xMm}
+      y={artwork.yMm}
+      width={artwork.widthMm}
+      height={artwork.heightMm}
+      preserveAspectRatio="none"
+    /&gt;
+  &lt;/g&gt;
+
+  &lt;g id="dieline-layer"&gt;{cutAndFoldPaths}&lt;/g&gt;
+  &lt;g id="interaction-layer"&gt;{selectionHandles}&lt;/g&gt;
+&lt;/svg&gt;</code></pre>
+
+          <h3>8.2. Transform behavior</h3>
+          <ul class="compact">
+            <li>Drag изменяет только <code class="inline">xMm</code> и <code class="inline">yMm</code>.</li>
+            <li>Corner resize изменяет <code class="inline">widthMm</code>/<code class="inline">heightMm</code> с фиксированным aspect ratio.</li>
+            <li>Resize anchor определяется активным handle; противоположный corner остается неподвижным.</li>
+            <li>Pointer capture обязателен, чтобы resize/drag не прерывался при выходе курсора за SVG.</li>
+            <li>Каждый завершенный gesture создает одну history entry; промежуточные pointermove не должны заполнять history.</li>
+            <li>Состояние selection не меняет exported geometry.</li>
+          </ul>
+
+          <h3>8.3. Маскирование и artwork continuity</h3>
+          <p>
+            В модели artwork остается одним изображением. Для 2D можно использовать один union clipPath либо
+            повторное отображение одного asset под per-panel clips. Для 3D каждая панель использует собственные UV,
+            рассчитанные из единого artwork rectangle; отдельные cropped textures в MVP не рекомендуются.
+          </p>
+        </section>
+
+        <section id="import">
+          <h2>9. Import pipeline: PNG, JPEG и PDF</h2>
+
+          <h3>9.1. Общий pipeline</h3>
+          <ol>
+            <li>Получить <code class="inline">File</code> через picker или drop.</li>
+            <li>Проверить extension, MIME, magic bytes и configured size limit.</li>
+            <li>Сохранить original Blob в IndexedDB и создать stable resourceId.</li>
+            <li>Создать preview representation в Web Worker.</li>
+            <li>Вычислить initial artwork size в mm согласно выбранной fit policy.</li>
+            <li>Записать ArtworkModel и отобразить его в SVG editor.</li>
+          </ol>
+
+          <h3>9.2. Raster files</h3>
+          <p>
+            Для PNG/JPEG использовать <code class="inline">createImageBitmap()</code>, при необходимости
+            нормализовать orientation и ограничить preview texture size в worker через OffscreenCanvas.
+            Original Blob сохраняется без пересжатия.
+          </p>
+          <pre><button class="copy-code" type="button">Copy</button><code>// Worker-side outline
+self.onmessage = async ({ data }: MessageEvent&lt;Blob&gt;) =&gt; {
+  const bitmap = await createImageBitmap(data, {
+    imageOrientation: 'from-image',
+    colorSpaceConversion: 'default',
+  });
+
+  const { width, height } = calculatePreviewSize(bitmap.width, bitmap.height);
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d', { alpha: true });
+  if (!ctx) throw new Error('2D_CONTEXT_UNAVAILABLE');
+
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  const preview = canvas.transferToImageBitmap();
+  bitmap.close();
+  postMessage(preview, [preview]);
+};</code></pre>
+
+          <h3>9.3. PDF files</h3>
+          <p>
+            PDF.js используется для чтения metadata и raster preview. Original PDF Blob сохраняется отдельно,
+            чтобы export adapter мог при допустимом сценарии встроить исходную PDF page через pdf-lib без повторной rasterization.
+          </p>
+          <div class="card-grid">
+            <div class="card"><b>Fast preview mode</b><p>Выбранная страница PDF rasterize‑ится для 2D editor и Three.js texture. Preview DPI не определяет export DPI.</p></div>
+            <div class="card"><b>Print-preserve mode</b><p>Исходная PDF page сохраняется и может быть embedded/clipped при PDF export, если transform и masking поддерживаются без разрушения fidelity.</p></div>
+          </div>
+
+          <div class="callout warn">
+            <p><strong>Multipage PDF:</strong> поведение не определено исходными требованиями. До начала разработки нужно утвердить page selection policy; рекомендуемый default — page 1 с явным selector, если страниц больше одной.</p>
+          </div>
+        </section>
+
+        <section id="preview3d">
+          <h2>10. 3D preview: geometry, UV и folding</h2>
+          <p>
+            Каждая панель — отдельная <code class="inline">BufferGeometry</code> plane mesh. Панель привязана к
+            <code class="inline">Object3D</code> pivot на линии сгиба. Folding выполняется вращением pivot,
+            поэтому panel geometry и UV остаются неизменными.
+          </p>
+
+          <h3>10.1. UV mapping из flat-net space</h3>
+          <pre><button class="copy-code" type="button">Copy</button><code>interface ArtworkPlacement {
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  heightMm: number;
+}
+
+function uvFromNetPoint(
+  netX: number,
+  netY: number,
+  art: ArtworkPlacement,
+) {
+  const u = (netX - art.xMm) / art.widthMm;
+  const v = 1 - (netY - art.yMm) / art.heightMm;
+  return { u, v };
+}</code></pre>
+
+          <p>
+            UV могут выходить за диапазон 0..1, если artwork не покрывает панель. Texture wrapping policy должна
+            предотвращать повтор изображения; рекомендуемый вариант — transparent/empty coverage через canvas texture
+            либо clip-aware texture generation, а не <code class="inline">RepeatWrapping</code>.
+          </p>
+
+          <h3>10.2. Hinge hierarchy</h3>
+          <pre><button class="copy-code" type="button">Copy</button><code>function applyFold(
+  panel: PanelModel,
+  pivot: THREE.Object3D,
+  progress: number,
+) {
+  const target = THREE.MathUtils.degToRad(panel.foldAngleClosedDeg ?? 0);
+  const angle = THREE.MathUtils.lerp(0, target, progress);
+
+  if (panel.hingeEdge === 'left' || panel.hingeEdge === 'right') {
+    pivot.rotation.y = angle;
+  } else {
+    pivot.rotation.x = angle;
+  }
+}</code></pre>
+
+          <h3>10.3. Interaction</h3>
+          <ul class="compact">
+            <li><strong>OrbitControls:</strong> orbit, pan, zoom; damping допустим только при корректном render loop.</li>
+            <li><strong>Raycaster:</strong> выбор панели и синхронизация <code class="inline">selectedPanelId</code> с 2D.</li>
+            <li><strong>Panel inspector:</strong> role, size, coverage status и local coordinates.</li>
+            <li><strong>Reset View:</strong> восстановление согласованного camera preset.</li>
+            <li><strong>No 3D artwork drag:</strong> любые точные изменения возвращаются в 2D numeric model.</li>
+          </ul>
+
+          <h3>10.4. Resource lifecycle</h3>
+          <ul class="compact">
+            <li>При замене artwork старые Texture и Material должны быть явно <code class="inline">dispose()</code>.</li>
+            <li>Retired ImageBitmap должен вызывать <code class="inline">close()</code>.</li>
+            <li>Texture dimensions/format не изменяются in-place после первого использования; создается новый Texture.</li>
+            <li>Контекст потери WebGL должен обрабатываться без потери canonical project state.</li>
+          </ul>
+        </section>
+
+        <section id="export">
+          <h2>11. Export architecture</h2>
+          <p>
+            Экспорт всегда читает canonical state, а не SVG DOM screenshot и не Three.js framebuffer.
+            Это обеспечивает повторяемость, физический размер и независимость от текущего zoom/camera.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Формат</th><th>Назначение</th><th>Vector fidelity</th><th>Основное ограничение</th></tr></thead>
+              <tbody>
+                <tr><td><strong>PDF</strong></td><td>1:1 print/proof, dieline + artwork, TrimBox/BleedBox</td><td>Высокая при vector dieline и embedded PDF page</td><td>Произвольные transforms/masks могут потребовать raster fallback</td></tr>
+                <tr><td><strong>SVG</strong></td><td>Vector dieline и downstream editing</td><td>Высокая для geometry</td><td>Не заменяет полноценный PDF prepress workflow</td></tr>
+                <tr><td><strong>PNG</strong></td><td>Proof, thumbnail, 3D snapshot</td><td>Нет</td><td>Размер в пикселях должен явно вычисляться из выбранного DPI</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>11.1. PDF export</h3>
+          <ul class="compact">
+            <li>Page size определяется net bounds + утвержденные margins/bleed в PDF points.</li>
+            <li>Artwork рисуется первым; cut/fold lines — поверх artwork.</li>
+            <li>Top-left Y преобразуется в PDF bottom-left Y.</li>
+            <li>Dieline сохраняется vector paths.</li>
+            <li>При raster artwork используется original/high-resolution source, а не preview texture.</li>
+            <li>При print-preserve PDF используется embedded page/clip, когда transform поддерживается.</li>
+          </ul>
+
+          <pre><button class="copy-code" type="button">Copy</button><code>const page = pdf.addPage([
+  mmToPt(exportWidthMm),
+  mmToPt(exportHeightMm),
+]);
+
+page.setTrimBox(
+  mmToPt(trimXmm),
+  mmToPt(trimYmm),
+  mmToPt(trimWidthMm),
+  mmToPt(trimHeightMm),
+);
+
+// 1. draw/clip artwork from canonical ArtworkModel
+// 2. draw vector cut paths
+// 3. draw vector fold paths
+// 4. attach metadata and save</code></pre>
+
+          <div class="callout danger">
+            <p><strong>Production caveat:</strong> PDF 1:1 еще не означает print-production compliance. Spot colors, overprint, line naming, PDF/X profile, embedded fonts, ICC profiles, bleed and safety rules должны быть отдельным утвержденным prepress scope.</p>
+          </div>
+        </section>
+
+        <section id="storage">
+          <h2>12. Project persistence, storage и offline</h2>
+          <h3>12.1. IndexedDB</h3>
+          <p>Рекомендуемые object stores:</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Store</th><th>Key</th><th>Данные</th></tr></thead>
+              <tbody>
+                <tr><td><code class="inline">projects</code></td><td>projectId</td><td>Serialized ProjectModel без binary assets</td></tr>
+                <tr><td><code class="inline">assets</code></td><td>resourceId</td><td>Original Blob, MIME, file name, checksum, metadata</td></tr>
+                <tr><td><code class="inline">previews</code></td><td>resourceId + variant</td><td>Optional cached raster preview/thumbnail</td></tr>
+                <tr><td><code class="inline">settings</code></td><td>settingName</td><td>UI preferences, not domain geometry</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>12.2. Schema migrations</h3>
+          <p>
+            Каждый ProjectModel содержит <code class="inline">schemaVersion</code>. Миграции являются чистыми функциями
+            <code class="inline">vN → vN+1</code>, покрыты unit tests и никогда не модифицируют original saved record in-place
+            до успешной валидации результата.
+          </p>
+
+          <h3>12.3. Service Worker</h3>
+          <p>
+            Service Worker кэширует application shell и статические dependencies, но не должен автоматически
+            отправлять или синхронизировать artwork. Развертывание требуется по HTTPS. Обновление версии должно
+            избегать потери unsaved project state.
+          </p>
+        </section>
+
+        <section id="quality">
+          <h2>13. Нефункциональные требования</h2>
+
+          <h3>13.1. Performance и memory</h3>
+          <ul class="compact">
+            <li>2D editor остается vector-first; rasterization применяется только к artwork preview.</li>
+            <li>Preview texture resolution ограничивается device-aware policy; export использует отдельный high-quality path.</li>
+            <li>Основной UI не блокируется PDF rasterization и large-image normalization — эти операции выполняются в worker.</li>
+            <li>Количество WebGL draw calls для одной коробки минимально; каждая панель может быть отдельным mesh без необходимости instancing.</li>
+            <li>Repeated artwork replacement не должен приводить к монотонному росту GPU/heap memory.</li>
+          </ul>
+
+          <h3>13.2. Security и privacy</h3>
+          <ul class="compact">
+            <li>Обработка файлов локальная по умолчанию.</li>
+            <li>Remote URL import отсутствует в MVP; это исключает основной риск tainted canvas/CORS.</li>
+            <li>Object URLs вызывают <code class="inline">URL.revokeObjectURL()</code> после замены/закрытия проекта.</li>
+            <li>File name отображается как text content, а не вставляется через HTML.</li>
+            <li>Парсинг PDF выполняется в sandboxed library context; errors не раскрывают локальные пути пользователя.</li>
+          </ul>
+
+          <h3>13.3. Accessibility</h3>
+          <ul class="compact">
+            <li>Toolbar, buttons, tabs и inspector реализуются стандартными DOM controls.</li>
+            <li>Canvas/SVG/WebGL дополняются текстовым selection/status summary.</li>
+            <li>Все действия artwork доступны с клавиатуры, включая move/nudge и proportional resize через numeric fields.</li>
+            <li>Drop zone имеет keyboard alternative и корректный accessible name.</li>
+            <li>Ошибки и завершение импорта объявляются через ARIA live region.</li>
+            <li>Фокус видим; shortcut не конфликтует с browser/assistive technology conventions.</li>
+          </ul>
+
+          <h3>13.4. Browser support</h3>
+          <p>
+            Базовая реализация должна использовать WebGL2‑совместимый Three.js renderer. WebGPU может быть progressive enhancement,
+            но не единственным путем. Конкретная browser matrix должна быть зафиксирована до release hardening.
+          </p>
+        </section>
+
+        <section id="testing">
+          <h2>14. Стратегия тестирования</h2>
+          <div class="phase-grid">
+            <div class="phase"><span class="tag primary">Layer 1</span><b>Deterministic unit tests</b><p>Units, bounds, panel generation, hinge graph, UV values, aspect-ratio transforms, PDF Y conversion.</p></div>
+            <div class="phase"><span class="tag accent">Layer 2</span><b>Interaction tests</b><p>Upload, DnD, move, resize, nudge, undo/redo, mode switch, persistence, error recovery.</p></div>
+            <div class="phase"><span class="tag good">Layer 3</span><b>Visual regression</b><p>Known-good 2D, folded 3D snapshots and exported PDF/PNG fixtures.</p></div>
+          </div>
+
+          <h3>14.1. Обязательные unit test groups</h3>
+          <ul class="checklist">
+            <li>mm ↔ px ↔ pt conversions.</li>
+            <li>Net bounding box.</li>
+            <li>Panel IDs and hinge references.</li>
+            <li>UV mapping at all four corners.</li>
+            <li>Artwork aspect-ratio preservation.</li>
+            <li>Pointer px → workspace mm.</li>
+            <li>Fold progress 0, 0.5 and 1.</li>
+            <li>PDF top-left → bottom-left transform.</li>
+            <li>Serialization and migration.</li>
+            <li>Undo/redo future invalidation.</li>
+          </ul>
+
+          <h3>14.2. E2E baseline scenarios</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Scenario</th><th>Expected result</th></tr></thead>
+              <tbody>
+                <tr><td>Создать валидные 6/6 → Continue</td><td>Открывается Artwork mode, net state сохранен.</td></tr>
+                <tr><td>Drop PNG → move → resize → undo → redo</td><td>Transform точно восстанавливается; aspect ratio не меняется.</td></tr>
+                <tr><td>Import PDF → preview → 3D</td><td>Одна и та же область artwork видна на соответствующих панелях.</td></tr>
+                <tr><td>Move artwork после открытия 3D</td><td>Texture обновляется; folded transforms не сбрасываются.</td></tr>
+                <tr><td>Save → reload browser → open project</td><td>Net, artwork Blob, transform и mode-restorable data восстановлены.</td></tr>
+                <tr><td>Export PDF</td><td>Page size и geometry соответствуют mm model независимо от screen zoom.</td></tr>
+                <tr><td>Replace artwork 20 раз</td><td>Нет устойчивого роста активных GPU textures/materials.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="delivery">
+          <h2>15. Рекомендуемый план реализации</h2>
+          <div class="phase-grid">
+            <div class="phase">
+              <span class="tag primary">Phase A</span>
+              <b>Canonical 2D foundation</b>
+              <p>Model, validation, units, state/history, SVG dieline, upload, artwork move/scale, IndexedDB save.</p>
+            </div>
+            <div class="phase">
+              <span class="tag accent">Phase B</span>
+              <b>Derived 3D preview</b>
+              <p>Panel BufferGeometry, UV mapping, hinge hierarchy, fold progress, camera controls, selection sync.</p>
+            </div>
+            <div class="phase">
+              <span class="tag good">Phase C</span>
+              <b>Import/export hardening</b>
+              <p>PDF page handling, vector-preserve path, PDF/SVG/PNG export, accessibility, stress and release testing.</p>
+            </div>
+          </div>
+
+          <h3>15.1. Dependency order</h3>
+          <ol>
+            <li>Зафиксировать canonical schema и box-style topology.</li>
+            <li>Покрыть geometry/units тестами.</li>
+            <li>Реализовать Stage 2 artwork editing без 3D.</li>
+            <li>Добавить local persistence и undo/redo.</li>
+            <li>Создать Three.js adapter и UV mapping.</li>
+            <li>Добавить PDF import modes и export adapters.</li>
+            <li>Провести performance, accessibility и browser hardening.</li>
+          </ol>
+
+          <div class="callout good">
+            <p><strong>Delivery rule:</strong> 3D не следует начинать до стабилизации canonical 2D model. Иначе 3D‑слой неизбежно начнет компенсировать ошибки структуры и станет вторым источником истины.</p>
+          </div>
+        </section>
+
+        <section id="acceptance">
+          <h2>16. Definition of Done / Acceptance criteria</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Критерий приемки</th></tr></thead>
+              <tbody>
+                <tr><td class="id">AC-001</td><td>При любом screen zoom числовые X/Y/W/H artwork в mm не изменяются.</td></tr>
+                <tr><td class="id">AC-002</td><td>После proportional resize вычисленный aspect ratio совпадает с исходным в пределах согласованного epsilon.</td></tr>
+                <tr><td class="id">AC-003</td><td>Один и тот же flat-net point отображает один и тот же artwork pixel в 2D и на соответствующей 3D panel.</td></tr>
+                <tr><td class="id">AC-004</td><td>Fold progress меняет только transforms pivots и не изменяет UV/ArtworkModel.</td></tr>
+                <tr><td class="id">AC-005</td><td>PDF export page size, dieline dimensions и artwork placement воспроизводятся из project state без чтения SVG DOM.</td></tr>
+                <tr><td class="id">AC-006</td><td>Undo после artwork replacement восстанавливает предыдущий asset и transform.</td></tr>
+                <tr><td class="id">AC-007</td><td>Reload приложения восстанавливает проект из IndexedDB без потери original file Blob.</td></tr>
+                <tr><td class="id">AC-008</td><td>Неподдерживаемый/поврежденный файл не ломает текущий проект и дает actionable error.</td></tr>
+                <tr><td class="id">AC-009</td><td>Все основные действия доступны без мыши через DOM controls и keyboard interaction.</td></tr>
+                <tr><td class="id">AC-010</td><td>Repeated asset replacement освобождает retired ImageBitmap, Texture и Material resources.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="open-decisions">
+          <h2>17. Открытые решения до начала разработки</h2>
+          <p>
+            Эти пункты не должны быть «додуманы» разработчиком молча. Для каждого требуется product decision
+            или явно зафиксированный default.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Вопрос</th><th>Рекомендуемый default</th><th>Статус</th></tr></thead>
+              <tbody>
+                <tr><td class="id">OD-001</td><td>Какой структурный box style и точная flap/glue-tab topology поддерживаются?</td><td>Зафиксировать текущую 6-panel topology как отдельный versioned template.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-002</td><td>Допускается ли rotation artwork в MVP?</td><td>Нет; хранить поле rotationDeg=0 для future compatibility.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-003</td><td>Как выбирать страницу multipage PDF?</td><td>Page 1 + selector при pageCount &gt; 1.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-004</td><td>Какой initial fit после загрузки?</td><td>Fit artwork within net bounds с сохранением aspect ratio и centering.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-005</td><td>Должен ли artwork быть видим вне panel union во время редактирования?</td><td>Да, с ослабленной opacity вне net; export/3D всегда clip.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-006</td><td>Максимальный размер файла/страницы и memory policy?</td><td>Configurable limit + device-aware preview downscale; original Blob не изменять.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-007</td><td>Какие cut/fold line styles, widths и colors требуются в export?</td><td>Отдельный export profile, не UI colors.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-008</td><td>Нужны ли bleed, safe area, board thickness и print marks?</td><td>Fields предусмотрены; UI/export disabled до утверждения.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-009</td><td>Требуется ли PDF/X, spot colors и overprint?</td><td>Считать вне MVP, пока не утвержден production-prepress scope.</td><td><span class="status open">Open</span></td></tr>
+                <tr><td class="id">OD-010</td><td>Целевая browser/device matrix?</td><td>Последние стабильные Chrome/Edge desktop; mobile как responsive, но не primary authoring target.</td><td><span class="status open">Open</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="references">
+          <h2>18. Технические источники</h2>
+          <p class="muted small">
+            Документ синтезирован из предоставленных MD и PDF research materials. Ниже перечислены основные
+            первичные документы, на которых базируются архитектурные рекомендации.
+          </p>
+          <ol class="references">
+            <li><a href="https://threejs.org/docs/pages/BufferGeometry.html">Three.js — BufferGeometry</a></li>
+            <li><a href="https://threejs.org/docs/pages/Object3D.html">Three.js — Object3D</a></li>
+            <li><a href="https://threejs.org/docs/pages/CanvasTexture.html">Three.js — CanvasTexture</a></li>
+            <li><a href="https://threejs.org/docs/pages/OrbitControls.html">Three.js — OrbitControls</a></li>
+            <li><a href="https://threejs.org/docs/pages/Raycaster.html">Three.js — Raycaster</a></li>
+            <li><a href="https://threejs.org/docs/pages/WebGLRenderer.html">Three.js — WebGLRenderer</a></li>
+            <li><a href="https://mozilla.github.io/pdf.js/examples/">PDF.js — Examples</a></li>
+            <li><a href="https://mozilla.github.io/pdf.js/api/draft/module-pdfjsLib.html">PDF.js — API</a></li>
+            <li><a href="https://pdf-lib.js.org/">pdf-lib — Documentation</a></li>
+            <li><a href="https://pdf-lib.js.org/docs/api/classes/pdfdocument">pdf-lib — PDFDocument</a></li>
+            <li><a href="https://pdf-lib.js.org/docs/api/classes/pdfpage">pdf-lib — PDFPage</a></li>
+            <li><a href="https://redux.js.org/usage/implementing-undo-history">Redux — Implementing Undo History</a></li>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/ImageBitmap">MDN — ImageBitmap</a></li>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas">MDN — OffscreenCanvas</a></li>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers">MDN — Service Workers</a></li>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices">MDN — WebGL best practices</a></li>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/CORS_enabled_image">MDN — CORS-enabled images</a></li>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/touch-action">MDN — touch-action</a></li>
+            <li><a href="https://www.w3.org/TR/css-values-3/">W3C — CSS Values and Units</a></li>
+            <li><a href="https://www.w3.org/TR/SVG2/">W3C — SVG 2</a></li>
+            <li><a href="https://fabricjs.com/docs/core-concepts/">Fabric.js — Core concepts</a></li>
+            <li><a href="https://playwright.dev/docs/input">Playwright — Actions</a></li>
+          </ol>
+        </section>
+
+        <footer class="footer">
+          Carton Developer Specification · Version 1.0 · Draft for Development · 30 July 2026
+        </footer>
+      </article>
+    </main>
+  </div>
+
+  <a class="back-top" id="backTop" href="#top" aria-label="Наверх">↑</a>
+
+  <script>
+    (() => {
+      const links = [...document.querySelectorAll('#toc a')];
+      const sections = links
+        .map(link => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+      const backTop = document.getElementById('backTop');
+
+      const setActive = () => {
+        const marker = window.scrollY + 140;
+        let activeId = sections[0]?.id;
+        for (const section of sections) {
+          if (section.offsetTop <= marker) activeId = section.id;
+        }
+        links.forEach(link => {
+          const isActive = link.getAttribute('href') === `#${activeId}`;
+          link.classList.toggle('active', isActive);
+          if (isActive) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
+        backTop.classList.toggle('visible', window.scrollY > 650);
+      };
+
+      document.querySelectorAll('pre').forEach(pre => {
+        const button = pre.querySelector('.copy-code');
+        const code = pre.querySelector('code');
+        if (!button || !code) return;
+        button.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.innerText);
+            const original = button.textContent;
+            button.textContent = 'Copied';
+            window.setTimeout(() => { button.textContent = original; }, 1200);
+          } catch {
+            button.textContent = 'Copy failed';
+          }
+        });
+      });
+
+      window.addEventListener('scroll', setActive, { passive: true });
+      window.addEventListener('resize', setActive);
+      setActive();
+    })();
+  </script>
+</body>
+</html>

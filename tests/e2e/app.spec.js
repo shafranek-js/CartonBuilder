@@ -193,7 +193,7 @@ test('validates dimensions, warns once for modified artwork and preserves compat
   await page.locator('#boxDepth').fill('0');
   await page.locator('#boxDepth').press('Enter');
   await expect(page.locator('#boxDepth')).toHaveValue('40');
-  await expect(page.locator('#toast')).toHaveText('depth must be a positive number.');
+  await expect(page.locator('#toast')).toHaveText('Enter valid positive dimensions.');
 
   await buildReferenceNet(page);
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -235,7 +235,8 @@ test('handles invalid and multi-file input, PDF page selection and rotated vecto
     mimeType: 'image/png',
     buffer: Buffer.from('not an image'),
   });
-  await expect(page.locator('#toast')).toHaveText('Use a PNG, JPG/JPEG or PDF file.');
+  await expect(page.locator('#errorBanner')).toContainText('Use a PNG, JPG/JPEG or PDF file.');
+  await expect(page.getByRole('button', { name: 'Choose another file' })).toBeVisible();
 
   await page.evaluate(() => {
     const transfer = new DataTransfer();
@@ -247,7 +248,7 @@ test('handles invalid and multi-file input, PDF page selection and rotated vecto
       dataTransfer: transfer,
     }));
   });
-  await expect(page.locator('#toast')).toHaveText('Drop exactly one artwork file.');
+  await expect(page.locator('#errorBanner')).toContainText('Drop exactly one artwork file.');
 
   const source = await PDFDocument.create();
   const first = source.addPage([300, 200]);
@@ -302,4 +303,145 @@ test('keeps model state stable during responsive resize without ResizeObserver',
   expect(shellBounds).toEqual({ x: 0, y: 0, width: 390, height: 720 });
   await expect(page.locator('#workspace')).toBeVisible();
   expect(await page.evaluate(() => window.boxNetApp.getState())).toEqual(stateBefore);
+});
+
+test('restores Preview mode from validated autosave and shows the technical-proof notice', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page);
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await expect(page.locator('.technical-proof-notice')).toContainText('not PDF/X certified');
+
+  await expect.poll(() => page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('carton-builder');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const value = await new Promise((resolve, reject) => {
+      const transaction = database.transaction('projects', 'readonly');
+      const request = transaction.objectStore('projects').get('current');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return value?.snapshot?.workflowStep;
+  })).toBe('preview');
+
+  await page.reload();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await expect(page.locator('[data-step-target="preview"]')).toHaveAttribute('aria-current', 'step');
+});
+
+test('localizes persistent errors and rejects a corrupt autosave without mutating the clean model', async ({ page }) => {
+  await openArtworkStep(page);
+  await page.locator('#localePicker').selectOption('ru');
+  await expect(page.locator('#artworkWorkspace')).toHaveAttribute(
+    'aria-label',
+    'Холст размещения макета',
+  );
+
+  await page.locator('#artworkFileInput').setInputFiles({
+    name: 'fake.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('not an image'),
+  });
+  await expect(page.locator('#errorBanner')).toContainText(
+    'Используйте файл PNG, JPG/JPEG или PDF.',
+  );
+  await expect(page.getByRole('button', { name: 'Выбрать другой файл' })).toBeVisible();
+
+  await page.locator('#projectFileInput').setInputFiles({
+    name: 'broken.carton',
+    mimeType: 'application/zip',
+    buffer: Buffer.from('not a project'),
+  });
+  await expect(page.locator('#errorBanner')).toContainText(
+    'Выберите корректный проект .carton размером до 120 МБ.',
+  );
+
+  await loadGeneratedPng(page, 'autosave-source.png');
+  await page.waitForTimeout(650);
+  await page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('carton-builder');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const record = await new Promise((resolve, reject) => {
+      const transaction = database.transaction('projects', 'readonly');
+      const request = transaction.objectStore('projects').get('current');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    record.originalBlob = null;
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction('projects', 'readwrite');
+      const request = transaction.objectStore('projects').put(record, 'current');
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+  });
+
+  await page.reload();
+  await expect(page.locator('#errorBanner')).toContainText(
+    'Сохранённый проект не удалось восстановить. Открыт чистый проект.',
+  );
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await expect(page.locator('#panelCount')).toHaveText('1/6');
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.artwork.artwork.hasArtwork),
+  ).toBe(false);
+});
+
+test('cancels worker processing and revokes superseded preview URLs', async ({ page }) => {
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL.bind(URL);
+    const revoke = URL.revokeObjectURL.bind(URL);
+    window.__objectUrlAudit = { created: [], revoked: [] };
+    URL.createObjectURL = (blob) => {
+      const url = create(blob);
+      window.__objectUrlAudit.created.push(url);
+      return url;
+    };
+    URL.revokeObjectURL = (url) => {
+      window.__objectUrlAudit.revoked.push(url);
+      return revoke(url);
+    };
+  });
+  await page.reload();
+  await openArtworkStep(page);
+
+  const source = await PDFDocument.create();
+  for (let index = 0; index < 24; index += 1) {
+    const pdfPage = source.addPage([1200, 800]);
+    pdfPage.drawRectangle({
+      x: 20,
+      y: 20,
+      width: 1160,
+      height: 760,
+      color: rgb(0.2, 0.4, 0.7),
+    });
+  }
+  const sourceBytes = await source.save();
+  await page.locator('#artworkFileInput').setInputFiles({
+    name: 'large.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(sourceBytes),
+  });
+  await expect(page.locator('#processingOverlay')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#processingOverlay')).toBeHidden();
+  await expect(page.locator('#artworkCanvasWrap')).toHaveAttribute('aria-busy', 'false');
+  expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.hasArtwork)).toBe(false);
+
+  for (let index = 0; index < 20; index += 1) {
+    await loadGeneratedPng(page, `replacement-${index}.png`);
+  }
+
+  const audit = await page.evaluate(() => window.__objectUrlAudit);
+  const activeUrls = audit.created.filter((url) => !audit.revoked.includes(url));
+  expect(activeUrls).toHaveLength(1);
+  expect(new Set(audit.revoked).size).toBe(audit.created.length - 1);
 });

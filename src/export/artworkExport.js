@@ -18,6 +18,7 @@ import {
   stroke,
 } from 'pdf-lib';
 
+import { AppError } from '../errors.js';
 import { getDielineSegments } from '../model/dieline.js';
 
 const POINTS_PER_MM = 72 / 25.4;
@@ -36,7 +37,9 @@ function createCanvas(width, height) {
 async function canvasToBlob(canvas, type, quality) {
   if (canvas.convertToBlob) return canvas.convertToBlob({ type, quality });
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not encode preview.'))), type, quality);
+    canvas.toBlob((blob) => (
+      blob ? resolve(blob) : reject(new AppError('previewCreateFailed'))
+    ), type, quality);
   });
 }
 
@@ -49,7 +52,7 @@ export async function createPreviewBlob({
   dpi = EXPORT_DPI,
   showDieline = true,
 }) {
-  if (!artwork.hasArtwork || !previewBlob) throw new Error('Artwork is required.');
+  if (!artwork.hasArtwork || !previewBlob) throw new AppError('artworkRequired');
   const bounds = boxModel.getBounds();
   const pixelsPerMm = dpi / 25.4;
   const width = Math.max(1, Math.round(bounds.width * pixelsPerMm));
@@ -59,7 +62,7 @@ export async function createPreviewBlob({
     || height > MAX_RASTER_EDGE
     || width * height > MAX_RASTER_PIXELS
   ) {
-    throw new Error('The 300 DPI raster export is too large for this browser.');
+    throw new AppError('rasterExportTooLarge');
   }
   const canvas = createCanvas(width, height);
   const context = canvas.getContext('2d', { alpha: type === 'image/png' });
@@ -236,7 +239,7 @@ export async function createPdfExport({
   originalBlob,
   previewBlob,
 }) {
-  if (!artwork.hasArtwork || !originalBlob) throw new Error('Artwork is required.');
+  if (!artwork.hasArtwork || !originalBlob) throw new AppError('artworkRequired');
   const pdfDocument = await PDFDocument.create();
   const bounds = boxModel.getBounds();
   const pageWidth = bounds.width * POINTS_PER_MM;

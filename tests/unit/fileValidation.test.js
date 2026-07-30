@@ -15,11 +15,15 @@ describe('artwork file validation', () => {
   });
 
   it('rejects spoofed, empty and oversized files', async () => {
-    await expect(validateArtworkFile(new Blob([]))).rejects.toThrow('empty');
-    await expect(validateArtworkFile(new Blob(['not a png'], { type: 'image/png' }))).rejects.toThrow('PNG');
+    await expect(validateArtworkFile(new Blob([]))).rejects.toMatchObject({
+      code: 'artworkFileEmpty',
+    });
+    await expect(
+      validateArtworkFile(new Blob(['not a png'], { type: 'image/png' })),
+    ).rejects.toMatchObject({ code: 'artworkFileUnsupported' });
     await expect(validateArtworkFile({
       size: MAX_ARTWORK_BYTES + 1,
-    })).rejects.toThrow('Choose an artwork file');
+    })).rejects.toMatchObject({ code: 'artworkFileRequired' });
 
     const oversized = new Proxy(new Blob(['x']), {
       get(target, property) {
@@ -28,7 +32,9 @@ describe('artwork file validation', () => {
         return typeof value === 'function' ? value.bind(target) : value;
       },
     });
-    await expect(validateArtworkFile(oversized)).rejects.toThrow('100 MB');
+    await expect(validateArtworkFile(oversized)).rejects.toMatchObject({
+      code: 'artworkFileTooLarge',
+    });
   });
 
   it('accepts a matching declared type', async () => {
