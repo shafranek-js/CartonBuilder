@@ -56,8 +56,8 @@ function showStep(step) {
     preview3dFacade?.suspend();
   }
 
-  if (artworkApp?.artwork.hasArtwork) {
-    artworkApp.persistWorkflowStep(step === 'preview' ? 'preview' : 'artwork');
+  if (artworkApp) {
+    artworkApp.persistWorkflowStep(step);
   }
 }
 
@@ -80,6 +80,7 @@ const boxApp = createBoxNetApp({
     preview3dFacade?.resetForProject();
   },
   onLayoutReset: () => preview3dFacade?.resetForProject(),
+  onChange: () => artworkApp?.scheduleSave(),
 });
 
 artworkApp = createArtworkApp({
@@ -94,9 +95,14 @@ artworkApp = createArtworkApp({
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot) => {
     preview3dFacade?.resetForProject();
-    stepButtons.find((button) => button.dataset.stepTarget === 'artwork').disabled = false;
+    stepButtons.find((button) => button.dataset.stepTarget === 'artwork').disabled = !model.isComplete && !snapshot.artwork;
     stepButtons.find((button) => button.dataset.stepTarget === 'preview').disabled = !snapshot.artwork;
-    showStep(snapshot.workflowStep === 'preview' ? 'preview' : 'artwork');
+    const targetStep = snapshot.workflowStep === 'preview' && snapshot.artwork
+      ? 'preview'
+      : (snapshot.workflowStep === 'artwork' || snapshot.artwork)
+        ? 'artwork'
+        : 'box';
+    showStep(targetStep);
   },
   getWorkflowStep: () => currentStep,
 });

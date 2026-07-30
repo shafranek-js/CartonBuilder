@@ -218,7 +218,9 @@ export function createArtworkApp({
   });
 
   function persistedWorkflowStep(value = getWorkflowStep()) {
-    return value === 'preview' ? 'preview' : 'artwork';
+    if (value === 'preview') return 'preview';
+    if (value === 'artwork') return 'artwork';
+    return 'box';
   }
 
   function createSnapshot(workflowStep = persistedWorkflowStep()) {
@@ -247,17 +249,13 @@ export function createArtworkApp({
     const hasCompleteArtwork = artwork.hasArtwork && originalBlob && previewBlob;
     const payload = {
       snapshot: createSnapshot(persistedWorkflowStep(workflowStep)),
-      originalBlob,
-      previewBlob,
+      originalBlob: hasCompleteArtwork ? originalBlob : null,
+      previewBlob: hasCompleteArtwork ? previewBlob : null,
     };
     saveQueue = saveQueue
       .catch(() => {})
       .then(async () => {
         if (disposed) return false;
-        if (!hasCompleteArtwork) {
-          await clearCurrentProject();
-          return true;
-        }
         await saveCurrentProject(payload);
         return true;
       })
@@ -283,7 +281,6 @@ export function createArtworkApp({
 
   async function flushPendingSave() {
     windowRef.clearTimeout(saveTimer);
-    if (!artwork.hasArtwork) return false;
     try {
       return await enqueueSave();
     } catch {
@@ -781,7 +778,11 @@ export function createArtworkApp({
   function restoreProject({ snapshot, originalBlob: sourceBlob, previewBlob: storedPreview }) {
     boxApp.loadState(snapshot.box);
     projectCreatedAt = snapshot.meta?.createdAt || new Date().toISOString();
-    artwork.restore(snapshot.artwork);
+    if (snapshot.artwork) {
+      artwork.restore(snapshot.artwork);
+    } else {
+      artwork.reset();
+    }
     Object.assign(layers, snapshot.view?.layers || {});
     Object.assign(layerLocks, snapshot.view?.layerLocks || {});
     Object.assign(viewport, {
@@ -790,10 +791,10 @@ export function createArtworkApp({
       panY: snapshot.view?.panY || 0,
     });
     history.restore(snapshot.history);
-    originalBlob = sourceBlob;
-    previewBlob = storedPreview;
+    originalBlob = sourceBlob || null;
+    previewBlob = storedPreview || null;
     renderer.setPreviewBlob(previewBlob);
-    selected = true;
+    selected = Boolean(artwork.hasArtwork);
     for (const [key, control] of Object.entries(layerControls)) control.checked = layers[key];
     for (const [key, control] of Object.entries(layerLockControls)) control.checked = layerLocks[key];
     render();
@@ -901,6 +902,7 @@ export function createArtworkApp({
     renderPreview: () => renderer.renderPreview(documentRef.getElementById('previewDieline').checked),
     createSnapshot,
     persistWorkflowStep,
+    scheduleSave,
     flushPendingSave,
     dispose,
     restoreAutosave,

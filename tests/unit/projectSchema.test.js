@@ -68,7 +68,8 @@ describe('project schema', () => {
 
   it('normalizes unknown workflow modes and rejects unknown schema versions', async () => {
     const { snapshot } = await createBundle();
-    expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'box' }).workflowStep).toBe('artwork');
+    expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'unknown' }).workflowStep).toBe('box');
+    expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'box' }).workflowStep).toBe('box');
     expect(() => migrateProjectSnapshot({ ...snapshot, schemaVersion: 2 })).toThrowError(
       expect.objectContaining({ code: 'projectVersionUnsupported' }),
     );
@@ -108,4 +109,21 @@ describe('project schema', () => {
       },
     })).rejects.toMatchObject({ code: 'projectArtworkChecksumMismatch' });
   });
+
+  it('supports artwork-free box net snapshots', async () => {
+    const snapshot = {
+      schemaVersion: 1,
+      workflowStep: 'artwork',
+      box: new BoxNetModel({ width: 220, height: 110, depth: 55 }).toJSON(),
+      artwork: null,
+      view: {},
+      history: { undo: [], redo: [] },
+    };
+
+    const valid = await validateProjectBundle({ snapshot, originalBlob: null, previewBlob: null });
+    expect(valid.snapshot.box.dimensions).toEqual({ width: 220, height: 110, depth: 55 });
+    expect(valid.originalBlob).toBeNull();
+    expect(valid.previewBlob).toBeNull();
+  });
 });
+

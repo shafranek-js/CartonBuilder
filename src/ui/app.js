@@ -10,6 +10,7 @@ export function createBoxNetApp({
   beforeDimensionReset = () => true,
   onDimensionReset = () => {},
   onLayoutReset = () => {},
+  onChange = () => {},
 }) {
   const svg = documentRef.getElementById('workspace');
   const panelCount = documentRef.getElementById('panelCount');
@@ -86,6 +87,7 @@ export function createBoxNetApp({
       lastDimensions = { ...model.dimensions };
       onDimensionReset(nextDimensions);
       render();
+      onChange();
       announce(t('dimensionsUpdated'));
     } catch (error) {
       restoreDimensionInputs();
@@ -96,6 +98,7 @@ export function createBoxNetApp({
   function addPanel(panelId, edge) {
     const result = model.addPanel(panelId, edge);
     render();
+    onChange();
 
     if (result) {
       announce(t('panelAdded', {
@@ -112,6 +115,7 @@ export function createBoxNetApp({
     const panel = model.getPanel(panelId);
     const result = model.deletePanel(panelId);
     render();
+    onChange();
 
     if (result && panel) {
       announce(t('panelRemoved', { name: panel.faceName, count: model.panelCount }));

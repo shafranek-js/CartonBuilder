@@ -61,12 +61,21 @@ async function loadGeneratedPng(page, fileName = 'sample-artwork.png') {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
+    const request = indexedDB.open('carton-builder', 1);
     await new Promise((resolve) => {
-      const request = indexedDB.deleteDatabase('carton-builder');
-      request.onsuccess = request.onerror = request.onblocked = resolve;
+      request.onsuccess = () => {
+        const db = request.result;
+        if (db.objectStoreNames.contains('projects')) {
+          const tx = db.transaction('projects', 'readwrite');
+          tx.objectStore('projects').clear();
+          tx.oncomplete = tx.onerror = resolve;
+        } else {
+          resolve();
+        }
+      };
+      request.onerror = resolve;
     });
   });
-  await page.reload();
 });
 
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
@@ -515,5 +524,26 @@ test('allows opening a .carton project directly from Step 1 (Create Box)', async
   await expect(page.locator('#artworkStep')).toBeVisible();
   await expect(page.locator('#artworkFileName')).toHaveText('direct-project.png');
 });
+
+test('persists custom box dimensions and panel layout across page reloads without artwork', async ({ page }) => {
+  await expect(page.locator('#boxStep')).toBeVisible();
+
+  await page.locator('#boxWidth').fill('210');
+  await page.locator('#boxWidth').dispatchEvent('change');
+  await page.locator('#boxHeight').fill('110');
+  await page.locator('#boxHeight').dispatchEvent('change');
+
+  await buildReferenceNet(page);
+  await expect(page.locator('#panelCount')).toHaveText('6/6');
+
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await page.reload();
+
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await expect(page.locator('#boxWidth')).toHaveValue('210');
+  await expect(page.locator('#boxHeight')).toHaveValue('110');
+  await expect(page.locator('#panelCount')).toHaveText('6/6');
+});
+
 
 

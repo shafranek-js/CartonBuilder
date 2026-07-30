@@ -13,7 +13,9 @@ function clone(value) {
 }
 
 function normalizeWorkflowStep(value) {
-  return value === 'preview' ? 'preview' : 'artwork';
+  if (value === 'preview') return 'preview';
+  if (value === 'artwork') return 'artwork';
+  return 'box';
 }
 
 export function migrateProjectSnapshot(input) {
@@ -37,7 +39,7 @@ export function migrateProjectSnapshot(input) {
     version = Number(snapshot.schemaVersion);
   }
 
-  if (!snapshot.box || !snapshot.artwork?.source) {
+  if (!snapshot.box) {
     throw new AppError('projectIncomplete');
   }
 
@@ -46,7 +48,9 @@ export function migrateProjectSnapshot(input) {
   // Validate domain state before any live model is mutated.
   try {
     BoxNetModel.fromJSON(snapshot.box);
-    new ArtworkModel(snapshot.artwork);
+    if (snapshot.artwork) {
+      new ArtworkModel(snapshot.artwork);
+    }
   } catch (error) {
     throw new AppError('projectIncomplete', {}, { cause: error });
   }
@@ -64,6 +68,14 @@ export async function validateProjectBundle({
   previewBlob,
 }) {
   const snapshot = migrateProjectSnapshot(inputSnapshot);
+  if (!snapshot.artwork || !snapshot.artwork.source) {
+    return {
+      snapshot,
+      originalBlob: null,
+      previewBlob: null,
+    };
+  }
+
   const source = snapshot.artwork.source;
 
   if (!(originalBlob instanceof Blob) || originalBlob.size === 0) {
