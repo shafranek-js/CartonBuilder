@@ -1,3 +1,5 @@
+import { AppError } from '../errors.js';
+
 export const MAX_ARTWORK_BYTES = 100 * 1024 * 1024;
 
 const SUPPORTED_TYPES = Object.freeze({
@@ -24,17 +26,17 @@ export function detectArtworkType(bytes) {
 }
 
 export async function validateArtworkFile(file) {
-  if (!(file instanceof Blob)) throw new Error('Choose an artwork file.');
-  if (file.size === 0) throw new Error('The artwork file is empty.');
-  if (file.size > MAX_ARTWORK_BYTES) throw new Error('Artwork files are limited to 100 MB.');
+  if (!(file instanceof Blob)) throw new AppError('artworkFileRequired');
+  if (file.size === 0) throw new AppError('artworkFileEmpty');
+  if (file.size > MAX_ARTWORK_BYTES) throw new AppError('artworkFileTooLarge');
 
   const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
   const detectedType = detectArtworkType(header);
   if (!detectedType || !SUPPORTED_TYPES[detectedType]) {
-    throw new Error('Use a PNG, JPG/JPEG or PDF file.');
+    throw new AppError('artworkFileUnsupported');
   }
   if (file.type && file.type !== detectedType && !(file.type === 'image/jpg' && detectedType === 'image/jpeg')) {
-    throw new Error('The file content does not match its declared type.');
+    throw new AppError('artworkFileTypeMismatch');
   }
   return {
     mimeType: detectedType,

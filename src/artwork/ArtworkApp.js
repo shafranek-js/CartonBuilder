@@ -1,9 +1,15 @@
 import { createExportSvg, getExportFilename } from '../export/svgExport.js';
 import { createDiagnosticsBlob, recordDiagnostic } from '../diagnostics.js';
+import { AppError } from '../errors.js';
 import { getExportWarnings } from '../export/exportChecks.js';
-import { t } from '../i18n.js';
-import { saveCurrentProject, loadCurrentProject } from '../project/ProjectStore.js';
+import { getUserErrorMessage, t } from '../i18n.js';
+import {
+  clearCurrentProject,
+  loadCurrentProject,
+  saveCurrentProject,
+} from '../project/ProjectStore.js';
 import { createProjectArchive, readProjectArchive } from '../project/projectArchive.js';
+import { validateProjectBundle } from '../project/projectSchema.js';
 import { ArtworkModel } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
@@ -48,6 +54,7 @@ export function createArtworkApp({
   onPreview,
   onBackToEditor,
   onProjectLoaded,
+  getWorkflowStep = () => 'artwork',
 }) {
   const artwork = new ArtworkModel();
   const viewport = new ViewportModel();
@@ -73,6 +80,11 @@ export function createArtworkApp({
   const toast = documentRef.getElementById('toast');
   const processing = documentRef.getElementById('processingOverlay');
   const processingText = documentRef.getElementById('processingText');
+  const announcer = documentRef.getElementById('announcer');
+  const errorBanner = documentRef.getElementById('errorBanner');
+  const errorMessage = documentRef.getElementById('errorMessage');
+  const errorRetryButton = documentRef.getElementById('errorRetryButton');
+  const errorDismissButton = documentRef.getElementById('errorDismissButton');
   const pageDialog = documentRef.getElementById('pageDialog');
   const pageNumber = documentRef.getElementById('pdfPageNumber');
   const pageCount = documentRef.getElementById('pdfPageCount');
@@ -127,6 +139,11 @@ export function createArtworkApp({
   let processingGeneration = 0;
   let processingController = null;
   let projectCreatedAt = new Date().toISOString();
+  let errorRetry = null;
+  let currentError = null;
+  let currentErrorFallback = 'unexpectedError';
+  let saveQueue = Promise.resolve();
+  let disposed = false;
 
   function showToast(message) {
     windowRef.clearTimeout(toastTimer);
@@ -134,6 +151,43 @@ export function createArtworkApp({
     toast.classList.add('visible');
     toastTimer = windowRef.setTimeout(() => toast.classList.remove('visible'), 2400);
   }
+
+  function announce(message) {
+    announcer.textContent = message;
+  }
+
+  function clearError() {
+    errorRetry = null;
+    currentError = null;
+    currentErrorFallback = 'unexpectedError';
+    errorBanner.hidden = true;
+    errorMessage.textContent = '';
+    errorRetryButton.hidden = true;
+  }
+
+  function renderCurrentError() {
+    if (!currentError) return;
+    errorMessage.textContent = getUserErrorMessage(currentError, currentErrorFallback);
+  }
+
+  function showError(error, fallbackKey = 'unexpectedError', { retry = null } = {}) {
+    errorRetry = retry;
+    currentError = error;
+    currentErrorFallback = fallbackKey;
+    renderCurrentError();
+    errorRetryButton.hidden = typeof retry !== 'function';
+    errorBanner.hidden = false;
+    recordDiagnostic('user-error', {
+      code: error instanceof AppError ? error.code : fallbackKey,
+    });
+  }
+
+  errorDismissButton.addEventListener('click', clearError);
+  errorRetryButton.addEventListener('click', () => {
+    const retry = errorRetry;
+    clearError();
+    retry?.();
+  });
 
   function captureEditorState() {
     return {
@@ -163,7 +217,11 @@ export function createArtworkApp({
     onPointerStart: startArtworkGesture,
   });
 
-  function createSnapshot(workflowStep = 'artwork') {
+  function persistedWorkflowStep(value = getWorkflowStep()) {
+    return value === 'preview' ? 'preview' : 'artwork';
+  }
+
+  function createSnapshot(workflowStep = persistedWorkflowStep()) {
     return {
       schemaVersion: 1,
       meta: {
@@ -185,20 +243,52 @@ export function createArtworkApp({
     };
   }
 
+  function enqueueSave(workflowStep = persistedWorkflowStep()) {
+    const hasCompleteArtwork = artwork.hasArtwork && originalBlob && previewBlob;
+    const payload = {
+      snapshot: createSnapshot(persistedWorkflowStep(workflowStep)),
+      originalBlob,
+      previewBlob,
+    };
+    saveQueue = saveQueue
+      .catch(() => {})
+      .then(async () => {
+        if (disposed) return false;
+        if (!hasCompleteArtwork) {
+          await clearCurrentProject();
+          return true;
+        }
+        await saveCurrentProject(payload);
+        return true;
+      })
+      .catch((error) => {
+        console.error(error);
+        showError(error, 'autosaveFailed');
+        throw error;
+      });
+    return saveQueue;
+  }
+
   function scheduleSave() {
     windowRef.clearTimeout(saveTimer);
-    saveTimer = windowRef.setTimeout(async () => {
-      try {
-        await saveCurrentProject({
-          snapshot: createSnapshot('artwork'),
-          originalBlob,
-          previewBlob,
-        });
-      } catch (error) {
-        console.error(error);
-        showToast(t('autosaveFailed'));
-      }
+    saveTimer = windowRef.setTimeout(() => {
+      enqueueSave().catch(() => {});
     }, 500);
+  }
+
+  function persistWorkflowStep(workflowStep = persistedWorkflowStep()) {
+    windowRef.clearTimeout(saveTimer);
+    return enqueueSave(workflowStep).catch(() => false);
+  }
+
+  async function flushPendingSave() {
+    windowRef.clearTimeout(saveTimer);
+    if (!artwork.hasArtwork) return false;
+    try {
+      return await enqueueSave();
+    } catch {
+      return false;
+    }
   }
 
   function renderControls() {
@@ -247,12 +337,13 @@ export function createArtworkApp({
     if (!artwork.hasArtwork || layerLocks.artwork) return;
     const before = captureEditorState();
     try {
+      clearError();
       callback();
       commitChange(label, before);
       if (fitViewport) renderer.fitToScreen();
     } catch (error) {
       render();
-      showToast(error.message || 'Enter a valid value.');
+      showError(error, 'invalidValue');
     }
   }
 
@@ -264,7 +355,7 @@ export function createArtworkApp({
     return new Promise((resolve, reject) => {
       pageDialog.addEventListener('close', () => {
         if (pageDialog.returnValue !== 'confirm') {
-          reject(new Error(t('pdfPageCancelled')));
+          reject(new AppError('pdfPageCancelled'));
           return;
         }
         resolve(Number(pageNumber.value) - 1);
@@ -278,8 +369,11 @@ export function createArtworkApp({
     const generation = ++processingGeneration;
     processingController?.abort();
     processingController = new AbortController();
+    clearError();
     processing.hidden = false;
+    canvasWrap.setAttribute('aria-busy', 'true');
     processingText.textContent = t('processing');
+    announce(t('processingStarted'));
 
     try {
       const loaded = await loadArtworkFile(file, {
@@ -296,6 +390,7 @@ export function createArtworkApp({
       render();
       windowRef.requestAnimationFrame(() => renderer.fitToScreen());
       scheduleSave();
+      announce(t('processingComplete'));
       windowRef.dispatchEvent(new CustomEvent('artwork-loaded', {
         detail: artwork.toJSON(),
       }));
@@ -308,15 +403,22 @@ export function createArtworkApp({
       if (
         generation === processingGeneration
         && error.name !== 'AbortError'
-        && error.message !== t('pdfPageCancelled')
+        && error.code !== 'pdfPageCancelled'
       ) {
         console.error(error);
-        recordDiagnostic('artwork-load-failed', { reason: error.message || 'unknown' });
-        showToast(error.message || t('artworkLoadFailed'));
+        recordDiagnostic('artwork-load-failed', {
+          reason: error instanceof AppError ? error.code : 'unknown',
+        });
+        showError(error, 'artworkLoadFailed', {
+          retry: () => input.click(),
+        });
+      } else if (generation === processingGeneration) {
+        announce(t('processingCancelled'));
       }
     } finally {
       if (generation === processingGeneration) {
         processing.hidden = true;
+        canvasWrap.setAttribute('aria-busy', 'false');
         processingController = null;
       }
       input.value = '';
@@ -536,7 +638,9 @@ export function createArtworkApp({
     if (artwork.hasArtwork) return;
     const files = [...(event.dataTransfer?.files || [])];
     if (files.length !== 1) {
-      showToast(t('dropOneFile'));
+      showError(new AppError('dropOneFile'), 'artworkLoadFailed', {
+        retry: () => input.click(),
+      });
       return;
     }
     processFile(files[0], false);
@@ -546,6 +650,9 @@ export function createArtworkApp({
     processingController?.abort();
     processingGeneration += 1;
     processing.hidden = true;
+    canvasWrap.setAttribute('aria-busy', 'false');
+    processingController = null;
+    announce(t('processingCancelled'));
     showToast(t('artworkProcessingCancelled'));
   });
 
@@ -568,12 +675,18 @@ export function createArtworkApp({
       showToast(t('loadBeforeSave'));
       return;
     }
-    const blob = await createProjectArchive({
-      snapshot: createSnapshot('artwork'),
-      originalBlob,
-      previewBlob,
-    });
-    downloadBlob(documentRef, windowRef, blob, 'carton-project.carton');
+    try {
+      clearError();
+      const blob = await createProjectArchive({
+        snapshot: createSnapshot(),
+        originalBlob,
+        previewBlob,
+      });
+      downloadBlob(documentRef, windowRef, blob, 'carton-project.carton');
+    } catch (error) {
+      console.error(error);
+      showError(error, 'projectSaveFailed');
+    }
   });
   documentRef.getElementById('loadProjectButton').addEventListener('click', () => projectInput.click());
   documentRef.getElementById('diagnosticsButton').addEventListener('click', () => {
@@ -591,28 +704,36 @@ export function createArtworkApp({
   });
   projectInput.addEventListener('change', async () => {
     try {
+      clearError();
       const project = await readProjectArchive(projectInput.files?.[0]);
       restoreProject(project);
       onProjectLoaded(project.snapshot);
       showToast(t('projectOpened'));
     } catch (error) {
       console.error(error);
-      showToast(error.message || t('projectOpenFailed'));
+      showError(error, 'projectOpenFailed');
     } finally {
       projectInput.value = '';
     }
   });
 
   documentRef.getElementById('exportSvgButton').addEventListener('click', () => {
-    downloadBlob(
-      documentRef,
-      windowRef,
-      new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' }),
-      getExportFilename(boxModel.dimensions),
-    );
+    try {
+      clearError();
+      downloadBlob(
+        documentRef,
+        windowRef,
+        new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' }),
+        getExportFilename(boxModel.dimensions),
+      );
+    } catch (error) {
+      console.error(error);
+      showError(error, 'unexpectedError');
+    }
   });
   documentRef.getElementById('exportPngButton').addEventListener('click', async () => {
     try {
+      clearError();
       const { createPreviewBlob } = await import('../export/artworkExport.js');
       const blob = await createPreviewBlob({
         boxModel,
@@ -624,11 +745,12 @@ export function createArtworkApp({
       downloadBlob(documentRef, windowRef, blob, 'carton-artwork-preview.png');
     } catch (error) {
       console.error(error);
-      showToast(error.message || t('exportPngFailed'));
+      showError(error, 'exportPngFailed');
     }
   });
   documentRef.getElementById('exportJpgButton').addEventListener('click', async () => {
     try {
+      clearError();
       const { createPreviewBlob } = await import('../export/artworkExport.js');
       const blob = await createPreviewBlob({
         boxModel,
@@ -640,24 +762,22 @@ export function createArtworkApp({
       downloadBlob(documentRef, windowRef, blob, 'carton-artwork-preview.jpg');
     } catch (error) {
       console.error(error);
-      showToast(error.message || t('exportJpgFailed'));
+      showError(error, 'exportJpgFailed');
     }
   });
   documentRef.getElementById('exportPdfButton').addEventListener('click', async () => {
     try {
+      clearError();
       const { createPdfExport } = await import('../export/artworkExport.js');
       const blob = await createPdfExport({ boxModel, artwork, originalBlob, previewBlob });
       downloadBlob(documentRef, windowRef, blob, 'carton-artwork.pdf');
     } catch (error) {
       console.error(error);
-      showToast(error.message || t('exportPdfFailed'));
+      showError(error, 'exportPdfFailed');
     }
   });
 
   function restoreProject({ snapshot, originalBlob: sourceBlob, previewBlob: storedPreview }) {
-    if (snapshot?.schemaVersion !== 1 || !snapshot.box || !snapshot.artwork) {
-      throw new Error('Unsupported or incomplete project.');
-    }
     boxApp.loadState(snapshot.box);
     projectCreatedAt = snapshot.meta?.createdAt || new Date().toISOString();
     artwork.restore(snapshot.artwork);
@@ -669,10 +789,8 @@ export function createArtworkApp({
       panY: snapshot.view?.panY || 0,
     });
     history.restore(snapshot.history);
-    originalBlob = new Blob([sourceBlob], {
-      type: snapshot.artwork.source.mimeType || 'application/octet-stream',
-    });
-    previewBlob = new Blob([storedPreview], { type: 'image/png' });
+    originalBlob = sourceBlob;
+    previewBlob = storedPreview;
     renderer.setPreviewBlob(previewBlob);
     selected = true;
     for (const [key, control] of Object.entries(layerControls)) control.checked = layers[key];
@@ -733,18 +851,38 @@ export function createArtworkApp({
     if (event.key === ' ') spacePressed = false;
   });
   windowRef.addEventListener('resize', () => renderer.render());
-  documentRef.addEventListener('carton-locale-changed', render);
-  windowRef.addEventListener('beforeunload', () => renderer.dispose());
+  documentRef.addEventListener('carton-locale-changed', () => {
+    render();
+    renderCurrentError();
+  });
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    windowRef.clearTimeout(saveTimer);
+    windowRef.clearTimeout(toastTimer);
+    windowRef.clearTimeout(wheelTimer);
+    processingController?.abort();
+    processingController = null;
+    renderer.dispose();
+  }
+
+  windowRef.addEventListener('beforeunload', dispose);
 
   async function restoreAutosave() {
     try {
       const stored = await loadCurrentProject();
-      if (!stored?.snapshot?.artwork || !stored.previewBlob) return false;
-      restoreProject(stored);
-      onProjectLoaded(stored.snapshot);
+      if (!stored) return false;
+      const validated = await validateProjectBundle(stored);
+      restoreProject(validated);
+      onProjectLoaded(validated.snapshot);
       return true;
     } catch (error) {
       console.warn('Could not restore autosaved project', error);
+      showError(
+        new AppError('autosaveRestoreFailed', {}, { cause: error }),
+        'autosaveRestoreFailed',
+      );
       return false;
     }
   }
@@ -761,6 +899,9 @@ export function createArtworkApp({
     fitToScreen: () => renderer.fitToScreen(),
     renderPreview: () => renderer.renderPreview(documentRef.getElementById('previewDieline').checked),
     createSnapshot,
+    persistWorkflowStep,
+    flushPendingSave,
+    dispose,
     restoreAutosave,
     get originalBlob() { return originalBlob; },
     get previewBlob() { return previewBlob; },

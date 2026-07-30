@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Интерактивный опросник требований для этапа размещения artwork на развёртке коробки">
+  <title>Artwork Placement Questionnaire</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --text: #18212f;
+      --muted: #667085;
+      --line: #d9e0e9;
+      --primary: #3157d5;
+      --primary-strong: #2445b3;
+      --primary-soft: #edf2ff;
+      --success: #087f5b;
+      --success-soft: #e8f7f1;
+      --warning: #b54708;
+      --warning-soft: #fff4e5;
+      --danger: #b42318;
+      --danger-soft: #fff0ef;
+      --critical: #7a3ee6;
+      --critical-soft: #f3edff;
+      --shadow: 0 10px 32px rgba(16, 24, 40, 0.08);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.94);
+      backdrop-filter: blur(14px);
+    }
+    .header-inner {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .brand { min-width: 250px; }
+    .brand h1 { margin: 0; font-size: 18px; line-height: 1.25; }
+    .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .progress-wrap { flex: 1; min-width: 180px; }
+    .progress-meta { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
+    .progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: #e8edf4; }
+    .progress-bar { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), #6d8cff); transition: width .2s ease; }
+    .header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+    .btn {
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 650;
+      transition: border-color .15s, background .15s, transform .15s;
+    }
+    .btn:hover { border-color: #aeb9c8; background: #f9fafb; }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+    .btn-primary:hover { border-color: var(--primary-strong); background: var(--primary-strong); }
+    .btn-danger { color: var(--danger); }
+    .btn-sm { min-height: 32px; padding: 5px 9px; font-size: 13px; }
+
+    .layout {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 22px;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+    .sidebar {
+      position: sticky;
+      top: 86px;
+      max-height: calc(100vh - 108px);
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .sidebar-head { padding: 15px; border-bottom: 1px solid var(--line); }
+    .sidebar-head strong { display: block; margin-bottom: 8px; }
+    .search {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      outline: none;
+    }
+    .search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(49,87,213,.12); }
+    .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
+    .filter-btn {
+      padding: 7px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .filter-btn.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+    .section-nav { padding: 8px; }
+    .section-link {
+      display: grid;
+      grid-template-columns: 29px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+      padding: 8px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      text-align: left;
+      color: var(--text);
+    }
+    .section-link:hover { background: var(--surface-2); }
+    .section-index { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; background: var(--primary-soft); color: var(--primary); font-size: 12px; font-weight: 800; }
+    .section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .section-count { color: var(--muted); font-size: 11px; }
+
+    main { min-width: 0; }
+    .intro-card, .meta-card, .section-block {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .intro-card { padding: 22px; margin-bottom: 16px; }
+    .intro-card h2 { margin: 0 0 8px; font-size: 23px; }
+    .intro-card p { margin: 0; max-width: 950px; color: var(--muted); }
+    .critical-banner {
+      margin-top: 16px;
+      padding: 13px 15px;
+      border: 1px solid #d9c9ff;
+      border-radius: 10px;
+      background: var(--critical-soft);
+      color: #54309d;
+    }
+    .critical-banner strong { color: #432182; }
+    .meta-card { padding: 15px; margin-bottom: 16px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+    .field label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .field input {
+      width: 100%;
+      min-height: 40px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      outline: none;
+    }
+    .field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(49,87,213,.12); }
+
+    .section-block { margin-bottom: 18px; overflow: clip; scroll-margin-top: 96px; }
+    .section-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff, #fbfcfe);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+    }
+    .section-header h2 { margin: 0; font-size: 18px; }
+    .section-progress { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .questions { padding: 6px 16px 16px; }
+    .question-card {
+      position: relative;
+      padding: 17px 0;
+      border-bottom: 1px solid #edf0f4;
+      scroll-margin-top: 96px;
+    }
+    .question-card:last-child { border-bottom: 0; }
+    .question-card.answered .q-number { background: var(--success-soft); color: var(--success); }
+    .question-card.critical { margin: 8px -6px; padding: 17px 10px; border: 1px solid #dfd1ff; border-radius: 10px; background: linear-gradient(90deg, rgba(243,237,255,.78), rgba(255,255,255,0)); }
+    .q-head { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; gap: 11px; align-items: start; }
+    .q-number { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); font-weight: 850; }
+    .q-title { padding-top: 6px; font-size: 16px; font-weight: 720; }
+    .q-title code, .q-note code { padding: 1px 5px; border-radius: 5px; background: #eef1f5; font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .critical-tag { margin-top: 6px; padding: 3px 7px; border-radius: 999px; background: var(--critical); color: white; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .q-body { margin-left: 53px; padding-top: 9px; }
+    .options { display: grid; gap: 7px; margin-bottom: 10px; }
+    .option {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface-2);
+      transition: border-color .15s, background .15s;
+    }
+    .option:hover { border-color: #b9c3d1; background: #fff; }
+    .option:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+    .option input { margin-top: 3px; accent-color: var(--primary); }
+    .option span { flex: 1; }
+    .quick-choice { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 10px; }
+    .quick-choice label { position: relative; }
+    .quick-choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .quick-choice span { display: block; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--muted); font-weight: 700; }
+    .quick-choice input:checked + span { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+    .q-note { margin: 7px 0 10px; padding: 9px 11px; border-left: 3px solid #a9b5c6; background: #f8fafc; color: var(--muted); border-radius: 0 7px 7px 0; }
+    pre.q-note { overflow: auto; white-space: pre-wrap; font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: #344054; }
+    .answer-label { display: block; margin: 5px 0; color: var(--muted); font-size: 12px; font-weight: 750; }
+    .answer-text {
+      width: 100%;
+      min-height: 62px;
+      resize: vertical;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      outline: none;
+    }
+    .answer-text:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(49,87,213,.12); }
+    .q-footer { display: flex; justify-content: flex-end; margin-top: 5px; }
+    .clear-answer { border: 0; background: transparent; color: var(--muted); font-size: 12px; }
+    .clear-answer:hover { color: var(--danger); }
+    .is-hidden { display: none !important; }
+    .empty-state { padding: 45px 20px; text-align: center; color: var(--muted); }
+    .save-state { color: var(--success); font-size: 12px; white-space: nowrap; }
+
+    .footer-actions {
+      position: sticky;
+      bottom: 12px;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.95);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .footer-actions .left, .footer-actions .right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 84px;
+      z-index: 100;
+      max-width: 360px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      background: #172033;
+      color: #fff;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .18s, transform .18s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    dialog {
+      width: min(520px, calc(100vw - 28px));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0;
+      box-shadow: 0 22px 70px rgba(16,24,40,.25);
+    }
+    dialog::backdrop { background: rgba(16,24,40,.38); }
+    .dialog-body { padding: 20px; }
+    .dialog-body h3 { margin: 0 0 8px; }
+    .dialog-body p { color: var(--muted); }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 13px 20px; border-top: 1px solid var(--line); background: var(--surface-2); }
+
+    @media (max-width: 1080px) {
+      .header-inner { align-items: flex-start; flex-wrap: wrap; }
+      .brand { min-width: 0; flex: 1; }
+      .progress-wrap { order: 3; flex-basis: 100%; }
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; max-height: none; }
+      .section-nav { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 700px) {
+      .header-inner, .layout { padding-left: 12px; padding-right: 12px; }
+      .header-actions { width: 100%; justify-content: flex-start; }
+      .header-actions .btn { flex: 1; }
+      .section-nav { grid-template-columns: 1fr; }
+      .meta-grid { grid-template-columns: 1fr; }
+      .questions { padding-left: 12px; padding-right: 12px; }
+      .q-head { grid-template-columns: 38px minmax(0,1fr); }
+      .critical-tag { grid-column: 2; justify-self: start; margin-top: 0; }
+      .q-body { margin-left: 49px; }
+      .footer-actions { align-items: stretch; flex-direction: column; }
+      .footer-actions .left, .footer-actions .right { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+
+    @media print {
+      body { background: white; font-size: 12px; }
+      .app-header, .sidebar, .footer-actions, .clear-answer, .toast, dialog { display: none !important; }
+      .layout { display: block; max-width: none; padding: 0; }
+      .intro-card, .meta-card, .section-block { box-shadow: none; border-color: #bbb; break-inside: avoid; }
+      .question-card, .section-block, .is-hidden { display: block !important; }
+      .question-card { break-inside: avoid; }
+      .answer-text { min-height: 42px; border-color: #999; }
+      .critical-tag { color: #000; background: transparent; border: 1px solid #777; }
+    }
+  </style>
+</head>
+<body>
+<header class="app-header">
+  <div class="header-inner">
+    <div class="brand">
+      <h1>Artwork Placement Questionnaire</h1>
+      <p>Интерактивная фиксация требований · 170 вопросов</p>
+    </div>
+    <div class="progress-wrap" aria-label="Прогресс заполнения">
+      <div class="progress-meta"><span id="progressText">Заполнено 0 из 170</span><span id="progressPercent">0%</span></div>
+      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sm" id="printBtn" type="button">Печать / PDF</button>
+      <button class="btn btn-sm" id="exportJsonBtn" type="button">Сохранить JSON</button>
+      <button class="btn btn-primary btn-sm" id="exportMdBtn" type="button">Скачать ответы .md</button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Навигация по опроснику">
+    <div class="sidebar-head">
+      <strong>Навигация</strong>
+      <input id="searchInput" class="search" type="search" placeholder="Поиск по вопросам…" autocomplete="off">
+      <div class="filter-row">
+        <button class="filter-btn active" type="button" data-filter="all">Все</button>
+        <button class="filter-btn" type="button" data-filter="critical">Критические</button>
+        <button class="filter-btn" type="button" data-filter="unanswered">Без ответа</button>
+        <button class="filter-btn" type="button" data-filter="answered">Заполненные</button>
+      </div>
+    </div>
+    <nav id="sectionNav" class="section-nav"></nav>
+  </aside>
+
+  <main>
+    <section class="intro-card">
+      <h2>Опросник требований к этапу размещения artwork</h2>
+      <p id="goalText"></p>
+      <div class="critical-banner">
+        <strong>Быстрый старт:</strong> сначала достаточно заполнить 15 критических вопросов:
+        <span id="criticalList"></span>. Затем можно пройти остальные разделы.
+      </div>
+    </section>
+
+    <section class="meta-card" aria-label="Данные опроса">
+      <div class="meta-grid">
+        <div class="field"><label for="projectName">Проект / версия</label><input id="projectName" type="text" placeholder="Например: Box Net Builder v2"></div>
+        <div class="field"><label for="respondent">Заполнил(а)</label><input id="respondent" type="text" placeholder="Имя или роль"></div>
+        <div class="field"><label for="reviewDate">Дата</label><input id="reviewDate" type="date"></div>
+      </div>
+    </section>
+
+    <div id="questionnaire"></div>
+    <div id="emptyState" class="intro-card empty-state is-hidden">По текущему фильтру вопросы не найдены.</div>
+
+    <div class="footer-actions">
+      <div class="left">
+        <span id="saveState" class="save-state">Ответы сохраняются локально в браузере</span>
+      </div>
+      <div class="right">
+        <button class="btn" id="importBtn" type="button">Загрузить JSON</button>
+        <input id="importInput" type="file" accept="application/json,.json" hidden>
+        <button class="btn btn-danger" id="resetBtn" type="button">Очистить ответы</button>
+        <button class="btn btn-primary" id="exportMdBtnBottom" type="button">Скачать ответы .md</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<dialog id="resetDialog">
+  <div class="dialog-body">
+    <h3>Очистить все ответы?</h3>
+    <p>Будут удалены выбранные варианты, комментарии и данные опроса, сохранённые в этом браузере.</p>
+  </div>
+  <div class="dialog-actions">
+    <button class="btn" id="cancelResetBtn" type="button">Отмена</button>
+    <button class="btn btn-danger" id="confirmResetBtn" type="button">Очистить</button>
+  </div>
+</dialog>
+
+<script id="questionnaire-data" type="application/json">{"title": "Questionnaire: Artwork Placement Stage", "goal": "Нужно точно определить второй этап приложения: загрузку artwork-файла, его размещение под построенной развёрткой, визуальное совмещение и получение полезного результата.", "critical": [1, 2, 3, 7, 9, 16, 17, 22, 23, 24, 29, 51, 67, 91, 109], "sections": [{"number": 1, "title": "Реальная бизнес-задача", "questions": [{"number": 1, "text": "**Кто основной пользователь приложения?**", "options": ["A. Дизайнер упаковки", "B. Artwork coordinator", "C. Сотрудник типографии", "D. Маркетинг или заказчик без специальных навыков", "E. Любой пользователь"], "notes": [], "critical": true, "binary": false}, {"number": 2, "text": "**Какой основной результат пользователь хочет получить?**", "options": ["A. Просто визуально проверить, как изображение ложится на панели", "B. Создать готовый плоский artwork-макет", "C. Подготовить файл для дальнейшей работы в Illustrator/ArtPro+", "D. Подготовить файл непосредственно для печати", "E. В дальнейшем построить 3D-модель коробки"], "notes": [], "critical": true, "binary": false}, {"number": 3, "text": "**Должно ли размещение быть технически точным или только визуальным?**", "options": ["A. Приблизительное визуальное совмещение", "B. Точное совмещение в миллиметрах", "C. Сначала визуальное, затем возможность точного позиционирования"], "notes": [], "critical": true, "binary": false}, {"number": 4, "text": "**Насколько критично сохранение масштаба 1:1?**", "options": [], "notes": [{"type": "text", "text": "Например, развёртка `150 × 90 × 40 мм` должна экспортироваться именно в этих физических размерах."}], "critical": false, "binary": false}, {"number": 5, "text": "**Предполагается ли использование приложения для фармацевтической упаковки и реальных artwork-файлов?**", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 6, "text": "**Должно ли приложение быть локальным автономным инструментом или в будущем стать частью более крупной Artwork Management System?**", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 2, "title": "Что именно загружается", "questions": [{"number": 7, "text": "**Что обычно будет находиться в загружаемом файле?**", "options": ["A. Единое изображение, покрывающее всю развёртку", "B. Только дизайн лицевой панели", "C. Существующий artwork с несколькими панелями", "D. Фотография или декоративный фон", "E. Скан или изображение существующей упаковки"], "notes": [], "critical": true, "binary": false}, {"number": 8, "text": "**Файл должен размещаться как единый неделимый слой или пользователь позднее сможет разделять его по панелям?**", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 9, "text": "**В первой версии допускается только один загруженный файл?**", "options": [], "notes": [], "critical": true, "binary": false}, {"number": 10, "text": "При загрузке второго файла приложение должно:", "options": ["A. Немедленно заменить первый", "B. Спросить подтверждение замены", "C. Добавить второй файл отдельным слоем"], "notes": [], "critical": false, "binary": false}, {"number": 11, "text": "**Нужны ли позднее дополнительные элементы поверх основного artwork:**", "options": ["логотип;", "текст;", "штрихкод;", "пиктограммы;", "отдельные изображения?"], "notes": [], "critical": false, "binary": false}, {"number": 12, "text": "**Нужно ли поддерживать прозрачный фон PNG без его замены на белый?**", "options": [], "notes": [{"type": "text", "text": "Рекомендуемый ответ: да."}], "critical": false, "binary": true}]}, {"number": 3, "title": "Форматы файлов", "questions": [{"number": 13, "text": "Подтверждаем форматы первой версии:", "options": ["PNG;", "JPG/JPEG;", "PDF."], "notes": [], "critical": false, "binary": false}, {"number": 14, "text": "Нужны ли дополнительно:", "options": ["TIFF;", "SVG;", "AI;", "EPS;", "PSD?"], "notes": [], "critical": false, "binary": false}, {"number": 15, "text": "**PDF обычно будет одностраничным или многостраничным?**", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 16, "text": "Для многостраничного PDF нужно:", "options": ["A. Использовать только первую страницу", "B. Показывать выбор страницы", "C. Отклонять такой файл", "D. Загружать все страницы как отдельные варианты"], "notes": [], "critical": true, "binary": false}, {"number": 17, "text": "**Нужно ли сохранять векторное качество PDF или PDF может использоваться только как растровый preview?**", "options": [], "notes": [], "critical": true, "binary": true}, {"number": 18, "text": "Если PDF содержит:", "options": ["TrimBox;", "BleedBox;", "CropBox;", "MediaBox;"], "notes": [{"type": "text", "text": "какую область следует считать размером artwork?"}], "critical": false, "binary": false}, {"number": 19, "text": "**Нужно ли учитывать поворот страницы, заданный внутри PDF?**", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 20, "text": "**Какой максимальный размер файла допустим?**", "options": [], "notes": [{"type": "text", "text": "Например: 20, 50, 100 или 250 MB."}], "critical": false, "binary": false}, {"number": 21, "text": "**Нужно ли показывать ошибку при повреждённом или защищённом паролем PDF?**", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 22, "text": "**Можно ли отправлять файл на сервер для обработки или всё должно выполняться локально в браузере?**", "options": [], "notes": [{"type": "text", "text": "Для конфиденциальных artwork-файлов рекомендуется локальная обработка."}], "critical": true, "binary": true}]}, {"number": 4, "title": "Физические размеры и DPI", "questions": [{"number": 23, "text": "При загрузке PNG/JPG, содержащего DPI, приложение должно:", "options": ["A. Использовать DPI для вычисления физического размера", "B. Игнорировать DPI и автоматически вписывать изображение", "C. Показать найденный физический размер и дать пользователю выбор"], "notes": [], "critical": true, "binary": false}, {"number": 24, "text": "Если DPI отсутствует, начальный размер определяется как:", "options": ["A. Fit inside — всё изображение помещается внутри общей области развёртки", "B. Fill — изображение полностью покрывает область развёртки", "C. По условным 96 DPI", "D. Пользователь вводит физическую ширину или высоту вручную"], "notes": [], "critical": true, "binary": false}, {"number": 25, "text": "Нужно ли показывать размеры artwork:", "options": ["в пикселях;", "в миллиметрах;", "в процентах;", "во всех трёх представлениях?"], "notes": [], "critical": false, "binary": false}, {"number": 26, "text": "**Должно ли приложение предупреждать о недостаточном разрешении?**", "options": [], "notes": [{"type": "text", "text": "Например: «На лицевой панели эффективное разрешение составляет только 110 DPI»."}], "critical": false, "binary": true}, {"number": 27, "text": "Какое разрешение считается приемлемым:", "options": ["150 DPI;", "200 DPI;", "300 DPI;", "другое значение?"], "notes": [], "critical": false, "binary": false}, {"number": 28, "text": "**Нужно ли запрещать экспорт при низком разрешении или достаточно предупреждения?**", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 5, "title": "Начальное размещение artwork", "questions": [{"number": 29, "text": "После загрузки изображение должно автоматически:", "options": ["A. Вписаться внутрь bounding box всей развёртки", "B. Полностью покрыть bounding box всей развёртки", "C. Вписаться в Front Panel", "D. Сохранить физический размер из файла", "E. Показать выбор режима"], "notes": [], "critical": true, "binary": false}, {"number": 30, "text": "Относительно чего изображение первоначально центрируется:", "options": ["A. Всей развёртки", "B. Front Panel", "C. Рабочего холста", "D. Base Panel"], "notes": [], "critical": false, "binary": false}, {"number": 31, "text": "**Нужно ли сразу выделять artwork рамкой и показывать маркеры масштабирования?**", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 32, "text": "При загрузке изображения, значительно большего развёртки:", "options": ["A. Автоматически уменьшать", "B. Оставлять исходный масштаб", "C. Спрашивать пользователя"], "notes": [], "critical": false, "binary": false}, {"number": 33, "text": "При загрузке маленького изображения:", "options": ["A. Автоматически увеличивать", "B. Не увеличивать выше 100%", "C. Увеличивать, но предупреждать о потере качества"], "notes": [], "critical": false, "binary": false}]}, {"number": 6, "title": "Перемещение изображения", "questions": [{"number": 34, "text": "Artwork перемещается:", "options": ["A. Перетаскиванием любой его видимой части", "B. Только после предварительного выбора", "C. Через специальный инструмент Move"], "notes": [], "critical": false, "binary": false}, {"number": 35, "text": "Нужно ли разрешать перемещение artwork полностью за пределы развёртки?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 36, "text": "Нужны ли числовые поля:", "options": ["`X`;", "`Y`;", "единицы — миллиметры?"], "notes": [], "critical": false, "binary": false}, {"number": 37, "text": "От какой точки измеряются `X` и `Y`:", "options": ["A. От верхнего левого угла bounding box развёртки", "B. От верхнего левого угла Front Panel", "C. От центра развёртки", "D. От глобального нуля документа"], "notes": [], "critical": false, "binary": false}, {"number": 38, "text": "Нужно ли перемещение с клавиатуры:", "options": ["стрелки — `0,1 мм` или `1 мм`;", "Shift + стрелки — `10 мм`?"], "notes": [], "critical": false, "binary": false}, {"number": 39, "text": "Нужна ли привязка artwork:", "options": ["к краям панелей;", "к центрам панелей;", "к центру всей развёртки;", "к направляющим?"], "notes": [], "critical": false, "binary": false}, {"number": 40, "text": "Должна ли привязка включаться постоянно или только при удержании клавиши, например Shift?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 41, "text": "Нужны ли команды:", "options": ["Center on dieline;", "Center on Front Panel;", "Align left/right/top/bottom;", "Reset position?"], "notes": [], "critical": false, "binary": false}]}, {"number": 7, "title": "Масштабирование artwork", "questions": [{"number": 42, "text": "Какими способами пользователь изменяет размер:", "options": ["A. Перетаскивание угловых маркеров", "B. Ползунок Scale", "C. Поле процентов", "D. Кнопки `+` и `−`", "E. Все перечисленные способы"], "notes": [], "critical": false, "binary": false}, {"number": 43, "text": "Подтверждаем, что пропорции **всегда** должны сохраняться?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 44, "text": "Нужна ли возможность временно отключить сохранение пропорций?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 45, "text": "При перетаскивании углового маркера масштабирование происходит:", "options": ["A. От противоположного угла", "B. От центра artwork", "C. Зависит от зажатой клавиши Alt"], "notes": [], "critical": false, "binary": false}, {"number": 46, "text": "При изменении масштаба через поле процентов масштабировать:", "options": ["A. От центра artwork", "B. От верхнего левого угла", "C. От текущей опорной точки"], "notes": [], "critical": false, "binary": false}, {"number": 47, "text": "Что означает `100%`:", "options": ["A. Исходный пиксельный размер", "B. Исходный физический размер по DPI", "C. Размер при первоначальном автоматическом размещении"], "notes": [], "critical": false, "binary": false}, {"number": 48, "text": "Нужны ли минимальный и максимальный масштабы?", "options": [], "notes": [{"type": "text", "text": "Например: от `1%` до `2000%`."}], "critical": false, "binary": true}, {"number": 49, "text": "Нужны ли команды:", "options": ["Fit inside dieline;", "Fill dieline;", "Fit to Front Panel;", "Actual size;", "Reset scale?"], "notes": [], "critical": false, "binary": false}, {"number": 50, "text": "**Должно ли приложение показывать текущую ширину и высоту artwork в миллиметрах?**", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 8, "title": "Вращение и отражение", "questions": [{"number": 51, "text": "Нужно ли вращение artwork?", "options": ["A. Не нужно", "B. Только на 90° влево/вправо", "C. На произвольный угол", "D. На произвольный угол с шагом, например 1°"], "notes": [], "critical": true, "binary": false}, {"number": 52, "text": "Если разрешено произвольное вращение, нужна ли привязка к:", "options": ["0°;", "90°;", "180°;", "270°?"], "notes": [], "critical": false, "binary": false}, {"number": 53, "text": "Нужны ли:", "options": ["отражение по горизонтали;", "отражение по вертикали?"], "notes": [], "critical": false, "binary": false}, {"number": 54, "text": "При вращении artwork должно вращаться:", "options": ["вокруг собственного центра;", "вокруг центра развёртки;", "вокруг выбранной опорной точки?"], "notes": [], "critical": false, "binary": false}]}, {"number": 9, "title": "Отображение развёртки поверх artwork", "questions": [{"number": 55, "text": "После загрузки artwork заливки панелей должны:", "options": ["A. Полностью исчезнуть", "B. Стать полупрозрачными", "C. Остаться только у Front и Base", "D. Управляться отдельным переключателем"], "notes": [], "critical": false, "binary": false}, {"number": 56, "text": "Как обозначать Front Panel:", "options": ["голубой полупрозрачной заливкой;", "голубой рамкой;", "подписью;", "сочетанием рамки и подписи?"], "notes": [], "critical": false, "binary": false}, {"number": 57, "text": "Как обозначать Base Panel:", "options": ["розовой полупрозрачной заливкой;", "розовой рамкой;", "подписью;", "сочетанием рамки и подписи?"], "notes": [], "critical": false, "binary": false}, {"number": 58, "text": "Остальные панели должны иметь названия:", "options": ["Back;", "Top;", "Left;", "Right;", "или оставаться без названий?"], "notes": [], "critical": false, "binary": false}, {"number": 59, "text": "Нужен ли переключатель **Show panel names**?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 60, "text": "Нужен ли переключатель **Show dieline**?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 61, "text": "Какими должны быть линии между панелями:", "options": ["сплошные;", "пунктирные;", "отдельный стиль для линий сгиба?"], "notes": [], "critical": false, "binary": false}, {"number": 62, "text": "Нужно ли различать:", "options": ["внешние линии реза;", "внутренние линии сгиба?"], "notes": [], "critical": false, "binary": false}, {"number": 63, "text": "Нужно ли отображать размеры панелей на холсте?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 64, "text": "Нужны ли линейки по краям рабочего пространства?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 65, "text": "Нужна ли координатная сетка?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 66, "text": "Нужно ли менять толщину линий визуально при zoom, чтобы они всегда оставались читаемыми?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 10, "title": "Видимость artwork вне развёртки", "questions": [{"number": 67, "text": "В режиме редактирования часть artwork вне панелей должна:", "options": ["A. Оставаться полностью видимой", "B. Быть полупрозрачной", "C. Быть видимой, но область вне развёртки затемняется", "D. Полностью скрываться"], "notes": [], "critical": true, "binary": false}, {"number": 68, "text": "Нужен ли отдельный контур полного размера изображения, даже если его часть скрыта маской?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 69, "text": "Нужен ли переключатель:", "options": ["`Show full artwork`;", "`Clip to dieline`?"], "notes": [], "critical": false, "binary": false}, {"number": 70, "text": "В режиме Preview область вне развёртки должна быть:", "options": ["белой;", "серой;", "прозрачной;", "настраиваемой?"], "notes": [], "critical": false, "binary": false}, {"number": 71, "text": "Развёртка является одной общей маской или каждая панель должна отображать artwork отдельно?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 72, "text": "Нужны ли видимые зазоры между панелями в Preview или изображение должно непрерывно проходить через линии сгиба?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 11, "title": "Режим редактирования и Preview", "questions": [{"number": 73, "text": "Нужны два отдельных режима?", "options": ["Edit;", "Preview."], "notes": [], "critical": false, "binary": false}, {"number": 74, "text": "Что скрывается в Preview:", "options": ["рамка выбора artwork;", "resize handles;", "названия панелей;", "цветные заливки;", "элементы управления?"], "notes": [], "critical": false, "binary": false}, {"number": 75, "text": "Линии развёртки в Preview:", "options": ["остаются видимыми;", "скрываются;", "пользователь выбирает?"], "notes": [], "critical": false, "binary": false}, {"number": 76, "text": "Нужно ли быстрое сравнение:", "options": ["artwork without dieline;", "artwork with dieline;", "clipped preview?"], "notes": [], "critical": false, "binary": false}, {"number": 77, "text": "Нужен ли полноэкранный Preview?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 78, "text": "Нужен ли в будущем 3D-preview собранной коробки сразу после этого этапа?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 12, "title": "Навигация по рабочему холсту", "questions": [{"number": 79, "text": "Подтверждаем разделение:", "options": ["изменение масштаба artwork;", "экранный zoom всего холста?"], "notes": [], "critical": false, "binary": false}, {"number": 80, "text": "Колесо мыши должно:", "options": ["A. Масштабировать весь холст", "B. Масштабировать artwork", "C. Масштабировать холст, а Ctrl + колесо — artwork"], "notes": [], "critical": false, "binary": false}, {"number": 81, "text": "Как перемещать viewport:", "options": ["Space + drag;", "средняя кнопка мыши;", "отдельный инструмент Hand;", "все варианты?"], "notes": [], "critical": false, "binary": false}, {"number": 82, "text": "Нужны команды:", "options": ["Fit dieline to screen;", "100%;", "Zoom in;", "Zoom out?"], "notes": [], "critical": false, "binary": false}, {"number": 83, "text": "После перемещения или масштабирования artwork приложение должно автоматически менять zoom холста или оставлять текущий вид?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 84, "text": "Нужно ли автоматически центрировать сцену после загрузки файла?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 13, "title": "Выбор и взаимодействие со слоями", "questions": [{"number": 85, "text": "При клике внутри панели пользователь выбирает:", "options": ["artwork;", "панель;", "объект под курсором в зависимости от активного инструмента?"], "notes": [], "critical": false, "binary": false}, {"number": 86, "text": "Развёртка после Continue должна быть:", "options": ["полностью заблокирована;", "выбираемой, но не изменяемой;", "редактируемой прямо на втором экране?"], "notes": [], "critical": false, "binary": false}, {"number": 87, "text": "Нужен ли явный переключатель инструментов:", "options": ["Select artwork;", "Hand/pan;", "Preview?"], "notes": [], "critical": false, "binary": false}, {"number": 88, "text": "Должна ли рамка artwork показываться постоянно или только при выборе?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 89, "text": "Нужна ли возможность временно заблокировать artwork от случайного перемещения?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 90, "text": "Нужна ли настройка прозрачности artwork для более удобного совмещения?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 14, "title": "Возврат к конструкции коробки", "questions": [{"number": 91, "text": "Должна быть кнопка **Back** к этапу создания развёртки?", "options": [], "notes": [], "critical": true, "binary": true}, {"number": 92, "text": "При возврате artwork:", "options": ["A. Сохраняется", "B. Удаляется", "C. Сохраняется, но после изменения развёртки его позиция сбрасывается"], "notes": [], "critical": false, "binary": false}, {"number": 93, "text": "Если пользователь изменил конфигурацию панелей, но размеры коробки остались прежними:", "options": ["попытаться сохранить положение artwork;", "заново центрировать artwork;", "спросить пользователя?"], "notes": [], "critical": false, "binary": false}, {"number": 94, "text": "Если изменились Width, Height или Depth:", "options": ["сохранять текущий физический размер artwork;", "сохранять процент масштаба;", "полностью сбрасывать трансформацию?"], "notes": [], "critical": false, "binary": false}, {"number": 95, "text": "Нужно ли предупреждение перед возвратом или изменением геометрии?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 15, "title": "Отмена действий и история", "questions": [{"number": 96, "text": "Нужны ли Undo и Redo?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 97, "text": "Какие действия должны попадать в историю:", "options": ["загрузка файла;", "замена файла;", "перемещение;", "масштабирование;", "вращение;", "изменение opacity;", "изменение режима отображения?"], "notes": [], "critical": false, "binary": false}, {"number": 98, "text": "Перемещение мышью должно считаться:", "options": ["одним действием после отпускания;", "серией промежуточных действий?"], "notes": [], "critical": false, "binary": false}, {"number": 99, "text": "Нужна ли кнопка **Reset artwork**?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 100, "text": "Reset должен сбрасывать:", "options": ["только position/scale/rotation;", "также удалять artwork;", "предлагать выбор?"], "notes": [], "critical": false, "binary": false}]}, {"number": 16, "title": "Сохранение проекта", "questions": [{"number": 101, "text": "Нужно ли сохранять проект, чтобы продолжить работу позже?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 102, "text": "Способ сохранения:", "options": ["A. JSON-файл на компьютер", "B. В браузере через local storage", "C. В облачной базе", "D. Несколько способов"], "notes": [], "critical": false, "binary": false}, {"number": 103, "text": "Должен ли файл проекта содержать сам artwork или только ссылку на него?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 104, "text": "Если artwork встроен в проект, допустим ли большой размер файла проекта?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 105, "text": "Нужно ли автосохранение?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 106, "text": "Если да, как часто и куда?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 107, "text": "Нужны ли:", "options": ["название проекта;", "автор;", "дата создания;", "версия;", "комментарий?"], "notes": [], "critical": false, "binary": false}, {"number": 108, "text": "Нужно ли сохранять историю изменений или только последнее состояние?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 17, "title": "Итог и экспорт", "questions": [{"number": 109, "text": "Что пользователь должен получить после завершения размещения?", "options": ["A. PNG-preview", "B. JPG-preview", "C. PDF", "D. SVG", "E. JSON проекта", "F. Несколько форматов"], "notes": [], "critical": true, "binary": false}, {"number": 110, "text": "Что должно входить в экспорт:", "options": ["artwork;", "линии развёртки;", "названия панелей;", "цветные обозначения Front/Base;", "белый фон?"], "notes": [], "critical": false, "binary": false}, {"number": 111, "text": "Нужны отдельные варианты:", "options": ["Artwork only;", "Artwork + dieline;", "Dieline only;", "Preview clipped to panels?"], "notes": [], "critical": false, "binary": false}, {"number": 112, "text": "Экспорт должен содержать:", "options": ["только bounding box развёртки;", "весь artwork;", "текущую видимую область холста?"], "notes": [], "critical": false, "binary": false}, {"number": 113, "text": "Нужны ли прозрачные поля за пределами развёртки?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 114, "text": "PDF должен иметь физический размер 1:1 в миллиметрах?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 115, "text": "Какой цветовой режим ожидается:", "options": ["RGB достаточно;", "требуется CMYK;", "пока RGB, CMYK позднее?"], "notes": [], "critical": false, "binary": false}, {"number": 116, "text": "Нужно ли сохранять оригинальное разрешение изображения в экспорте?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 117, "text": "Должны ли линии развёртки находиться на отдельном PDF-слое?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 118, "text": "Нужна ли специальная spot color для dieline, например `CutContour`?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 119, "text": "Нужны ли bleed и safe area?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 120, "text": "Нужны ли технические метки:", "options": ["crop marks;", "registration marks;", "color bars;", "размеры?"], "notes": [], "critical": false, "binary": false}, {"number": 121, "text": "Нужна ли проверка перед экспортом:", "options": ["все панели покрыты artwork;", "разрешение достаточно;", "artwork выходит за край;", "файл не загружен?"], "notes": [], "critical": false, "binary": false}, {"number": 122, "text": "Должен ли пользователь иметь возможность экспортировать результат до полного покрытия всех панелей?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 18, "title": "Bleed и технические зоны", "questions": [{"number": 123, "text": "Нужно ли изображение выводить за внешние края панелей для bleed?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 124, "text": "Значение bleed:", "options": ["фиксированное, например 3 мм;", "задаётся пользователем;", "зависит от конструкции?"], "notes": [], "critical": false, "binary": false}, {"number": 125, "text": "Bleed строится:", "options": ["вокруг общей формы развёртки;", "отдельно вокруг каждой панели?"], "notes": [], "critical": false, "binary": false}, {"number": 126, "text": "Нужна ли safe area внутри каждой панели?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 127, "text": "Нужно ли предупреждать, если важный объект расположен слишком близко к линии сгиба или реза?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 128, "text": "На текущем этапе приложение работает только с шестью прямоугольными панелями или уже нужно учитывать будущие клапаны?", "options": [], "notes": [], "critical": false, "binary": false}]}, {"number": 19, "title": "UI второго этапа", "questions": [{"number": 129, "text": "Второй этап должен открываться:", "options": ["A. В том же окне вместо конструктора", "B. На новой странице", "C. В отдельной вкладке/шаге мастера"], "notes": [], "critical": false, "binary": false}, {"number": 130, "text": "Верхняя часть с Width, Height и Depth остаётся видимой?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 131, "text": "Нужен индикатор этапов:", "options": [], "notes": [{"type": "code", "text": "1. Create Box → 2. Place Artwork → 3. Preview/Export"}], "critical": false, "binary": false}, {"number": 132, "text": "Где должна находиться панель управления:", "options": ["слева;", "справа;", "сверху;", "в плавающей панели?"], "notes": [], "critical": false, "binary": false}, {"number": 133, "text": "Что должно быть видно постоянно:", "options": ["имя файла;", "масштаб;", "X/Y;", "размер в миллиметрах;", "DPI;", "rotation?"], "notes": [], "critical": false, "binary": false}, {"number": 134, "text": "Нужен ли отдельный список слоёв?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 135, "text": "Нужны ли tooltips с объяснением каждого инструмента?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 136, "text": "Язык первой версии:", "options": ["английский;", "русский;", "оба;", "локализуемый интерфейс?"], "notes": [], "critical": false, "binary": false}, {"number": 137, "text": "Нужно ли визуально повторять стиль текущего окна Create Basic Box или разрешён современный новый дизайн?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 20, "title": "Drag-and-drop", "questions": [{"number": 138, "text": "Файл можно бросать:", "options": ["на весь canvas;", "только на выделенную drop zone?"], "notes": [], "critical": false, "binary": false}, {"number": 139, "text": "После загрузки drag-and-drop должен оставаться активным для замены файла?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 140, "text": "При перетаскивании неподдерживаемого файла нужно:", "options": ["сразу показать запрет;", "принять drop и затем показать ошибку?"], "notes": [], "critical": false, "binary": false}, {"number": 141, "text": "Что происходит, если пользователь бросает несколько файлов одновременно?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 142, "text": "Нужна ли визуальная подсветка всей drop zone при `dragover`?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 143, "text": "Нужно ли предупреждение перед заменой существующего artwork через drag-and-drop?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 21, "title": "Ошибки и предупреждения", "questions": [{"number": 144, "text": "Какие ситуации должны блокировать работу:", "options": ["неподдерживаемый формат;", "файл слишком большой;", "повреждённый файл;", "PDF с паролем;", "отсутствие доступной памяти;", "нулевые или некорректные размеры?"], "notes": [], "critical": false, "binary": false}, {"number": 145, "text": "Ошибки показываются:", "options": ["всплывающим сообщением;", "внутри панели;", "модальным окном?"], "notes": [], "critical": false, "binary": false}, {"number": 146, "text": "Нужно ли позволить повторную загрузку после ошибки без перезагрузки страницы?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 147, "text": "Нужно ли логировать технические ошибки для разработчиков?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 148, "text": "Нужно ли показывать процесс загрузки и обработки больших PDF?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 149, "text": "Нужна ли возможность отменить обработку большого файла?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 22, "title": "Платформы и управление", "questions": [{"number": 150, "text": "Основная платформа:", "options": ["desktop browser;", "tablet;", "mobile?"], "notes": [], "critical": false, "binary": false}, {"number": 151, "text": "Какие браузеры обязательны:", "options": ["Chrome;", "Edge;", "Firefox;", "Safari?"], "notes": [], "critical": false, "binary": false}, {"number": 152, "text": "Нужно ли поддерживать touch:", "options": ["перемещение одним пальцем;", "pinch-to-zoom;", "resize handles?"], "notes": [], "critical": false, "binary": false}, {"number": 153, "text": "Минимальный размер экрана?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 154, "text": "Нужны ли горячие клавиши?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 155, "text": "Нужно ли учитывать пользователей с высокой плотностью экрана и 4K-мониторами?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 23, "title": "Производительность и конфиденциальность", "questions": [{"number": 156, "text": "Какой типичный размер изображения:", "options": ["по пикселям;", "по мегабайтам;", "размер страницы PDF?"], "notes": [], "critical": false, "binary": false}, {"number": 157, "text": "Какой максимальный размер artwork ожидается в реальной работе?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 158, "text": "Допустимо ли временно уменьшать изображение для экранного preview, сохраняя оригинал для экспорта?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 159, "text": "Должно ли приложение работать полностью без интернета?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 160, "text": "Допустимо ли хранить загруженный artwork в памяти браузера до закрытия страницы?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 161, "text": "Нужно ли гарантировать, что файл никогда не покидает устройство пользователя?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 162, "text": "Нужна ли автоматическая очистка временных данных после закрытия проекта?", "options": [], "notes": [], "critical": false, "binary": true}]}, {"number": 24, "title": "Следующие этапы продукта", "questions": [{"number": 163, "text": "После размещения artwork следующим этапом будет:", "options": ["экспорт;", "3D-просмотр;", "редактирование отдельных панелей;", "добавление клапанов;", "автоматическое разрезание artwork на панели?"], "notes": [], "critical": false, "binary": false}, {"number": 164, "text": "В 3D-preview artwork должен корректно переходить между панелями через сгибы?", "options": [], "notes": [], "critical": false, "binary": false}, {"number": 165, "text": "Нужна ли возможность видеть собранную коробку и вращать её?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 166, "text": "Нужна ли отдельная ориентация artwork на каждой панели?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 167, "text": "Планируется ли автоматическое определение существующих линий развёртки внутри загруженного PDF?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 168, "text": "Планируется ли сравнение загруженного artwork с созданной развёрткой?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 169, "text": "Нужна ли автоматическая проверка, совпадают ли размеры загруженного PDF с созданной конструкцией?", "options": [], "notes": [], "critical": false, "binary": true}, {"number": 170, "text": "Нужно ли в будущем поддерживать нестандартные конструкции, клапаны и непрямоугольные панели?", "options": [], "notes": [{"type": "text", "text": "# Критические вопросы для первого решения"}, {"type": "text", "text": "Чтобы быстро зафиксировать основу, сначала достаточно ответить на эти 15 пунктов:"}, {"type": "code", "text": "1, 2, 3, 7, 9, 16, 17, 22, 23, 24, 29, 51, 67, 91, 109"}, {"type": "text", "text": "Удобный формат ответа:"}, {"type": "code", "text": "1 — B\n2 — A и E\n3 — C\n7 — единый artwork всей развёртки\n9 — один файл\n16 — выбор страницы\n..."}, {"type": "text", "text": "После ответов вопросы, которые потеряют актуальность, можно будет исключить, а оставшиеся превратить в окончательную продуктовую спецификацию второго этапа."}], "critical": false, "binary": true}]}]}</script>
+<script>
+(() => {
+  'use strict';
+
+  const DATA = JSON.parse(document.getElementById('questionnaire-data').textContent);
+  const STORAGE_KEY = 'artwork-placement-questionnaire.v1';
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+  let currentFilter = 'all';
+  let searchTerm = '';
+  let saveTimer = null;
+  let state = loadState();
+
+  function blankState() {
+    return {
+      version: 1,
+      updatedAt: null,
+      meta: { projectName: '', respondent: '', reviewDate: new Date().toISOString().slice(0,10) },
+      answers: {}
+    };
+  }
+
+  function loadState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return parsed && parsed.answers ? { ...blankState(), ...parsed, meta: { ...blankState().meta, ...(parsed.meta || {}) } } : blankState();
+    } catch (error) {
+      console.warn('Could not load saved questionnaire state', error);
+      return blankState();
+    }
+  }
+
+  function inlineMarkdown(value) {
+    const div = document.createElement('div');
+    div.textContent = value || '';
+    let safe = div.innerHTML;
+    safe = safe.replace(/`([^`]+)`/g, '<code>$1</code>');
+    safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    return safe;
+  }
+
+  function slugSection(section) { return `section-${section.number}`; }
+  function getAnswer(number) {
+    const key = String(number);
+    if (!state.answers[key]) state.answers[key] = { selected: [], quick: '', notes: '' };
+    return state.answers[key];
+  }
+
+  function render() {
+    $('#goalText').textContent = DATA.goal;
+    $('#criticalList').textContent = DATA.critical.join(', ');
+    $('#projectName').value = state.meta.projectName || '';
+    $('#respondent').value = state.meta.respondent || '';
+    $('#reviewDate').value = state.meta.reviewDate || '';
+
+    const nav = $('#sectionNav');
+    const host = $('#questionnaire');
+    nav.innerHTML = '';
+    host.innerHTML = '';
+
+    for (const section of DATA.sections) {
+      const navBtn = document.createElement('button');
+      navBtn.type = 'button';
+      navBtn.className = 'section-link';
+      navBtn.dataset.target = slugSection(section);
+      navBtn.innerHTML = `<span class="section-index">${section.number}</span><span class="section-name">${inlineMarkdown(section.title)}</span><span class="section-count" id="nav-count-${section.number}">0/${section.questions.length}</span>`;
+      nav.appendChild(navBtn);
+
+      const block = document.createElement('section');
+      block.className = 'section-block';
+      block.id = slugSection(section);
+      block.dataset.section = section.number;
+      block.innerHTML = `<header class="section-header"><h2>${section.number}. ${inlineMarkdown(section.title)}</h2><span class="section-progress" id="section-progress-${section.number}"></span></header><div class="questions"></div>`;
+      const qhost = $('.questions', block);
+
+      for (const q of section.questions) {
+        const answer = getAnswer(q.number);
+        const card = document.createElement('article');
+        card.className = `question-card${q.critical ? ' critical' : ''}`;
+        card.id = `question-${q.number}`;
+        card.dataset.question = q.number;
+        card.dataset.critical = q.critical ? 'true' : 'false';
+        card.dataset.search = [q.text, ...q.options, ...q.notes.map(n => n.text)].join(' ').toLowerCase();
+
+        const optionsHtml = q.options.length ? `<div class="options">${q.options.map((opt, idx) => {
+          const id = `q${q.number}-opt${idx}`;
+          const checked = answer.selected.includes(opt) ? ' checked' : '';
+          return `<label class="option" for="${id}"><input id="${id}" type="checkbox" data-role="option" value="${escapeAttr(opt)}"${checked}><span>${inlineMarkdown(opt)}</span></label>`;
+        }).join('')}</div>` : '';
+
+        const quickHtml = q.binary ? `<div class="quick-choice" role="radiogroup" aria-label="Быстрый ответ">
+          ${['Да','Нет','Не определено'].map(value => {
+            const id = `q${q.number}-quick-${value.replace(/\s/g,'-')}`;
+            return `<label for="${id}"><input id="${id}" type="radio" name="q${q.number}-quick" data-role="quick" value="${value}"${answer.quick === value ? ' checked' : ''}><span>${value}</span></label>`;
+          }).join('')}
+        </div>` : '';
+
+        const notesHtml = q.notes.map(note => note.type === 'code'
+          ? `<pre class="q-note">${escapeHtml(note.text)}</pre>`
+          : `<div class="q-note">${inlineMarkdown(note.text)}</div>`
+        ).join('');
+
+        card.innerHTML = `
+          <div class="q-head">
+            <div class="q-number">${q.number}</div>
+            <div class="q-title">${inlineMarkdown(q.text)}</div>
+            ${q.critical ? '<span class="critical-tag">Критический</span>' : ''}
+          </div>
+          <div class="q-body">
+            ${optionsHtml}
+            ${quickHtml}
+            ${notesHtml}
+            <label class="answer-label" for="q${q.number}-notes">Ответ / комментарий</label>
+            <textarea class="answer-text" id="q${q.number}-notes" data-role="notes" placeholder="Введите решение, пояснение или собственный вариант…">${escapeHtml(answer.notes || '')}</textarea>
+            <div class="q-footer"><button type="button" class="clear-answer" data-role="clear">Очистить ответ</button></div>
+          </div>`;
+        qhost.appendChild(card);
+      }
+      host.appendChild(block);
+    }
+
+    bindRenderedEvents();
+    applyFilters();
+    updateProgress();
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+  function escapeAttr(value) { return escapeHtml(value).replace(/'/g, '&#39;'); }
+
+  function bindRenderedEvents() {
+    $$('.section-link').forEach(btn => btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+
+    $$('.question-card').forEach(card => {
+      const number = Number(card.dataset.question);
+      card.addEventListener('change', e => {
+        const answer = getAnswer(number);
+        if (e.target.dataset.role === 'option') {
+          answer.selected = $$('input[data-role="option"]:checked', card).map(i => i.value);
+        } else if (e.target.dataset.role === 'quick') {
+          answer.quick = e.target.value;
+        }
+        scheduleSave();
+        updateProgress();
+        applyFilters();
+      });
+      const notes = $('[data-role="notes"]', card);
+      notes.addEventListener('input', () => {
+        getAnswer(number).notes = notes.value;
+        scheduleSave();
+        updateProgress();
+      });
+      $('[data-role="clear"]', card).addEventListener('click', () => {
+        state.answers[String(number)] = { selected: [], quick: '', notes: '' };
+        $$('input', card).forEach(input => input.checked = false);
+        notes.value = '';
+        scheduleSave();
+        updateProgress();
+        applyFilters();
+      });
+    });
+  }
+
+  function isAnswered(number) {
+    const a = state.answers[String(number)];
+    return !!(a && ((a.selected && a.selected.length) || a.quick || (a.notes && a.notes.trim())));
+  }
+
+  function updateProgress() {
+    const allQuestions = DATA.sections.flatMap(s => s.questions);
+    const answered = allQuestions.filter(q => isAnswered(q.number)).length;
+    const percent = Math.round((answered / allQuestions.length) * 100);
+    $('#progressText').textContent = `Заполнено ${answered} из ${allQuestions.length}`;
+    $('#progressPercent').textContent = `${percent}%`;
+    $('#progressBar').style.width = `${percent}%`;
+
+    for (const section of DATA.sections) {
+      const count = section.questions.filter(q => isAnswered(q.number)).length;
+      $(`#nav-count-${section.number}`).textContent = `${count}/${section.questions.length}`;
+      $(`#section-progress-${section.number}`).textContent = `Заполнено ${count} из ${section.questions.length}`;
+      for (const q of section.questions) {
+        document.getElementById(`question-${q.number}`)?.classList.toggle('answered', isAnswered(q.number));
+      }
+    }
+  }
+
+  function applyFilters() {
+    let visibleQuestions = 0;
+    for (const section of DATA.sections) {
+      let visibleInSection = 0;
+      for (const q of section.questions) {
+        const card = document.getElementById(`question-${q.number}`);
+        const matchesSearch = !searchTerm || card.dataset.search.includes(searchTerm);
+        const answered = isAnswered(q.number);
+        const matchesFilter = currentFilter === 'all'
+          || (currentFilter === 'critical' && q.critical)
+          || (currentFilter === 'answered' && answered)
+          || (currentFilter === 'unanswered' && !answered);
+        const visible = matchesSearch && matchesFilter;
+        card.classList.toggle('is-hidden', !visible);
+        if (visible) { visibleQuestions++; visibleInSection++; }
+      }
+      document.getElementById(slugSection(section)).classList.toggle('is-hidden', visibleInSection === 0);
+      const navLink = $(`.section-link[data-target="${slugSection(section)}"]`);
+      navLink?.classList.toggle('is-hidden', visibleInSection === 0);
+    }
+    $('#emptyState').classList.toggle('is-hidden', visibleQuestions !== 0);
+  }
+
+  function scheduleSave() {
+    $('#saveState').textContent = 'Сохранение…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 250);
+  }
+
+  function saveNow() {
+    state.updatedAt = new Date().toISOString();
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      $('#saveState').textContent = 'Сохранено локально';
+    } catch (error) {
+      console.error(error);
+      $('#saveState').textContent = 'Не удалось сохранить локально';
+      toast('Не удалось сохранить ответы в браузере. Экспортируйте JSON, чтобы не потерять данные.');
+    }
+  }
+
+  function getQuestion(number) {
+    for (const section of DATA.sections) {
+      const found = section.questions.find(q => q.number === number);
+      if (found) return { section, question: found };
+    }
+    return null;
+  }
+
+  function exportMarkdown() {
+    syncMeta();
+    const lines = [
+      '# Artwork Placement Questionnaire — Answers', '',
+      `- **Проект / версия:** ${state.meta.projectName || 'Не указано'}`,
+      `- **Заполнил(а):** ${state.meta.respondent || 'Не указано'}`,
+      `- **Дата:** ${state.meta.reviewDate || 'Не указана'}`,
+      `- **Экспортировано:** ${new Date().toLocaleString('ru-RU')}`, '',
+      '> Критические вопросы: ' + DATA.critical.join(', '), ''
+    ];
+
+    for (const section of DATA.sections) {
+      lines.push(`# ${section.number}. ${stripMarkdown(section.title)}`, '');
+      for (const q of section.questions) {
+        const a = state.answers[String(q.number)] || { selected: [], quick: '', notes: '' };
+        lines.push(`## ${q.number}. ${stripMarkdown(q.text)}${q.critical ? ' — КРИТИЧЕСКИЙ' : ''}`, '');
+        if (a.selected?.length) {
+          lines.push('**Выбранные варианты:**');
+          a.selected.forEach(v => lines.push(`- ${stripMarkdown(v)}`));
+          lines.push('');
+        }
+        if (a.quick) lines.push(`**Быстрый ответ:** ${a.quick}`, '');
+        if (a.notes?.trim()) lines.push('**Комментарий:**', '', a.notes.trim(), '');
+        if (!isAnswered(q.number)) lines.push('*Ответ не заполнен.*', '');
+      }
+    }
+    downloadText(`artwork-placement-answers-${dateStamp()}.md`, lines.join('\n'), 'text/markdown;charset=utf-8');
+    toast('Файл Markdown подготовлен.');
+  }
+
+  function exportJson() {
+    syncMeta();
+    const output = { ...state, questionnaire: { title: DATA.title, critical: DATA.critical, questionCount: 170 } };
+    downloadText(`artwork-placement-answers-${dateStamp()}.json`, JSON.stringify(output, null, 2), 'application/json;charset=utf-8');
+    toast('JSON сохранён.');
+  }
+
+  function stripMarkdown(value) {
+    return String(value || '').replace(/\*\*/g, '').replace(/`/g, '');
+  }
+
+  function dateStamp() { return new Date().toISOString().slice(0,10); }
+
+  function downloadText(filename, content, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function syncMeta() {
+    state.meta.projectName = $('#projectName').value.trim();
+    state.meta.respondent = $('#respondent').value.trim();
+    state.meta.reviewDate = $('#reviewDate').value;
+    saveNow();
+  }
+
+  function importJson(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = JSON.parse(reader.result);
+        if (!imported || typeof imported !== 'object' || !imported.answers) throw new Error('Invalid questionnaire state');
+        state = { ...blankState(), ...imported, meta: { ...blankState().meta, ...(imported.meta || {}) } };
+        saveNow();
+        render();
+        toast('Ответы загружены из JSON.');
+      } catch (error) {
+        console.error(error);
+        toast('Не удалось загрузить JSON: неверный формат файла.');
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function toast(message) {
+    const node = $('#toast');
+    node.textContent = message;
+    node.classList.add('show');
+    clearTimeout(node._timer);
+    node._timer = setTimeout(() => node.classList.remove('show'), 2800);
+  }
+
+  $('#searchInput').addEventListener('input', e => {
+    searchTerm = e.target.value.trim().toLowerCase();
+    applyFilters();
+  });
+  $$('.filter-btn').forEach(btn => btn.addEventListener('click', () => {
+    currentFilter = btn.dataset.filter;
+    $$('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+    applyFilters();
+  }));
+  ['projectName','respondent','reviewDate'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => { syncMeta(); });
+  });
+  $('#exportMdBtn').addEventListener('click', exportMarkdown);
+  $('#exportMdBtnBottom').addEventListener('click', exportMarkdown);
+  $('#exportJsonBtn').addEventListener('click', exportJson);
+  $('#printBtn').addEventListener('click', () => window.print());
+  $('#importBtn').addEventListener('click', () => $('#importInput').click());
+  $('#importInput').addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (file) importJson(file);
+    e.target.value = '';
+  });
+  $('#resetBtn').addEventListener('click', () => $('#resetDialog').showModal());
+  $('#cancelResetBtn').addEventListener('click', () => $('#resetDialog').close());
+  $('#confirmResetBtn').addEventListener('click', () => {
+    localStorage.removeItem(STORAGE_KEY);
+    state = blankState();
+    $('#resetDialog').close();
+    render();
+    toast('Все ответы очищены.');
+  });
+
+  window.addEventListener('beforeunload', saveNow);
+  render();
+})();
+</script>
+</body>
+</html>

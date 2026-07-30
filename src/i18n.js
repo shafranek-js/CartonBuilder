@@ -1,3 +1,5 @@
+import { AppError } from './errors.js';
+
 const messages = {
   en: {
     language: 'Language',
@@ -67,6 +69,7 @@ const messages = {
     dropOneFile: 'Drop exactly one artwork file.',
     loadBeforeSave: 'Load artwork before saving the project.',
     projectOpened: 'Project opened.',
+    projectSaveFailed: 'Could not save the project.',
     projectOpenFailed: 'Could not open the project.',
     exportPngFailed: 'Could not export PNG.',
     exportJpgFailed: 'Could not export JPG.',
@@ -84,6 +87,60 @@ const messages = {
     panelAdded: '{name} added. {count} of 6 panels placed.{complete}',
     panelRemoved: '{name} removed. {count} of 6 panels placed.',
     boxCompleteSuffix: ' Box net complete.',
+    dismiss: 'Dismiss',
+    tryAnotherFile: 'Choose another file',
+    technicalProofNotice: 'Technical proof: the PDF is 1:1 with a CutContour dieline, but it is not PDF/X certified. Verify it with your printer before production.',
+    workflowLabel: 'Workflow',
+    languageLabel: 'Language',
+    boxDesignerLabel: 'Box net designer',
+    interactiveBoxNetLabel: 'Interactive box net',
+    artworkCanvasLabel: 'Artwork placement canvas',
+    artworkControlsLabel: 'Artwork controls',
+    artworkCenterXLabel: 'Artwork center X',
+    artworkCenterYLabel: 'Artwork center Y',
+    artworkWidthLabel: 'Artwork width',
+    artworkHeightLabel: 'Artwork height',
+    artworkScaleLabel: 'Artwork scale',
+    artworkOpacityLabel: 'Artwork opacity',
+    showArtworkLabel: 'Show Artwork',
+    lockArtworkLabel: 'Lock Artwork',
+    showDielineLabel: 'Show Dieline',
+    lockDielineLabel: 'Lock Dieline',
+    showPanelNamesLabel: 'Show Panel names',
+    lockPanelNamesLabel: 'Lock Panel names',
+    showHighlightsLabel: 'Show Front/Base highlight',
+    lockHighlightsLabel: 'Lock Front/Base highlight',
+    clippedPreviewLabel: 'Clipped artwork preview',
+    processingStarted: 'Artwork processing started.',
+    processingComplete: 'Artwork processing complete.',
+    processingCancelled: 'Artwork processing cancelled.',
+    unexpectedError: 'Something went wrong. Try again.',
+    invalidValue: 'Enter a valid value.',
+    artworkFileRequired: 'Choose an artwork file.',
+    artworkFileEmpty: 'The artwork file is empty.',
+    artworkFileTooLarge: 'Artwork files are limited to 100 MB.',
+    artworkFileUnsupported: 'Use a PNG, JPG/JPEG or PDF file.',
+    artworkFileTypeMismatch: 'The file content does not match its declared type.',
+    previewCreateFailed: 'Could not create the artwork preview.',
+    canvasContextUnavailable: 'The browser could not create an image-processing canvas.',
+    pdfPasswordProtected: 'Password-protected PDF files are not supported.',
+    pdfDamaged: 'The PDF file is damaged or cannot be opened.',
+    pdfPageInvalid: 'Choose a valid PDF page.',
+    rasterExportTooLarge: 'The 300 DPI raster export is too large for this browser.',
+    projectArchiveInvalid: 'Choose a valid .carton project up to 120 MB.',
+    projectIncomplete: 'The project is incomplete.',
+    projectMetadataTooLarge: 'The project metadata is too large.',
+    projectVersionUnsupported: 'This project version is not supported.',
+    projectAssetPathInvalid: 'The project contains an invalid asset path.',
+    projectPreviewMissing: 'The project preview is missing.',
+    projectArtworkMissing: 'The project artwork is missing.',
+    projectArtworkTooLarge: 'The project artwork exceeds 100 MB.',
+    projectPreviewTooLarge: 'The project preview is too large.',
+    projectArtworkChecksumMismatch: 'The project artwork checksum does not match.',
+    projectArtworkSizeMismatch: 'The project artwork size does not match its metadata.',
+    projectArtworkTypeMismatch: 'The project artwork type does not match its metadata.',
+    projectPreviewInvalid: 'The project preview is invalid.',
+    autosaveRestoreFailed: 'The saved project could not be restored. A clean project has been opened.',
   },
   ru: {
     language: 'Язык',
@@ -153,6 +210,7 @@ const messages = {
     dropOneFile: 'Перетащите ровно один файл макета.',
     loadBeforeSave: 'Загрузите макет перед сохранением проекта.',
     projectOpened: 'Проект открыт.',
+    projectSaveFailed: 'Не удалось сохранить проект.',
     projectOpenFailed: 'Не удалось открыть проект.',
     exportPngFailed: 'Не удалось экспортировать PNG.',
     exportJpgFailed: 'Не удалось экспортировать JPG.',
@@ -170,6 +228,60 @@ const messages = {
     panelAdded: '{name} добавлена. Размещено панелей: {count} из 6.{complete}',
     panelRemoved: '{name} удалена. Размещено панелей: {count} из 6.',
     boxCompleteSuffix: ' Развёртка готова.',
+    dismiss: 'Закрыть',
+    tryAnotherFile: 'Выбрать другой файл',
+    technicalProofNotice: 'Технический макет: PDF имеет масштаб 1:1 и контур CutContour, но не сертифицирован как PDF/X. Перед производством проверьте его в типографии.',
+    workflowLabel: 'Этапы работы',
+    languageLabel: 'Язык',
+    boxDesignerLabel: 'Редактор развёртки коробки',
+    interactiveBoxNetLabel: 'Интерактивная развёртка коробки',
+    artworkCanvasLabel: 'Холст размещения макета',
+    artworkControlsLabel: 'Управление макетом',
+    artworkCenterXLabel: 'Центр макета по X',
+    artworkCenterYLabel: 'Центр макета по Y',
+    artworkWidthLabel: 'Ширина макета',
+    artworkHeightLabel: 'Высота макета',
+    artworkScaleLabel: 'Масштаб макета',
+    artworkOpacityLabel: 'Прозрачность макета',
+    showArtworkLabel: 'Показывать макет',
+    lockArtworkLabel: 'Заблокировать макет',
+    showDielineLabel: 'Показывать развёртку',
+    lockDielineLabel: 'Заблокировать развёртку',
+    showPanelNamesLabel: 'Показывать названия панелей',
+    lockPanelNamesLabel: 'Заблокировать названия панелей',
+    showHighlightsLabel: 'Показывать подсветку Front/Base',
+    lockHighlightsLabel: 'Заблокировать подсветку Front/Base',
+    clippedPreviewLabel: 'Предпросмотр макета, обрезанного по панелям',
+    processingStarted: 'Обработка макета началась.',
+    processingComplete: 'Обработка макета завершена.',
+    processingCancelled: 'Обработка макета отменена.',
+    unexpectedError: 'Произошла ошибка. Повторите попытку.',
+    invalidValue: 'Введите корректное значение.',
+    artworkFileRequired: 'Выберите файл макета.',
+    artworkFileEmpty: 'Файл макета пуст.',
+    artworkFileTooLarge: 'Размер файла макета не должен превышать 100 МБ.',
+    artworkFileUnsupported: 'Используйте файл PNG, JPG/JPEG или PDF.',
+    artworkFileTypeMismatch: 'Содержимое файла не соответствует заявленному типу.',
+    previewCreateFailed: 'Не удалось создать предпросмотр макета.',
+    canvasContextUnavailable: 'Браузеру не удалось создать холст для обработки изображения.',
+    pdfPasswordProtected: 'PDF, защищённые паролем, не поддерживаются.',
+    pdfDamaged: 'PDF повреждён или не может быть открыт.',
+    pdfPageInvalid: 'Выберите корректную страницу PDF.',
+    rasterExportTooLarge: 'Экспорт 300 DPI слишком велик для этого браузера.',
+    projectArchiveInvalid: 'Выберите корректный проект .carton размером до 120 МБ.',
+    projectIncomplete: 'Данные проекта неполны.',
+    projectMetadataTooLarge: 'Метаданные проекта слишком велики.',
+    projectVersionUnsupported: 'Эта версия проекта не поддерживается.',
+    projectAssetPathInvalid: 'Проект содержит некорректный путь к файлу.',
+    projectPreviewMissing: 'В проекте отсутствует предпросмотр.',
+    projectArtworkMissing: 'В проекте отсутствует исходный макет.',
+    projectArtworkTooLarge: 'Размер макета в проекте превышает 100 МБ.',
+    projectPreviewTooLarge: 'Предпросмотр проекта слишком велик.',
+    projectArtworkChecksumMismatch: 'Контрольная сумма макета не совпадает.',
+    projectArtworkSizeMismatch: 'Размер макета не соответствует метаданным проекта.',
+    projectArtworkTypeMismatch: 'Тип макета не соответствует метаданным проекта.',
+    projectPreviewInvalid: 'Предпросмотр проекта повреждён.',
+    autosaveRestoreFailed: 'Сохранённый проект не удалось восстановить. Открыт чистый проект.',
   },
 };
 
@@ -178,6 +290,13 @@ let locale = 'en';
 export function t(key, parameters = {}) {
   const template = messages[locale]?.[key] || messages.en[key] || key;
   return template.replace(/\{(\w+)\}/g, (_, name) => String(parameters[name] ?? `{${name}}`));
+}
+
+export function getUserErrorMessage(error, fallbackKey = 'unexpectedError') {
+  if (error instanceof AppError) {
+    return t(error.code, error.parameters);
+  }
+  return t(fallbackKey);
 }
 
 export function getLocale() {
@@ -189,6 +308,12 @@ export function setLocale(nextLocale, documentRef = document) {
   documentRef.documentElement.lang = locale;
   for (const element of documentRef.querySelectorAll('[data-i18n]')) {
     element.textContent = t(element.dataset.i18n);
+  }
+  for (const element of documentRef.querySelectorAll('[data-i18n-aria-label]')) {
+    element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel));
+  }
+  for (const element of documentRef.querySelectorAll('[data-i18n-title]')) {
+    element.setAttribute('title', t(element.dataset.i18nTitle));
   }
   try {
     localStorage.setItem('carton-builder-locale', locale);

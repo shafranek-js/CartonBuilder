@@ -2,8 +2,8 @@
 
 CartonBuilder is a local-first browser application for building a six-panel
 rectangular-box net, placing one artwork asset on it in exact millimetre
-coordinates, previewing the clipped result, and exporting production-oriented
-files.
+coordinates, previewing the clipped result, and exporting proof and technically
+structured files.
 
 The current workflow is:
 
@@ -71,7 +71,7 @@ corner of the Front Panel. SVG, canvas, and PDF are render/export adapters; none
 of them is a second source of transform state.
 
 The detailed runtime contract is in
-[`docs/6. artwork-placement-runtime-specification.md`](docs/6.%20artwork-placement-runtime-specification.md).
+[`docs/3. artwork-placement-runtime-specification.md`](docs/3.%20artwork-placement-runtime-specification.md).
 
 ## Artwork and projects
 
@@ -114,6 +114,11 @@ off in Preview by default.
   possible; the dieline is a separate `Dieline` optional-content group; cut
   lines use the `CutContour` spot color and fold lines are dashed.
 
+The PDF is a technical proof, not a certified production PDF/X deliverable.
+It must be checked with the intended printer before production. CartonBuilder
+does not currently provide an ICC workflow, overprint or trapping validation,
+bleed, or complete print-production validation.
+
 Preflight warns about low effective DPI, artwork outside the dieline, and panels
 that are not fully covered. Only missing or unreadable artwork blocks the normal
 export flow; browser canvas safety limits can still reject an impractically
@@ -145,7 +150,8 @@ The existing events are unchanged:
 
 - This is a 2D artwork-placement release; it intentionally has no 3D preview.
 - There are no flaps, bleed, safe area, material thickness, trapping, crop
-  marks, CMYK conversion workflow, or free-angle rotation.
+  marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
+  production validation, or free-angle rotation.
 - One artwork asset is supported; replacement is not part of undo history.
 - Touch workflows are out of scope. The target is desktop Chrome at
   approximately 1024×720 or larger, including 4K displays.

@@ -1,5 +1,5 @@
 import { createExportSvg, formatNumber, getExportFilename } from '../export/svgExport.js';
-import { t } from '../i18n.js';
+import { getUserErrorMessage, t } from '../i18n.js';
 import { createBoxNetRenderer } from './renderer.js';
 
 export function createBoxNetApp({
@@ -88,7 +88,7 @@ export function createBoxNetApp({
       announce(t('dimensionsUpdated'));
     } catch (error) {
       restoreDimensionInputs();
-      showToast(error.message || t('invalidDimensions'));
+      showToast(getUserErrorMessage(error, 'invalidDimensions'));
     }
   }
 
