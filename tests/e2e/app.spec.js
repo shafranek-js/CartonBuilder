@@ -545,5 +545,26 @@ test('persists custom box dimensions and panel layout across page reloads withou
   await expect(page.locator('#panelCount')).toHaveText('6/6');
 });
 
+test('persists box net after removing artwork and reloading without showing an error banner', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page);
+  await expect(page.locator('#artworkFileName')).toHaveText('sample-artwork.png');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
+
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.locator('#boxStep')).toBeVisible();
+
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await page.reload();
+
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await expect(page.locator('#errorBanner')).toBeHidden();
+  await expect(page.locator('#panelCount')).toHaveText('6/6');
+});
+
+
 
 

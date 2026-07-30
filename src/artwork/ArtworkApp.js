@@ -781,7 +781,7 @@ export function createArtworkApp({
     if (snapshot.artwork) {
       artwork.restore(snapshot.artwork);
     } else {
-      artwork.reset();
+      artwork.clear();
     }
     Object.assign(layers, snapshot.view?.layers || {});
     Object.assign(layerLocks, snapshot.view?.layerLocks || {});
