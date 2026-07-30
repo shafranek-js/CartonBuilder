@@ -18,6 +18,13 @@ async function buildReferenceNet(page) {
 
 test('builds, completes and exports the reference net', async ({ page }) => {
   await page.goto('/');
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  const shellBounds = await page.locator('.app-shell').evaluate((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  });
+  expect(shellBounds).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
 
   await expect(page.getByLabel('Width:')).toHaveValue('150');
   await expect(page.getByLabel('Height:')).toHaveValue('90');
@@ -117,6 +124,11 @@ test('keeps the model stable when resized and works without ResizeObserver', asy
 
   const stateBefore = await page.evaluate(() => window.boxNetApp.getState());
   await page.setViewportSize({ width: 390, height: 720 });
+  const shellBounds = await page.locator('.app-shell').evaluate((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  });
+  expect(shellBounds).toEqual({ x: 0, y: 0, width: 390, height: 720 });
   await expect(page.locator('.app-shell')).toHaveCSS('border-radius', '0px');
   await expect(page.locator('#workspace')).toBeVisible();
   expect(await page.evaluate(() => window.boxNetApp.getState())).toEqual(stateBefore);
