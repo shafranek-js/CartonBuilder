@@ -235,7 +235,7 @@ test('validates dimensions, warns once for modified artwork and preserves compat
   });
   await activate(page, 'Add Top Panel to the top edge of Front Panel');
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.locator('#cancelButton').click();
   await expect.poll(() => page.evaluate(() => window.__cancelled)).toBe(1);
 });
 
@@ -564,6 +564,32 @@ test('persists box net after removing artwork and reloading without showing an e
   await expect(page.locator('#errorBanner')).toBeHidden();
   await expect(page.locator('#panelCount')).toHaveText('6/6');
 });
+
+test('resets custom dimensions and panel layout back to defaults with one click', async ({ page }) => {
+  await expect(page.locator('#boxStep')).toBeVisible();
+
+  await page.locator('#boxWidth').fill('240');
+  await page.locator('#boxWidth').dispatchEvent('change');
+  await page.locator('#boxHeight').fill('120');
+  await page.locator('#boxHeight').dispatchEvent('change');
+  await buildReferenceNet(page);
+  await expect(page.locator('#panelCount')).toHaveText('6/6');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Box' }).click();
+
+  await expect(page.locator('#boxWidth')).toHaveValue('150');
+  await expect(page.locator('#boxHeight')).toHaveValue('90');
+  await expect(page.locator('#boxDepth')).toHaveValue('40');
+  await expect(page.locator('#panelCount')).toHaveText('1/6');
+
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await page.reload();
+
+  await expect(page.locator('#boxWidth')).toHaveValue('150');
+  await expect(page.locator('#panelCount')).toHaveText('1/6');
+});
+
 
 
 

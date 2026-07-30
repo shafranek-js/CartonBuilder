@@ -163,13 +163,23 @@ export function createBoxNetApp({
     );
     onContinue();
   });
-  cancelButton.addEventListener('click', () => {
-    if (model.panelCount > 1 && !windowRef.confirm(t('resetLayoutConfirm'))) return;
+  const DEFAULT_BOX_DIMENSIONS = Object.freeze({ width: 150, height: 90, depth: 40 });
 
-    model.reset(lastDimensions);
+  cancelButton.addEventListener('click', () => {
+    const isModified = model.panelCount > 1 ||
+      model.dimensions.width !== DEFAULT_BOX_DIMENSIONS.width ||
+      model.dimensions.height !== DEFAULT_BOX_DIMENSIONS.height ||
+      model.dimensions.depth !== DEFAULT_BOX_DIMENSIONS.depth;
+
+    if (isModified && !windowRef.confirm(t('resetBoxConfirm'))) return;
+
+    model.reset(DEFAULT_BOX_DIMENSIONS);
+    lastDimensions = { ...DEFAULT_BOX_DIMENSIONS };
+    restoreDimensionInputs();
     onLayoutReset();
     render();
-    showToast(t('layoutReset'));
+    onChange();
+    showToast(t('boxReset'));
     windowRef.dispatchEvent(new windowRef.CustomEvent('box-net-cancelled'));
   });
 
