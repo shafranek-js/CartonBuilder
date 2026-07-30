@@ -10,6 +10,7 @@ import {
   getAdjacentBasis,
   rectanglesOverlap,
 } from './model/geometry.js';
+import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { createBoxNetApp } from './ui/app.js';
 
 initializeI18n();
@@ -23,6 +24,7 @@ const previewWarning = document.getElementById('previewWarning');
 
 let currentStep = 'box';
 let artworkApp;
+let preview3dFacade;
 let resetArtworkAfterBoxCompletion = false;
 
 function showStep(step) {
@@ -43,9 +45,15 @@ function showStep(step) {
   }
 
   if (step === 'artwork') {
+    preview3dFacade?.suspend();
     requestAnimationFrame(() => artworkApp.render());
   } else if (step === 'preview') {
-    requestAnimationFrame(() => artworkApp.renderPreview());
+    requestAnimationFrame(() => {
+      artworkApp.renderPreview();
+      preview3dFacade?.resume();
+    });
+  } else {
+    preview3dFacade?.suspend();
   }
 
   if (artworkApp?.artwork.hasArtwork) {
@@ -69,7 +77,9 @@ const boxApp = createBoxNetApp({
   },
   onDimensionReset: () => {
     resetArtworkAfterBoxCompletion = true;
+    preview3dFacade?.resetForProject();
   },
+  onLayoutReset: () => preview3dFacade?.resetForProject(),
 });
 
 artworkApp = createArtworkApp({
@@ -83,11 +93,20 @@ artworkApp = createArtworkApp({
   },
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot) => {
+    preview3dFacade?.resetForProject();
     stepButtons.find((button) => button.dataset.stepTarget === 'artwork').disabled = false;
     stepButtons.find((button) => button.dataset.stepTarget === 'preview').disabled = !snapshot.artwork;
     showStep(snapshot.workflowStep === 'preview' ? 'preview' : 'artwork');
   },
   getWorkflowStep: () => currentStep,
+});
+
+preview3dFacade = createLazyPreview3DFacade({
+  getOptions: () => ({
+    boxModel: model,
+    artwork: artworkApp.artwork,
+    getPreviewBlob: () => artworkApp.previewBlob,
+  }),
 });
 
 window.BoxNet = {
@@ -109,6 +128,7 @@ window.cartonBuilderApp = {
   },
   showStep,
   artwork: artworkApp,
+  preview3d: preview3dFacade,
 };
 
 for (const button of stepButtons) {
@@ -118,5 +138,6 @@ for (const button of stepButtons) {
 }
 
 artworkApp.restoreAutosave();
+window.addEventListener('beforeunload', () => preview3dFacade.dispose());
 
 export { model };

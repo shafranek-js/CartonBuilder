@@ -746,18 +746,176 @@ dialog button {
 }
 
 .preview-step {
-  grid-template-rows: 38px minmax(0, 1fr) auto 52px;
+  grid-template-rows: auto minmax(0, 1fr) auto 52px;
 }
 
 .preview-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 18px;
+  gap: 8px 14px;
+  min-height: 44px;
+  padding-block: 5px;
   color: #fff;
 }
 
+.preview-mode-tabs {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #747474;
+  border-radius: 5px;
+  background: #434343;
+}
+
+.preview-mode-tabs button,
+.preview-3d-controls button,
+.preview-3d-recovery button {
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #f4f4f4;
+  cursor: pointer;
+}
+
+.preview-mode-tabs button {
+  padding-inline: 13px;
+}
+
+.preview-mode-tabs button[aria-selected="true"] {
+  border-color: #879928;
+  background: #66701f;
+  color: #fff;
+}
+
+.preview-mode-tabs button:focus-visible,
+.preview-3d-controls button:focus-visible,
+.preview-3d-controls select:focus-visible,
+.preview-3d-controls input:focus-visible,
+.preview-3d-recovery button:focus-visible,
+#preview3dCanvas:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.preview-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-view-controls[hidden] {
+  display: none;
+}
+
+.preview-3d-controls {
+  flex-wrap: wrap;
+}
+
+.preview-3d-controls button,
+.preview-3d-recovery button {
+  padding-inline: 10px;
+  border-color: #747474;
+  background: #595959;
+}
+
+.fold-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fold-control input {
+  width: clamp(100px, 13vw, 180px);
+}
+
+.fold-control output {
+  min-width: 38px;
+  color: #e8e8e8;
+  font-variant-numeric: tabular-nums;
+}
+
+.compact-select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #dcdcdc;
+  font-size: 11px;
+}
+
+.compact-select select {
+  min-height: 30px;
+  border: 1px solid #777;
+  border-radius: 4px;
+  background: #f2f2f2;
+  color: #222;
+}
+
 .preview-warning {
+  flex: 1 1 180px;
   color: #f4d46c;
+  font-size: 12px;
+  text-align: right;
+}
+
+.preview-3d-panel {
+  background: #e8eaeb;
+}
+
+#preview3dCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+.preview-3d-busy,
+.preview-3d-recovery {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  background: rgb(30 32 33 / 76%);
+  color: #fff;
+  text-align: center;
+}
+
+.preview-3d-busy[hidden],
+.preview-3d-recovery[hidden] {
+  display: none;
+}
+
+.preview-3d-recovery > div {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-3d-inspector {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  padding: 9px 11px;
+  border: 1px solid rgb(255 255 255 / 42%);
+  border-radius: 5px;
+  background: rgb(30 32 33 / 78%);
+  color: #fff;
+  pointer-events: none;
+}
+
+.preview-3d-inspector[hidden] {
+  display: none;
+}
+
+.preview-3d-inspector span {
+  color: #d7d7d7;
   font-size: 12px;
 }
 
@@ -914,5 +1072,21 @@ dialog input {
 
   .artwork-stage {
     grid-template-columns: minmax(0, 1fr) 240px;
+  }
+
+  .preview-toolbar {
+    align-content: center;
+  }
+
+  .preview-warning {
+    display: none;
+  }
+
+  .compact-select > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
   }
 }
