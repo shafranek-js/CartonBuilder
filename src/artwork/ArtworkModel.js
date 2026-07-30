@@ -1,0 +1,258 @@
+const MIN_SCALE = 0.01;
+const MAX_SCALE = 20;
+
+function finiteNumber(value, name) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(`${name} must be a finite number.`);
+  }
+  return number;
+}
+
+function positiveNumber(value, name) {
+  const number = finiteNumber(value, name);
+  if (number <= 0) {
+    throw new Error(`${name} must be a positive number.`);
+  }
+  return number;
+}
+
+function normalizeQuarterTurn(value) {
+  const normalized = ((Number(value) % 360) + 360) % 360;
+  if (![0, 90, 180, 270].includes(normalized)) {
+    throw new Error('rotation must be 0, 90, 180 or 270 degrees.');
+  }
+  return normalized;
+}
+
+function cloneSource(source) {
+  return source ? { ...source } : null;
+}
+
+export class ArtworkModel {
+  constructor(state = null) {
+    this.clear();
+    if (state) this.restore(state);
+  }
+
+  clear() {
+    this.source = null;
+    this.centerXmm = 0;
+    this.centerYmm = 0;
+    this.initialWidthMm = 1;
+    this.initialHeightMm = 1;
+    this.scale = 1;
+    this.rotation = 0;
+    this.opacity = 1;
+    this.modified = false;
+    return this;
+  }
+
+  get hasArtwork() {
+    return Boolean(this.source);
+  }
+
+  get aspectRatio() {
+    if (!this.source) return 1;
+    return this.source.widthPx / this.source.heightPx;
+  }
+
+  get unrotatedWidthMm() {
+    return this.initialWidthMm * this.scale;
+  }
+
+  get unrotatedHeightMm() {
+    return this.initialHeightMm * this.scale;
+  }
+
+  get displayedWidthMm() {
+    return this.rotation % 180 === 0 ? this.unrotatedWidthMm : this.unrotatedHeightMm;
+  }
+
+  get displayedHeightMm() {
+    return this.rotation % 180 === 0 ? this.unrotatedHeightMm : this.unrotatedWidthMm;
+  }
+
+  get bounds() {
+    return {
+      minX: this.centerXmm - this.displayedWidthMm / 2,
+      minY: this.centerYmm - this.displayedHeightMm / 2,
+      maxX: this.centerXmm + this.displayedWidthMm / 2,
+      maxY: this.centerYmm + this.displayedHeightMm / 2,
+      width: this.displayedWidthMm,
+      height: this.displayedHeightMm,
+    };
+  }
+
+  load(source, dielineBounds) {
+    const widthPx = positiveNumber(source.widthPx, 'source.widthPx');
+    const heightPx = positiveNumber(source.heightPx, 'source.heightPx');
+    this.source = {
+      id: source.id || crypto.randomUUID(),
+      fileName: String(source.fileName || 'artwork'),
+      mimeType: String(source.mimeType || ''),
+      byteLength: Number(source.byteLength || 0),
+      widthPx,
+      heightPx,
+      pageIndex: source.pageIndex == null ? null : Number(source.pageIndex),
+      pageCount: source.pageCount == null ? null : Number(source.pageCount),
+      vector: Boolean(source.vector),
+      previewWidthPx: Number(source.previewWidthPx || widthPx),
+      previewHeightPx: Number(source.previewHeightPx || heightPx),
+      pdfPageRotation: normalizeQuarterTurn(source.pdfPageRotation || 0),
+      mediaBox: source.mediaBox ? { ...source.mediaBox } : null,
+      sha256: source.sha256 || '',
+    };
+    this.rotation = this.source.pdfPageRotation;
+    this.opacity = 1;
+    this.fitDieline(dielineBounds, { setInitial: true });
+    this.modified = false;
+    return this;
+  }
+
+  fitDieline(bounds, { setInitial = false } = {}) {
+    if (!this.source) return this;
+    const width = positiveNumber(bounds.width, 'bounds.width');
+    const height = positiveNumber(bounds.height, 'bounds.height');
+    const displayedAspect = this.rotation % 180 === 0
+      ? this.aspectRatio
+      : 1 / this.aspectRatio;
+    let displayedWidth = width;
+    let displayedHeight = displayedWidth / displayedAspect;
+    if (displayedHeight > height) {
+      displayedHeight = height;
+      displayedWidth = displayedHeight * displayedAspect;
+    }
+    const targetWidth = this.rotation % 180 === 0 ? displayedWidth : displayedHeight;
+    const targetHeight = this.rotation % 180 === 0 ? displayedHeight : displayedWidth;
+
+    if (setInitial) {
+      this.initialWidthMm = targetWidth;
+      this.initialHeightMm = targetHeight;
+      this.scale = 1;
+    } else {
+      this.scale = targetWidth / this.initialWidthMm;
+    }
+    this.centerXmm = bounds.minX + width / 2;
+    this.centerYmm = bounds.minY + height / 2;
+    this.modified = !setInitial;
+    return this;
+  }
+
+  fillDieline(bounds) {
+    if (!this.source) return this;
+    const width = positiveNumber(bounds.width, 'bounds.width');
+    const height = positiveNumber(bounds.height, 'bounds.height');
+    const baseDisplayedWidth = this.rotation % 180 === 0
+      ? this.initialWidthMm
+      : this.initialHeightMm;
+    const baseDisplayedHeight = this.rotation % 180 === 0
+      ? this.initialHeightMm
+      : this.initialWidthMm;
+    const widthScale = width / baseDisplayedWidth;
+    const heightScale = height / baseDisplayedHeight;
+    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.max(widthScale, heightScale)));
+    this.centerXmm = bounds.minX + width / 2;
+    this.centerYmm = bounds.minY + height / 2;
+    this.modified = true;
+    return this;
+  }
+
+  centerOnDieline(bounds) {
+    this.centerXmm = finiteNumber(bounds.minX, 'bounds.minX') + positiveNumber(bounds.width, 'bounds.width') / 2;
+    this.centerYmm = finiteNumber(bounds.minY, 'bounds.minY') + positiveNumber(bounds.height, 'bounds.height') / 2;
+    this.modified = true;
+    return this;
+  }
+
+  moveBy(deltaXmm, deltaYmm) {
+    this.centerXmm += finiteNumber(deltaXmm, 'deltaXmm');
+    this.centerYmm += finiteNumber(deltaYmm, 'deltaYmm');
+    this.modified = true;
+    return this;
+  }
+
+  setCenter(centerXmm, centerYmm) {
+    this.centerXmm = finiteNumber(centerXmm, 'centerXmm');
+    this.centerYmm = finiteNumber(centerYmm, 'centerYmm');
+    this.modified = true;
+    return this;
+  }
+
+  setScale(scale) {
+    const next = positiveNumber(scale, 'scale');
+    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, next));
+    this.modified = true;
+    return this;
+  }
+
+  setDisplayedWidth(widthMm) {
+    const base = this.rotation % 180 === 0 ? this.initialWidthMm : this.initialHeightMm;
+    return this.setScale(positiveNumber(widthMm, 'widthMm') / base);
+  }
+
+  setDisplayedHeight(heightMm) {
+    const base = this.rotation % 180 === 0 ? this.initialHeightMm : this.initialWidthMm;
+    return this.setScale(positiveNumber(heightMm, 'heightMm') / base);
+  }
+
+  setOpacity(opacity) {
+    this.opacity = Math.min(1, Math.max(0, finiteNumber(opacity, 'opacity')));
+    this.modified = true;
+    return this;
+  }
+
+  rotateQuarterTurns(turns) {
+    this.rotation = normalizeQuarterTurn(this.rotation + Number(turns) * 90);
+    this.modified = true;
+    return this;
+  }
+
+  resetTransform() {
+    this.scale = 1;
+    this.rotation = this.source?.pdfPageRotation || 0;
+    this.opacity = 1;
+    this.modified = false;
+    return this;
+  }
+
+  getEffectiveDpi() {
+    if (!this.source || this.source.vector) return null;
+    const dpiX = this.source.widthPx / (this.unrotatedWidthMm / 25.4);
+    const dpiY = this.source.heightPx / (this.unrotatedHeightMm / 25.4);
+    return Math.min(dpiX, dpiY);
+  }
+
+  toJSON() {
+    return {
+      source: cloneSource(this.source),
+      centerXmm: this.centerXmm,
+      centerYmm: this.centerYmm,
+      initialWidthMm: this.initialWidthMm,
+      initialHeightMm: this.initialHeightMm,
+      scale: this.scale,
+      rotation: this.rotation,
+      opacity: this.opacity,
+      modified: this.modified,
+    };
+  }
+
+  restore(state) {
+    if (!state?.source) return this.clear();
+    this.source = cloneSource(state.source);
+    this.centerXmm = finiteNumber(state.centerXmm, 'centerXmm');
+    this.centerYmm = finiteNumber(state.centerYmm, 'centerYmm');
+    this.initialWidthMm = positiveNumber(state.initialWidthMm, 'initialWidthMm');
+    this.initialHeightMm = positiveNumber(state.initialHeightMm, 'initialHeightMm');
+    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(state.scale, 'scale')));
+    this.rotation = normalizeQuarterTurn(state.rotation);
+    this.opacity = Math.min(1, Math.max(0, finiteNumber(state.opacity, 'opacity')));
+    this.modified = Boolean(state.modified);
+    return this;
+  }
+}
+
+export const ARTWORK_SCALE_LIMITS = Object.freeze({
+  min: MIN_SCALE,
+  max: MAX_SCALE,
+});

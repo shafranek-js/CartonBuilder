@@ -157,4 +157,28 @@ describe('BoxNetModel', () => {
     expect(model.dimensions.width).toBe(150);
     expect(model.getPanel('front').basis.normal).toEqual([0, 0, 1]);
   });
+
+  it('restores the existing serialized schema without changing it', () => {
+    const original = createReferenceNet();
+    const restored = BoxNetModel.fromJSON(original.toJSON());
+
+    expect(restored.toJSON()).toEqual(original.toJSON());
+    expect(restored.getPanel('front').links.bottom).toBe('bottom');
+    expect(restored.getPanel('bottom').links.top).toBe('front');
+  });
+
+  it('rejects forged serialized topology and geometry', () => {
+    const valid = createReferenceNet().toJSON();
+    const displaced = structuredClone(valid);
+    displaced.panels.find(({ id }) => id === 'bottom').x += 5;
+    expect(() => BoxNetModel.fromJSON(displaced)).toThrow('parent edge');
+
+    const duplicateFace = structuredClone(valid);
+    duplicateFace.panels[1].basis = structuredClone(duplicateFace.panels[0].basis);
+    expect(() => BoxNetModel.fromJSON(duplicateFace)).toThrow('physical face');
+
+    const oversized = structuredClone(valid);
+    oversized.panels.push(structuredClone(oversized.panels[0]));
+    expect(() => BoxNetModel.fromJSON(oversized)).toThrow('Invalid box net state');
+  });
 });

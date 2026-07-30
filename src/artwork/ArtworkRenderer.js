@@ -1,0 +1,248 @@
+import { getDielineSegments, getPanelMaskPath } from '../model/dieline.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgElement(documentRef, name, attributes = {}) {
+  const element = documentRef.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value != null) element.setAttribute(key, String(value));
+  }
+  return element;
+}
+
+function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath) {
+  const image = svgElement(documentRef, 'image', {
+    class: 'artwork-image',
+    href: previewUrl,
+    x: artwork.centerXmm - artwork.unrotatedWidthMm / 2,
+    y: artwork.centerYmm - artwork.unrotatedHeightMm / 2,
+    width: artwork.unrotatedWidthMm,
+    height: artwork.unrotatedHeightMm,
+    opacity,
+    preserveAspectRatio: 'none',
+    transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
+    'clip-path': clipPath,
+  });
+  parent.appendChild(image);
+  return image;
+}
+
+function appendDieline(documentRef, parent, model) {
+  const { cut, fold } = getDielineSegments(model);
+  for (const segment of cut) {
+    parent.appendChild(svgElement(documentRef, 'line', {
+      class: 'dieline-cut',
+      x1: segment.start.x,
+      y1: segment.start.y,
+      x2: segment.end.x,
+      y2: segment.end.y,
+    }));
+  }
+  for (const segment of fold) {
+    parent.appendChild(svgElement(documentRef, 'line', {
+      class: 'dieline-fold',
+      x1: segment.start.x,
+      y1: segment.start.y,
+      x2: segment.end.x,
+      y2: segment.end.y,
+    }));
+  }
+}
+
+function appendSelection(documentRef, parent, artwork, onPointerStart) {
+  const group = svgElement(documentRef, 'g', {
+    transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
+  });
+  const x = artwork.centerXmm - artwork.unrotatedWidthMm / 2;
+  const y = artwork.centerYmm - artwork.unrotatedHeightMm / 2;
+  group.appendChild(svgElement(documentRef, 'rect', {
+    class: 'selection-frame',
+    x,
+    y,
+    width: artwork.unrotatedWidthMm,
+    height: artwork.unrotatedHeightMm,
+  }));
+
+  const handles = [
+    { key: 'nw', x, y, sx: -1, sy: -1 },
+    { key: 'ne', x: x + artwork.unrotatedWidthMm, y, sx: 1, sy: -1 },
+    { key: 'se', x: x + artwork.unrotatedWidthMm, y: y + artwork.unrotatedHeightMm, sx: 1, sy: 1 },
+    { key: 'sw', x, y: y + artwork.unrotatedHeightMm, sx: -1, sy: 1 },
+  ];
+  for (const handle of handles) {
+    const node = svgElement(documentRef, 'rect', {
+      class: 'resize-handle',
+      x: handle.x - 3,
+      y: handle.y - 3,
+      width: 6,
+      height: 6,
+      rx: 1,
+      'data-handle': handle.key,
+    });
+    node.addEventListener('pointerdown', (event) => onPointerStart(event, {
+      type: 'resize',
+      sx: handle.sx,
+      sy: handle.sy,
+    }));
+    group.appendChild(node);
+  }
+  parent.appendChild(group);
+}
+
+export class ArtworkRenderer {
+  constructor({
+    svg,
+    previewSvg,
+    model,
+    artwork,
+    viewport,
+    layers,
+    onPointerStart,
+  }) {
+    this.svg = svg;
+    this.previewSvg = previewSvg;
+    this.model = model;
+    this.artwork = artwork;
+    this.viewport = viewport;
+    this.layers = layers;
+    this.onPointerStart = onPointerStart;
+    this.previewUrl = '';
+    this.selected = false;
+  }
+
+  setPreviewBlob(blob) {
+    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+    this.previewUrl = blob ? URL.createObjectURL(blob) : '';
+  }
+
+  dispose() {
+    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+    this.previewUrl = '';
+  }
+
+  getSceneBounds() {
+    const box = this.model.getBounds();
+    if (!this.artwork.hasArtwork) return box;
+    const art = this.artwork.bounds;
+    const minX = Math.min(box.minX, art.minX);
+    const minY = Math.min(box.minY, art.minY);
+    const maxX = Math.max(box.maxX, art.maxX);
+    const maxY = Math.max(box.maxY, art.maxY);
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  }
+
+  fitToScreen() {
+    const bounds = this.getSceneBounds();
+    this.viewport.fit(bounds, this.svg.clientWidth || 1, this.svg.clientHeight || 1, 44);
+    this.render();
+  }
+
+  clientToModel(clientX, clientY) {
+    const rectangle = this.svg.getBoundingClientRect();
+    return this.viewport.screenToModel(clientX - rectangle.left, clientY - rectangle.top);
+  }
+
+  render() {
+    const width = Math.max(1, this.svg.clientWidth);
+    const height = Math.max(1, this.svg.clientHeight);
+    const x = -this.viewport.panX / this.viewport.zoom;
+    const y = -this.viewport.panY / this.viewport.zoom;
+    this.svg.setAttribute('viewBox', `${x} ${y} ${width / this.viewport.zoom} ${height / this.viewport.zoom}`);
+    this.renderScene(this.svg, {
+      preview: false,
+      showDieline: this.layers.dieline,
+      showNames: this.layers.names,
+      showHighlights: this.layers.highlights,
+      showArtwork: this.layers.artwork,
+    });
+  }
+
+  renderPreview(showDieline = true) {
+    const bounds = this.model.getBounds();
+    const padding = Math.max(4, Math.max(bounds.width, bounds.height) * 0.035);
+    this.previewSvg.setAttribute(
+      'viewBox',
+      `${bounds.minX - padding} ${bounds.minY - padding} ${bounds.width + padding * 2} ${bounds.height + padding * 2}`,
+    );
+    this.renderScene(this.previewSvg, {
+      preview: true,
+      showDieline,
+      showNames: false,
+      showHighlights: false,
+      showArtwork: true,
+    });
+  }
+
+  renderScene(target, {
+    preview,
+    showDieline,
+    showNames,
+    showHighlights,
+    showArtwork,
+  }) {
+    const documentRef = target.ownerDocument;
+    target.replaceChildren();
+    const defs = svgElement(documentRef, 'defs');
+    const clip = svgElement(documentRef, 'clipPath', { id: `${target.id}-panel-mask` });
+    const path = svgElement(documentRef, 'path', { d: getPanelMaskPath(this.model) });
+    clip.appendChild(path);
+    defs.appendChild(clip);
+    target.appendChild(defs);
+
+    if (showArtwork && this.artwork.hasArtwork && this.previewUrl) {
+      if (!preview && !this.layers.showFull) {
+        appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity * 0.28, null);
+      }
+      if (!preview && this.layers.showFull) {
+        appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity, null);
+      } else {
+        appendImage(
+          documentRef,
+          target,
+          this.artwork,
+          this.previewUrl,
+          this.artwork.opacity,
+          `url(#${target.id}-panel-mask)`,
+        );
+      }
+    }
+
+    if (showHighlights) {
+      for (const panel of this.model.getPanels()) {
+        if (panel.id !== 'front' && panel.id !== 'bottom') continue;
+        target.appendChild(svgElement(documentRef, 'rect', {
+          class: panel.id === 'front' ? 'front-highlight' : 'base-highlight',
+          x: panel.x,
+          y: panel.y,
+          width: panel.width,
+          height: panel.height,
+        }));
+      }
+    }
+
+    if (showDieline) appendDieline(documentRef, target, this.model);
+
+    if (showNames) {
+      for (const panel of this.model.getPanels()) {
+        const label = svgElement(documentRef, 'text', {
+          class: 'artwork-panel-label',
+          x: panel.x + panel.width / 2,
+          y: panel.y + panel.height / 2,
+          'font-size': 10,
+        });
+        label.textContent = panel.faceName;
+        target.appendChild(label);
+      }
+    }
+
+    if (!preview && this.selected && showArtwork && this.artwork.hasArtwork) {
+      appendSelection(documentRef, target, this.artwork, this.onPointerStart);
+    }
+
+    if (!preview) {
+      for (const node of target.querySelectorAll('.artwork-image')) {
+        node.addEventListener('pointerdown', (event) => this.onPointerStart(event, { type: 'move' }));
+      }
+    }
+  }
+}

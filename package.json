@@ -16,5 +16,11 @@
     "@playwright/test": "^1.50.1",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"
+  },
+  "dependencies": {
+    "@zip.js/zip.js": "^2.8.34",
+    "idb": "^8.0.3",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.624"
   }
 }

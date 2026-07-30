@@ -1,16 +1,19 @@
 import { createExportSvg, formatNumber, getExportFilename } from '../export/svgExport.js';
-import { createResultDialog } from './dialogs.js';
+import { t } from '../i18n.js';
 import { createBoxNetRenderer } from './renderer.js';
 
-export function createBoxNetApp({ model, documentRef = document, windowRef = window }) {
+export function createBoxNetApp({
+  model,
+  documentRef = document,
+  windowRef = window,
+  onContinue = () => {},
+  beforeDimensionReset = () => true,
+  onDimensionReset = () => {},
+}) {
   const svg = documentRef.getElementById('workspace');
   const panelCount = documentRef.getElementById('panelCount');
   const continueButton = documentRef.getElementById('continueButton');
   const cancelButton = documentRef.getElementById('cancelButton');
-  const resultBackdrop = documentRef.getElementById('resultBackdrop');
-  const closeDialogButton = documentRef.getElementById('closeDialogButton');
-  const exportButton = documentRef.getElementById('exportButton');
-  const dialogSummary = documentRef.getElementById('dialogSummary');
   const toast = documentRef.getElementById('toast');
   const announcer = documentRef.getElementById('announcer');
   const workspaceWrap = documentRef.querySelector('.workspace-wrap');
@@ -64,22 +67,28 @@ export function createBoxNetApp({ model, documentRef = document, windowRef = win
       if (!changed) return;
 
       if (hasAddedPanels) {
-        const shouldReset = windowRef.confirm(
-          'Changing the box dimensions will reset the current panel layout. Continue?',
-        );
-        if (!shouldReset) {
+        const resetDecision = beforeDimensionReset(nextDimensions);
+        if (!resetDecision) {
           restoreDimensionInputs();
           return;
+        }
+        if (resetDecision !== 'confirmed') {
+          const shouldReset = windowRef.confirm(t('dimensionsReset'));
+          if (!shouldReset) {
+            restoreDimensionInputs();
+            return;
+          }
         }
       }
 
       model.reset(nextDimensions);
       lastDimensions = { ...model.dimensions };
+      onDimensionReset(nextDimensions);
       render();
-      announce('Box dimensions updated. The layout contains the Front Panel only.');
+      announce(t('dimensionsUpdated'));
     } catch (error) {
       restoreDimensionInputs();
-      showToast(error.message || 'Enter valid positive dimensions.');
+      showToast(error.message || t('invalidDimensions'));
     }
   }
 
@@ -88,10 +97,11 @@ export function createBoxNetApp({ model, documentRef = document, windowRef = win
     render();
 
     if (result) {
-      const completionMessage = model.isComplete ? ' Box net complete.' : '';
-      announce(
-        `${result.faceName} added. ${model.panelCount} of 6 panels placed.${completionMessage}`,
-      );
+      announce(t('panelAdded', {
+        name: result.faceName,
+        count: model.panelCount,
+        complete: model.isComplete ? t('boxCompleteSuffix') : '',
+      }));
     }
 
     return result;
@@ -103,7 +113,7 @@ export function createBoxNetApp({ model, documentRef = document, windowRef = win
     render();
 
     if (result && panel) {
-      announce(`${panel.faceName} removed. ${model.panelCount} of 6 panels placed.`);
+      announce(t('panelRemoved', { name: panel.faceName, count: model.panelCount }));
     }
 
     return result;
@@ -131,17 +141,6 @@ export function createBoxNetApp({ model, documentRef = document, windowRef = win
     windowRef.URL.revokeObjectURL(url);
   }
 
-  const resultDialog = createResultDialog({
-    windowRef,
-    model,
-    backdrop: resultBackdrop,
-    closeButton: closeDialogButton,
-    exportButton,
-    dialogSummary,
-    continueButton,
-    onExport: exportSvg,
-  });
-
   for (const input of Object.values(dimensionInputs)) {
     input.addEventListener('change', applyDimensionChange);
     input.addEventListener('keydown', (event) => {
@@ -152,13 +151,19 @@ export function createBoxNetApp({ model, documentRef = document, windowRef = win
     });
   }
 
-  continueButton.addEventListener('click', resultDialog.open);
+  continueButton.addEventListener('click', () => {
+    if (!model.isComplete) return;
+    windowRef.dispatchEvent(
+      new windowRef.CustomEvent('box-net-complete', { detail: model.toJSON() }),
+    );
+    onContinue();
+  });
   cancelButton.addEventListener('click', () => {
-    if (model.panelCount > 1 && !windowRef.confirm('Reset the current box layout?')) return;
+    if (model.panelCount > 1 && !windowRef.confirm(t('resetLayoutConfirm'))) return;
 
     model.reset(lastDimensions);
     render();
-    showToast('The box layout was reset.');
+    showToast(t('layoutReset'));
     windowRef.dispatchEvent(new windowRef.CustomEvent('box-net-cancelled'));
   });
 
@@ -180,6 +185,13 @@ export function createBoxNetApp({ model, documentRef = document, windowRef = win
       restoreDimensionInputs();
       render();
     },
+    loadState(state) {
+      model.restore(state);
+      lastDimensions = { ...model.dimensions };
+      restoreDimensionInputs();
+      render();
+    },
+    exportSvg,
     getState() {
       return model.toJSON();
     },
