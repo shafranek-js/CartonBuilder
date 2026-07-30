@@ -37,6 +37,11 @@ function canUseWorker() {
   );
 }
 
+function shouldRetryOnMainThread(error) {
+  return error instanceof AppError
+    && (error.code === 'workerUnavailable' || error.code === 'artworkLoadFailed');
+}
+
 export function loadArtworkWithWorker(file, {
   choosePage = async () => 0,
   signal,
@@ -106,18 +111,20 @@ export async function loadArtworkFile(file, {
   signal,
   workerFactory = defaultWorkerFactory,
   preferWorker = true,
+  workerSupported = canUseWorker(),
+  processFile = processArtworkFile,
 } = {}) {
   await validateArtworkFile(file);
-  if (preferWorker && canUseWorker()) {
+  if (preferWorker && workerSupported) {
     try {
       return await loadArtworkWithWorker(file, { choosePage, signal, workerFactory });
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
-      if (!(error instanceof AppError) || error.code !== 'workerUnavailable') throw error;
+      if (!shouldRetryOnMainThread(error)) throw error;
     }
   }
 
-  const loaded = await processArtworkFile(file, { choosePage, signal });
+  const loaded = await processFile(file, { choosePage, signal });
   return buildLoadResult(file, loaded);
 }
 
