@@ -25,6 +25,19 @@ test('builds, completes and exports the reference net', async ({ page }) => {
     return { x, y, width, height };
   });
   expect(shellBounds).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
+  await expect(page.locator('.title-bar')).toHaveCount(0);
+
+  const dimensionRowPositions = await page.locator('.dimension-row').evaluateAll((rows) =>
+    rows.map((row) => {
+      const { x, y } = row.getBoundingClientRect();
+      return { x, y };
+    }),
+  );
+  expect(dimensionRowPositions).toHaveLength(3);
+  expect(new Set(dimensionRowPositions.map(({ y }) => y)).size).toBe(1);
+  expect(dimensionRowPositions[0].x).toBeLessThan(dimensionRowPositions[1].x);
+  expect(dimensionRowPositions[1].x).toBeLessThan(dimensionRowPositions[2].x);
+  expect(dimensionRowPositions[2].x - dimensionRowPositions[0].x).toBeLessThan(500);
 
   await expect(page.getByLabel('Width:')).toHaveValue('150');
   await expect(page.getByLabel('Height:')).toHaveValue('90');
