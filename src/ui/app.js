@@ -9,6 +9,7 @@ export function createBoxNetApp({
   onContinue = () => {},
   beforeDimensionReset = () => true,
   onDimensionReset = () => {},
+  onLayoutReset = () => {},
 }) {
   const svg = documentRef.getElementById('workspace');
   const panelCount = documentRef.getElementById('panelCount');
@@ -162,6 +163,7 @@ export function createBoxNetApp({
     if (model.panelCount > 1 && !windowRef.confirm(t('resetLayoutConfirm'))) return;
 
     model.reset(lastDimensions);
+    onLayoutReset();
     render();
     showToast(t('layoutReset'));
     windowRef.dispatchEvent(new windowRef.CustomEvent('box-net-cancelled'));
@@ -181,6 +183,7 @@ export function createBoxNetApp({
     deletePanel,
     reset(dimensions) {
       model.reset(dimensions || lastDimensions);
+      onLayoutReset();
       lastDimensions = { ...model.dimensions };
       restoreDimensionInputs();
       render();

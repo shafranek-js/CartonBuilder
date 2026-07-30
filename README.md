@@ -10,8 +10,8 @@ The current workflow is:
 1. **Create Box** — enter width, height and depth, then build a valid six-face net.
 2. **Place Artwork** — load PNG, JPEG, or one page of a PDF; move, scale, rotate,
    inspect effective DPI, and control fixed system layers.
-3. **Preview / Export** — inspect the panel-union clipping and export PNG, JPG,
-   SVG dieline, or a physical-size PDF.
+3. **Preview / Export** — switch between the clipped 2D proof and a folded 3D
+   carton, then export PNG, JPG, SVG dieline, or a physical-size PDF.
 
 All artwork processing happens in the browser. The application does not upload
 assets or project data to a server.
@@ -49,6 +49,9 @@ npm run test:all
 end-to-end browser workflows. The E2E suite covers PNG and multipage rotated PDF
 input, transforms, layer locking, undo/redo, autosave, `.carton` round-trips,
 localization, responsive resizing, integration events, and all export buttons.
+It also covers all reachable fold trees, net-space UV continuity, lazy 3D
+loading, both camera projections, scene presets, WebGL recovery, and repeated
+texture replacement.
 
 ## Architecture
 
@@ -59,6 +62,8 @@ localization, responsive resizing, integration events, and all export buttons.
 - `src/project/` — IndexedDB autosave and versioned `.carton` ZIP import/export.
 - `src/export/` — SVG, raster preview, preflight checks, and physical-size PDF
   adapters. Heavy PDF code is loaded only when required.
+- `src/preview3d/` — lazy-loaded Three.js fold graph, procedural panel geometry,
+  shared artwork texture, cameras, scene presets, picking, and GPU lifecycle.
 - `src/ui/` — the existing box-net controller and renderer.
 - `src/i18n.js` — English/Russian runtime strings.
 - `src/diagnostics.js` — bounded local event history and explicit anonymized
@@ -105,6 +110,23 @@ The fixed Layers panel exposes visibility and lock state for Artwork, Dieline,
 Panel names, and Front/Base highlighting. Panel labels are visible in Edit and
 off in Preview by default.
 
+## 3D preview
+
+- `3D Preview` is an inspection surface; artwork remains editable only in 2D.
+- `Open`, `Fold`, and the slider control fold progress without changing the
+  project model.
+- Perspective and orthographic cameras are available; Perspective is the
+  default. Mouse drag orbits, the wheel zooms, right-drag pans, and arrow keys
+  pan while the 3D canvas is focused.
+- `Technical`, `Studio`, and `Photorealistic` scene presets are available;
+  Studio is the default. Technical uses unlit color for proof comparison.
+- Clicking a panel shows its identity and millimetre dimensions. `Escape`
+  clears the selection, and `Reset View` restores deterministic isometric
+  framing.
+- Artwork is shown on the exterior only. The unprinted interior is white.
+- Three.js is downloaded only when 3D is first opened. WebGL 2 is required for
+  3D, but not for 2D editing, project files, or export.
+
 ## Export
 
 - PNG: 300 DPI, transparent outside the panel union.
@@ -141,6 +163,12 @@ window.boxNetApp.getState()
 Additive APIs include `window.boxNetApp.loadState()`,
 `window.boxNetApp.exportSvg()`, and `window.cartonBuilderApp`.
 
+The transient 3D facade is available as
+`window.cartonBuilderApp.preview3d`. It exposes activation, fold progress,
+camera projection, scene preset, panel selection, reset/render, state,
+resource diagnostics, and disposal. Its state is deliberately excluded from
+autosave and `.carton` version 1.
+
 The existing events are unchanged:
 
 - `box-net-complete` with `model.toJSON()` in `event.detail`;
@@ -148,10 +176,14 @@ The existing events are unchanged:
 
 ## Current limitations
 
-- This is a 2D artwork-placement release; it intentionally has no 3D preview.
+- The 3D view is a derived proof preview, not a second artwork editor or a
+  production render.
 - There are no flaps, bleed, safe area, material thickness, trapping, crop
   marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
-  production validation, or free-angle rotation.
+  production validation, collision simulation, or free-angle rotation.
+- Camera position, fold progress, panel selection, and scene preset are not
+  persisted. 3D image export is not provided.
 - One artwork asset is supported; replacement is not part of undo history.
 - Touch workflows are out of scope. The target is desktop Chrome at
-  approximately 1024×720 or larger, including 4K displays.
+  approximately 1024×720 or larger, including 4K displays. WebGL 1 and
+  WebGPU-only rendering are not supported.
