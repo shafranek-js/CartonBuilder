@@ -8,6 +8,9 @@ import {
   rgb,
 } from 'pdf-lib';
 import { expect, test } from '@playwright/test';
+import { sha256 } from '../../src/artwork/fileValidation.js';
+import { BoxNetModel } from '../../src/model/BoxNetModel.js';
+import { createProjectArchive } from '../../src/project/projectArchive.js';
 
 async function activate(page, label, key = 'Enter') {
   const action = page.getByRole('button', { name: label });
@@ -445,3 +448,72 @@ test('cancels worker processing and revokes superseded preview URLs', async ({ p
   expect(activeUrls).toHaveLength(1);
   expect(new Set(audit.revoked).size).toBe(audit.created.length - 1);
 });
+
+test('allows opening a .carton project directly from Step 1 (Create Box)', async ({ page }) => {
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await expect(page.locator('#loadProjectButtonStep1')).toBeVisible();
+
+  const boxModel = new BoxNetModel({ width: 200, height: 100, depth: 50 });
+  boxModel.addPanel('Front', 'bottom', 'Base');
+  boxModel.addPanel('Front', 'top', 'Top');
+  boxModel.addPanel('Top', 'top', 'Back');
+  boxModel.addPanel('Front', 'left', 'Left');
+  boxModel.addPanel('Back', 'right', 'Right');
+
+  const originalBlob = new Blob([
+    Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]),
+  ], { type: 'image/png' });
+  const previewBlob = new Blob([
+    Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 2]),
+  ], { type: 'image/png' });
+  const sourceHash = await sha256(originalBlob);
+
+  const snapshot = {
+    schemaVersion: 1,
+    meta: { name: 'Direct project load' },
+    workflowStep: 'artwork',
+    box: boxModel.toJSON(),
+    artwork: {
+      source: {
+        id: 'asset-direct',
+        fileName: 'direct-project.png',
+        mimeType: 'image/png',
+        byteLength: originalBlob.size,
+        widthPx: 100,
+        heightPx: 50,
+        previewWidthPx: 100,
+        previewHeightPx: 50,
+        pageIndex: null,
+        pageCount: null,
+        vector: false,
+        pdfPageRotation: 0,
+        mediaBox: null,
+        sha256: sourceHash,
+      },
+      centerXmm: 100,
+      centerYmm: 50,
+      initialWidthMm: 200,
+      initialHeightMm: 100,
+      scale: 1,
+      rotation: 0,
+      opacity: 1,
+      modified: false,
+    },
+    view: {},
+    history: { undo: [], redo: [] },
+  };
+
+  const archiveBlob = await createProjectArchive({ snapshot, originalBlob, previewBlob });
+  const buffer = Buffer.from(await archiveBlob.arrayBuffer());
+
+  await page.locator('#projectFileInput').setInputFiles({
+    name: 'direct-test.carton',
+    mimeType: 'application/zip',
+    buffer,
+  });
+
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await expect(page.locator('#artworkFileName')).toHaveText('direct-project.png');
+});
+
+

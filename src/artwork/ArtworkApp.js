@@ -688,7 +688,8 @@ export function createArtworkApp({
       showError(error, 'projectSaveFailed');
     }
   });
-  documentRef.getElementById('loadProjectButton').addEventListener('click', () => projectInput.click());
+  documentRef.getElementById('loadProjectButton')?.addEventListener('click', () => projectInput.click());
+  documentRef.getElementById('loadProjectButtonStep1')?.addEventListener('click', () => projectInput.click());
   documentRef.getElementById('diagnosticsButton').addEventListener('click', () => {
     downloadBlob(
       documentRef,
