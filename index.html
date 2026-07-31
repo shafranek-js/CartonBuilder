@@ -132,15 +132,12 @@
                 <circle cx="12" cy="10" r="2.5"/>
               </svg>
             </button>
-            <section class="tool-section file-section">
-              <h2 data-i18n="artwork">Artwork</h2>
-              <div class="file-picker-row">
-                <span class="file-name" id="artworkFileName" data-i18n="noFile">No file selected</span>
-                <button type="button" id="selectArtworkButton" data-i18n="selectFile">Select File</button>
-              </div>
-              <button type="button" id="replaceArtworkButton" hidden></button>
-              <button type="button" id="removeArtworkButton" hidden></button>
-            </section>
+            <div hidden>
+              <span id="artworkFileName"></span>
+              <button type="button" id="selectArtworkButton"></button>
+              <button type="button" id="replaceArtworkButton"></button>
+              <button type="button" id="removeArtworkButton"></button>
+            </div>
 
             <section class="tool-section layers-tool-section">
               <h2 data-i18n="layers">Layers</h2>
