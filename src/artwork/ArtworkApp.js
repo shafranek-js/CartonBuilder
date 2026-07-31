@@ -15,6 +15,7 @@ import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
 import { ViewportModel } from './ViewportModel.js';
 import { loadArtworkFile } from './fileLoader.js';
+import { saveOrDownloadFile } from '../utils/fileSaver.js';
 
 function downloadBlob(documentRef, windowRef, blob, fileName) {
   const url = windowRef.URL.createObjectURL(blob);
@@ -755,7 +756,18 @@ export function createArtworkApp({
         originalBlob,
         previewBlob,
       });
-      downloadBlob(documentRef, windowRef, blob, 'carton-project.carton');
+      await saveOrDownloadFile({
+        blob,
+        suggestedName: 'carton-project.carton',
+        types: [
+          {
+            description: 'CartonBuilder Project (*.carton)',
+            accept: { 'application/x-carton-project': ['.carton', '.json'] },
+          },
+        ],
+        windowRef,
+        documentRef,
+      });
     } catch (error) {
       console.error(error);
       showError(error, 'projectSaveFailed');
@@ -777,15 +789,21 @@ export function createArtworkApp({
     }
   });
 
-  documentRef.getElementById('exportSvgButton').addEventListener('click', () => {
+  documentRef.getElementById('exportSvgButton').addEventListener('click', async () => {
     try {
       clearError();
-      downloadBlob(
-        documentRef,
+      await saveOrDownloadFile({
+        blob: new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' }),
+        suggestedName: getExportFilename(boxModel.dimensions),
+        types: [
+          {
+            description: 'Scalable Vector Graphics (*.svg)',
+            accept: { 'image/svg+xml': ['.svg'] },
+          },
+        ],
         windowRef,
-        new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' }),
-        getExportFilename(boxModel.dimensions),
-      );
+        documentRef,
+      });
     } catch (error) {
       console.error(error);
       showError(error, 'unexpectedError');
@@ -802,7 +820,18 @@ export function createArtworkApp({
         previewBlob,
         type: 'image/png',
       });
-      downloadBlob(documentRef, windowRef, blob, 'carton-artwork-preview.png');
+      await saveOrDownloadFile({
+        blob,
+        suggestedName: 'carton-artwork-preview.png',
+        types: [
+          {
+            description: 'PNG Image (*.png)',
+            accept: { 'image/png': ['.png'] },
+          },
+        ],
+        windowRef,
+        documentRef,
+      });
     } catch (error) {
       console.error(error);
       showError(error, 'exportPngFailed');
@@ -819,7 +848,18 @@ export function createArtworkApp({
         previewBlob,
         type: 'image/jpeg',
       });
-      downloadBlob(documentRef, windowRef, blob, 'carton-artwork-preview.jpg');
+      await saveOrDownloadFile({
+        blob,
+        suggestedName: 'carton-artwork-preview.jpg',
+        types: [
+          {
+            description: 'JPEG Image (*.jpg)',
+            accept: { 'image/jpeg': ['.jpg', '.jpeg'] },
+          },
+        ],
+        windowRef,
+        documentRef,
+      });
     } catch (error) {
       console.error(error);
       showError(error, 'exportJpgFailed');
@@ -830,7 +870,18 @@ export function createArtworkApp({
       clearError();
       const { createPdfExport } = await import('../export/artworkExport.js');
       const blob = await createPdfExport({ boxModel, artwork, originalBlob, previewBlob });
-      downloadBlob(documentRef, windowRef, blob, 'carton-artwork.pdf');
+      await saveOrDownloadFile({
+        blob,
+        suggestedName: 'carton-artwork.pdf',
+        types: [
+          {
+            description: 'PDF Document (*.pdf)',
+            accept: { 'application/pdf': ['.pdf'] },
+          },
+        ],
+        windowRef,
+        documentRef,
+      });
     } catch (error) {
       console.error(error);
       showError(error, 'exportPdfFailed');
