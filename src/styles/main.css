@@ -1310,73 +1310,52 @@ dialog button {
   margin-bottom: 10px;
 }
 
-.reference-point-grid {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
+.reference-point-svg {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 8px);
-  grid-template-rows: repeat(3, 8px);
-  gap: 3px;
-  box-sizing: border-box;
+  color: var(--text, #ffffff);
+  overflow: visible;
 }
 
-.reference-point-lines {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 30px;
-  height: 30px;
-  pointer-events: none;
-  color: var(--panel-border, #666666);
+.reference-point-connectors {
+  color: var(--muted-text, #777777);
 }
 
 .reference-point-button {
-  position: relative;
-  z-index: 1;
-  width: 8px;
-  height: 8px;
-  min-width: 8px;
-  min-height: 8px;
-  max-width: 8px;
-  max-height: 8px;
-  padding: 0;
-  margin: 0;
-  display: block;
-  border: 1px solid var(--panel-border, #666666);
-  border-radius: 0;
-  background: var(--panel-bg, #3e3e3e);
   cursor: pointer;
-  box-sizing: border-box;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  outline: none;
 }
 
-.reference-point-button::after {
-  display: none;
+.reference-point-button .box {
+  fill: var(--panel-bg, #3e3e3e);
+  stroke: var(--text, #ffffff);
+  stroke-width: 1.2px;
+  transition: fill 0.15s ease, stroke 0.15s ease;
 }
 
-.reference-point-button:hover,
-.reference-point-button:focus-visible {
-  border-color: var(--text, #ffffff);
-  z-index: 2;
+.reference-point-button:hover .box,
+.reference-point-button:focus-visible .box {
+  stroke: var(--accent, #afca42);
 }
 
-.reference-point-button:focus-visible {
-  outline: 2px solid var(--focus, #59c2ff);
-  outline-offset: 1px;
+.reference-point-button[aria-pressed="true"] .box,
+.reference-point-button.active .box {
+  fill: var(--text, #ffffff);
+  stroke: var(--text, #ffffff);
 }
 
-.reference-point-button[aria-pressed="true"] {
-  background: var(--text, #ffffff);
-  border-color: var(--text, #ffffff);
-}
-
-.reference-point-button:disabled {
+.reference-point-button[disabled] .box,
+.reference-point-button.disabled .box {
   opacity: 0.35;
+}
+
+.reference-point-button[disabled],
+.reference-point-button.disabled {
   cursor: default;
+  pointer-events: none;
 }
 
 .transform-fields {
@@ -1397,6 +1376,7 @@ dialog button {
 .transform-fields label b {
   min-width: 14px;
   text-align: right;
+  color: var(--text, #ffffff);
 }
 
 .transform-fields label > span {

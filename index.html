@@ -174,20 +174,58 @@
             <section class="tool-section">
               <h2 data-i18n="transform">Transform</h2>
               <div class="transform-layout-row">
-                <div class="reference-point-grid" id="referencePointGrid" role="group" aria-label="Reference point" data-i18n-aria-label="referencePointLabel">
-                  <svg class="reference-point-lines" width="30" height="30" viewBox="0 0 30 30" fill="none" aria-hidden="true">
-                    <rect x="4" y="4" width="22" height="22" stroke="currentColor" stroke-width="1" shape-rendering="crispEdges"/>
-                  </svg>
-                  <button type="button" class="reference-point-button" data-point="top-left" title="Top left" data-i18n-title="referencePointTopLeft" aria-label="Top left" data-i18n-aria-label="referencePointTopLeft" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="top-center" title="Top center" data-i18n-title="referencePointTopCenter" aria-label="Top center" data-i18n-aria-label="referencePointTopCenter" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="top-right" title="Top right" data-i18n-title="referencePointTopRight" aria-label="Top right" data-i18n-aria-label="referencePointTopRight" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="middle-left" title="Middle left" data-i18n-title="referencePointMiddleLeft" aria-label="Middle left" data-i18n-aria-label="referencePointMiddleLeft" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="center" title="Center" data-i18n-title="referencePointCenter" aria-label="Center" data-i18n-aria-label="referencePointCenter" aria-pressed="true"></button>
-                  <button type="button" class="reference-point-button" data-point="middle-right" title="Middle right" data-i18n-title="referencePointMiddleRight" aria-label="Middle right" data-i18n-aria-label="referencePointMiddleRight" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="bottom-left" title="Bottom left" data-i18n-title="referencePointBottomLeft" aria-label="Bottom left" data-i18n-aria-label="referencePointBottomLeft" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="bottom-center" title="Bottom center" data-i18n-title="referencePointBottomCenter" aria-label="Bottom center" data-i18n-aria-label="referencePointBottomCenter" aria-pressed="false"></button>
-                  <button type="button" class="reference-point-button" data-point="bottom-right" title="Bottom right" data-i18n-title="referencePointBottomRight" aria-label="Bottom right" data-i18n-aria-label="referencePointBottomRight" aria-pressed="false"></button>
-                </div>
+                <svg class="reference-point-svg" id="referencePointGrid" viewBox="0 0 28 28" width="28" height="28" role="group" aria-label="Reference point" data-i18n-aria-label="referencePointLabel">
+                  <g class="reference-point-connectors" stroke="currentColor" stroke-width="1.5" stroke-linecap="square">
+                    <line x1="6.5" y1="3.5" x2="10.5" y2="3.5" />
+                    <line x1="17.5" y1="3.5" x2="21.5" y2="3.5" />
+                    <line x1="6.5" y1="24.5" x2="10.5" y2="24.5" />
+                    <line x1="17.5" y1="24.5" x2="21.5" y2="24.5" />
+
+                    <line x1="3.5" y1="6.5" x2="3.5" y2="10.5" />
+                    <line x1="3.5" y1="17.5" x2="3.5" y2="21.5" />
+                    <line x1="24.5" y1="6.5" x2="24.5" y2="10.5" />
+                    <line x1="24.5" y1="17.5" x2="24.5" y2="21.5" />
+                  </g>
+
+                  <g class="reference-point-button" data-point="top-left" role="button" tabindex="0" aria-label="Top left" aria-pressed="false" title="Top left" data-i18n-title="referencePointTopLeft" data-i18n-aria-label="referencePointTopLeft">
+                    <rect class="hitbox" x="0" y="0" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="0.75" y="0.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="top-center" role="button" tabindex="0" aria-label="Top center" aria-pressed="false" title="Top center" data-i18n-title="referencePointTopCenter" data-i18n-aria-label="referencePointTopCenter">
+                    <rect class="hitbox" x="9.5" y="0" width="9" height="8" fill="transparent" />
+                    <rect class="box" x="11.25" y="0.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="top-right" role="button" tabindex="0" aria-label="Top right" aria-pressed="false" title="Top right" data-i18n-title="referencePointTopRight" data-i18n-aria-label="referencePointTopRight">
+                    <rect class="hitbox" x="20" y="0" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="21.75" y="0.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+
+                  <g class="reference-point-button" data-point="middle-left" role="button" tabindex="0" aria-label="Middle left" aria-pressed="false" title="Middle left" data-i18n-title="referencePointMiddleLeft" data-i18n-aria-label="referencePointMiddleLeft">
+                    <rect class="hitbox" x="0" y="9.5" width="8" height="9" fill="transparent" />
+                    <rect class="box" x="0.75" y="11.25" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="center" role="button" tabindex="0" aria-label="Center" aria-pressed="true" title="Center" data-i18n-title="referencePointCenter" data-i18n-aria-label="referencePointCenter">
+                    <rect class="hitbox" x="9.5" y="9.5" width="9" height="9" fill="transparent" />
+                    <rect class="box" x="11.25" y="11.25" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="middle-right" role="button" tabindex="0" aria-label="Middle right" aria-pressed="false" title="Middle right" data-i18n-title="referencePointMiddleRight" data-i18n-aria-label="referencePointMiddleRight">
+                    <rect class="hitbox" x="20" y="9.5" width="8" height="9" fill="transparent" />
+                    <rect class="box" x="21.75" y="11.25" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+
+                  <g class="reference-point-button" data-point="bottom-left" role="button" tabindex="0" aria-label="Bottom left" aria-pressed="false" title="Bottom left" data-i18n-title="referencePointBottomLeft" data-i18n-aria-label="referencePointBottomLeft">
+                    <rect class="hitbox" x="0" y="20" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="0.75" y="21.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="bottom-center" role="button" tabindex="0" aria-label="Bottom center" aria-pressed="false" title="Bottom center" data-i18n-title="referencePointBottomCenter" data-i18n-aria-label="referencePointBottomCenter">
+                    <rect class="hitbox" x="9.5" y="20" width="9" height="8" fill="transparent" />
+                    <rect class="box" x="11.25" y="21.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="bottom-right" role="button" tabindex="0" aria-label="Bottom right" aria-pressed="false" title="Bottom right" data-i18n-title="referencePointBottomRight" data-i18n-aria-label="referencePointBottomRight">
+                    <rect class="hitbox" x="20" y="20" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="21.75" y="21.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                </svg>
                 <div class="transform-fields">
                   <label><b>X:</b> <span><input id="artworkX" aria-label="Artwork X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled> mm</span></label>
                   <label><b>W:</b> <span><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
