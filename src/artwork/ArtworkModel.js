@@ -29,6 +29,44 @@ function cloneSource(source) {
   return source ? { ...source } : null;
 }
 
+export const REFERENCE_POINTS = Object.freeze([
+  'top-left',
+  'top-center',
+  'top-right',
+  'middle-left',
+  'center',
+  'middle-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+]);
+
+const REFERENCE_FRACTIONS = Object.freeze({
+  'top-left': Object.freeze({ x: -1, y: -1 }),
+  'top-center': Object.freeze({ x: 0, y: -1 }),
+  'top-right': Object.freeze({ x: 1, y: -1 }),
+  'middle-left': Object.freeze({ x: -1, y: 0 }),
+  center: Object.freeze({ x: 0, y: 0 }),
+  'middle-right': Object.freeze({ x: 1, y: 0 }),
+  'bottom-left': Object.freeze({ x: -1, y: 1 }),
+  'bottom-center': Object.freeze({ x: 0, y: 1 }),
+  'bottom-right': Object.freeze({ x: 1, y: 1 }),
+});
+
+function rotatePoint(x, y, degrees) {
+  const radians = degrees * Math.PI / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  return {
+    x: x * cosine - y * sine,
+    y: x * sine + y * cosine,
+  };
+}
+
+export function getReferenceFraction(point) {
+  return REFERENCE_FRACTIONS[point] || REFERENCE_FRACTIONS.center;
+}
+
 export class ArtworkModel {
   constructor(state = null) {
     this.clear();
@@ -45,6 +83,7 @@ export class ArtworkModel {
     this.rotation = 0;
     this.opacity = 1;
     this.bgOpacity = 0.28;
+    this.referencePoint = 'center';
     this.modified = false;
     return this;
   }
@@ -131,11 +170,11 @@ export class ArtworkModel {
       this.initialWidthMm = targetWidth;
       this.initialHeightMm = targetHeight;
       this.scale = 1;
+      this.centerXmm = bounds.minX + width / 2;
+      this.centerYmm = bounds.minY + height / 2;
     } else {
-      this.scale = targetWidth / this.initialWidthMm;
+      this.setScale(targetWidth / this.initialWidthMm);
     }
-    this.centerXmm = bounds.minX + width / 2;
-    this.centerYmm = bounds.minY + height / 2;
     this.modified = !setInitial;
     return this;
   }
@@ -152,9 +191,7 @@ export class ArtworkModel {
       : this.initialWidthMm;
     const widthScale = width / baseDisplayedWidth;
     const heightScale = height / baseDisplayedHeight;
-    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.max(widthScale, heightScale)));
-    this.centerXmm = bounds.minX + width / 2;
-    this.centerYmm = bounds.minY + height / 2;
+    this.setScale(Math.max(widthScale, heightScale));
     this.modified = true;
     return this;
   }
@@ -180,9 +217,44 @@ export class ArtworkModel {
     return this;
   }
 
+  getReferenceOffset() {
+    const fraction = REFERENCE_FRACTIONS[this.referencePoint] || REFERENCE_FRACTIONS.center;
+    return rotatePoint(
+      fraction.x * this.unrotatedWidthMm / 2,
+      fraction.y * this.unrotatedHeightMm / 2,
+      this.rotation,
+    );
+  }
+
+  getReferencePosition() {
+    const offset = this.getReferenceOffset();
+    return {
+      x: this.centerXmm + offset.x,
+      y: this.centerYmm + offset.y,
+    };
+  }
+
+  setReferencePoint(point) {
+    if (!REFERENCE_POINTS.includes(point)) return this;
+    this.referencePoint = point;
+    return this;
+  }
+
+  setReferencePosition(x, y) {
+    const offset = this.getReferenceOffset();
+    this.centerXmm = finiteNumber(x, 'x') - offset.x;
+    this.centerYmm = finiteNumber(y, 'y') - offset.y;
+    this.modified = true;
+    return this;
+  }
+
   setScale(scale) {
-    const next = positiveNumber(scale, 'scale');
-    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, next));
+    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(scale, 'scale')));
+    const reference = this.getReferencePosition();
+    this.scale = next;
+    const offset = this.getReferenceOffset();
+    this.centerXmm = reference.x - offset.x;
+    this.centerYmm = reference.y - offset.y;
     this.modified = true;
     return this;
   }
@@ -210,7 +282,11 @@ export class ArtworkModel {
   }
 
   rotateQuarterTurns(turns) {
+    const reference = this.getReferencePosition();
     this.rotation = normalizeQuarterTurn(this.rotation + Number(turns) * 90);
+    const offset = this.getReferenceOffset();
+    this.centerXmm = reference.x - offset.x;
+    this.centerYmm = reference.y - offset.y;
     this.modified = true;
     return this;
   }
@@ -242,6 +318,7 @@ export class ArtworkModel {
       rotation: this.rotation,
       opacity: this.opacity,
       bgOpacity: this.bgOpacity,
+      referencePoint: this.referencePoint,
       modified: this.modified,
     };
   }
@@ -259,6 +336,9 @@ export class ArtworkModel {
     this.bgOpacity = state.bgOpacity != null
       ? Math.min(1, Math.max(0, finiteNumber(state.bgOpacity, 'bgOpacity')))
       : 0.28;
+    this.referencePoint = REFERENCE_POINTS.includes(state.referencePoint)
+      ? state.referencePoint
+      : 'center';
     this.modified = Boolean(state.modified);
     return this;
   }

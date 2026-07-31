@@ -13,6 +13,7 @@ import {
 import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
+import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 
 initializeI18n();
@@ -34,6 +35,16 @@ if (settingsTriggerBtn && settingsPopover) {
     popoverContainer: settingsPopover,
   });
 }
+
+const panelDock = createPanelDock({
+  stage: document.getElementById('artworkStage'),
+  leftPanel: document.getElementById('artworkSidebarLeft'),
+  rightPanel: document.getElementById('artworkSidebarRight'),
+  leftEdge: document.getElementById('panelEdgeLeft'),
+  rightEdge: document.getElementById('panelEdgeRight'),
+  leftPin: document.getElementById('pinLeftPanel'),
+  rightPin: document.getElementById('pinRightPanel'),
+});
 
 let currentStep = 'box';
 let artworkApp;
@@ -84,6 +95,7 @@ function showStep(step) {
   }
 
   if (step === 'artwork') {
+    panelDock.openPanels();
     if (resetArtworkAfterBoxCompletion) {
       artworkApp?.resetPlacementForNewDimensions();
       resetArtworkAfterBoxCompletion = false;

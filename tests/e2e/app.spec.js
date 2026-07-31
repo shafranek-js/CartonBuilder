@@ -590,6 +590,107 @@ test('resets custom dimensions and panel layout back to defaults with one click'
   await expect(page.locator('#panelCount')).toHaveText('1/6');
 });
 
+test('auto-hides unpinned dock panels and reveals them from the edge, pinning persists', async ({ page }) => {
+  await openArtworkStep(page);
+  const stage = page.locator('#artworkStage');
+
+  await expect(stage).toHaveAttribute('data-left', 'pinned');
+  await expect(stage).toHaveAttribute('data-right', 'pinned');
+  await expect(page.locator('#panelEdgeLeft')).toBeHidden();
+
+  await page.locator('#pinLeftPanel').click();
+  await expect(stage).toHaveAttribute('data-left', 'open');
+  await expect(page.locator('#pinLeftPanel')).toHaveAttribute('aria-pressed', 'false');
+
+  await page.mouse.move(700, 360);
+  await expect(stage).toHaveAttribute('data-left', 'closed');
+  await expect(page.locator('#panelEdgeLeft')).toBeVisible();
+
+  await page.waitForTimeout(400);
+  await page.locator('#panelEdgeLeft').hover({ force: true });
+  await expect(stage).toHaveAttribute('data-left', 'open');
+  await expect(page.locator('#panelEdgeLeft')).toBeHidden();
+
+  await page.locator('#pinLeftPanel').click();
+  await expect(stage).toHaveAttribute('data-left', 'pinned');
+  await expect(page.locator('#pinLeftPanel')).toHaveAttribute('aria-pressed', 'true');
+
+  await page.locator('#pinRightPanel').click();
+  await expect(stage).toHaveAttribute('data-right', 'open');
+  await page.mouse.move(640, 360);
+  await expect(stage).toHaveAttribute('data-right', 'closed');
+  await expect(page.locator('#panelEdgeRight')).toBeVisible();
+
+  await page.waitForTimeout(400);
+  await page.locator('#panelEdgeRight').hover({ force: true });
+  await expect(stage).toHaveAttribute('data-right', 'open');
+  await page.locator('#pinRightPanel').click();
+  await expect(stage).toHaveAttribute('data-right', 'pinned');
+
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await page.reload();
+
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await expect(stage).toHaveAttribute('data-left', 'pinned');
+  await expect(stage).toHaveAttribute('data-right', 'pinned');
+});
+
+test('reference point selector swaps X/Y without moving artwork and anchors transforms', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page);
+
+  const centerButton = page.locator('.reference-point-button[data-point="center"]');
+  const topLeftButton = page.locator('.reference-point-button[data-point="top-left"]');
+  await expect(centerButton).toHaveAttribute('aria-pressed', 'true');
+
+  const centerX = Number(await page.locator('#artworkX').inputValue());
+  const centerY = Number(await page.locator('#artworkY').inputValue());
+  const modelCenter = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return { x: model.centerXmm, y: model.centerYmm };
+  });
+
+  await topLeftButton.click();
+  await expect(topLeftButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(centerButton).toHaveAttribute('aria-pressed', 'false');
+
+  const topLeftX = Number(await page.locator('#artworkX').inputValue());
+  const topLeftY = Number(await page.locator('#artworkY').inputValue());
+  expect(topLeftX).toBeLessThan(centerX);
+  expect(topLeftY).toBeLessThan(centerY);
+
+  const modelAfter = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return { x: model.centerXmm, y: model.centerYmm };
+  });
+  expect(modelAfter.x).toBeCloseTo(modelCenter.x, 5);
+  expect(modelAfter.y).toBeCloseTo(modelCenter.y, 5);
+
+  await page.locator('#artworkX').fill('0');
+  await page.locator('#artworkX').dispatchEvent('change');
+  await page.locator('#artworkY').fill('0');
+  await page.locator('#artworkY').dispatchEvent('change');
+  await expect.poll(() => page.evaluate(() => {
+    const position = window.cartonBuilderApp.artwork.artwork.getReferencePosition();
+    return Math.round(position.x * 100) === 0 && Math.round(position.y * 100) === 0;
+  })).toBe(true);
+
+  const anchor = await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.getReferencePosition());
+  await page.locator('#artworkScale').fill('150');
+  await page.locator('#artworkScale').dispatchEvent('change');
+  await expect.poll(() => page.evaluate(() => (
+    Math.round(window.cartonBuilderApp.artwork.artwork.scale * 100) === 150
+  ))).toBe(true);
+  const anchorAfterScale = await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.getReferencePosition());
+  expect(anchorAfterScale.x).toBeCloseTo(anchor.x, 4);
+  expect(anchorAfterScale.y).toBeCloseTo(anchor.y, 4);
+
+  await page.getByRole('button', { name: 'Rotate +90°' }).click();
+  const anchorAfterRotate = await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.getReferencePosition());
+  expect(anchorAfterRotate.x).toBeCloseTo(anchorAfterScale.x, 4);
+  expect(anchorAfterRotate.y).toBeCloseTo(anchorAfterScale.y, 4);
+});
+
 
 
 

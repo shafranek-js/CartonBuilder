@@ -75,6 +75,99 @@ describe('ArtworkModel', () => {
     expect(restored.bgOpacity).toBe(0.28);
   });
 
+  it('defaults to the center reference point and reports its coordinates', () => {
+    const model = new ArtworkModel().load(source, bounds);
+
+    expect(model.referencePoint).toBe('center');
+    expect(model.getReferencePosition()).toEqual({ x: 75, y: 0 });
+
+    model.setReferencePoint('top-left');
+    expect(model.referencePoint).toBe('top-left');
+    expect(model.getReferencePosition().x).toBeCloseTo(-40, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(-76.667, 2);
+    expect(model.centerXmm).toBe(75);
+    expect(model.centerYmm).toBe(0);
+    expect(model.modified).toBe(false);
+  });
+
+  it('keeps the selected reference point fixed when scaling', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('top-left');
+    const before = model.getReferencePosition();
+
+    model.setScale(2);
+
+    expect(model.getReferencePosition().x).toBeCloseTo(before.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(before.y, 5);
+    expect(model.scale).toBe(2);
+  });
+
+  it('moves the selected reference point to the entered coordinates', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('top-left');
+
+    model.setReferencePosition(0, 0);
+
+    expect(model.getReferencePosition().x).toBeCloseTo(0, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(0, 5);
+    expect(model.centerXmm).toBeCloseTo(115, 5);
+    expect(model.centerYmm).toBeCloseTo(76.667, 2);
+  });
+
+  it('keeps the selected reference point fixed when rotating', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('top-left');
+    const before = model.getReferencePosition();
+
+    model.rotateQuarterTurns(1);
+
+    expect(model.rotation).toBe(90);
+    expect(model.getReferencePosition().x).toBeCloseTo(before.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(before.y, 5);
+  });
+
+  it('keeps the selected reference point fixed for Fit and Fill', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('bottom-right');
+    const before = model.getReferencePosition();
+
+    model.fitDieline(bounds);
+    expect(model.getReferencePosition().x).toBeCloseTo(before.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(before.y, 5);
+
+    model.setReferencePoint('top-center');
+    const fillBefore = model.getReferencePosition();
+    model.fillDieline(bounds);
+    expect(model.getReferencePosition().x).toBeCloseTo(fillBefore.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(fillBefore.y, 5);
+  });
+
+  it('persists the reference point and falls back to center for old projects', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('bottom-center');
+
+    const restored = new ArtworkModel(model.toJSON());
+    expect(restored.referencePoint).toBe('bottom-center');
+
+    const oldState = model.toJSON();
+    delete oldState.referencePoint;
+    const legacy = new ArtworkModel(oldState);
+    expect(legacy.referencePoint).toBe('center');
+
+    const invalid = new ArtworkModel({ ...model.toJSON(), referencePoint: 'nowhere' });
+    expect(invalid.referencePoint).toBe('center');
+  });
+
+  it('does not change the reference point on reset transform', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('middle-right');
+    model.moveBy(10, 20).rotateQuarterTurns(1);
+
+    model.resetTransform();
+
+    expect(model.referencePoint).toBe('middle-right');
+  });
+
   it('keeps PDF page rotation as the initial canonical rotation', () => {
     const model = new ArtworkModel().load({
       ...source,

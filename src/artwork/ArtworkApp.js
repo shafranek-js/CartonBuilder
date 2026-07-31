@@ -10,7 +10,7 @@ import {
 } from '../project/ProjectStore.js';
 import { createProjectArchive, readProjectArchive } from '../project/projectArchive.js';
 import { validateProjectBundle } from '../project/projectSchema.js';
-import { ArtworkModel } from './ArtworkModel.js';
+import { ArtworkModel, getReferenceFraction } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
 import { ViewportModel } from './ViewportModel.js';
@@ -113,6 +113,7 @@ export function createArtworkApp({
     undo: documentRef.getElementById('undoButton'),
     redo: documentRef.getElementById('redoButton'),
     preview: documentRef.getElementById('previewButton'),
+    referencePointGrid: documentRef.getElementById('referencePointGrid'),
   };
 
   const layerControls = {
@@ -294,8 +295,9 @@ export function createArtworkApp({
     const enabled = artwork.hasArtwork;
     const transformEnabled = enabled && !layerLocks.artwork;
     controls.fileName.textContent = artwork.source?.fileName || t('noFile');
-    controls.x.value = enabled ? round(artwork.centerXmm) : '';
-    controls.y.value = enabled ? round(artwork.centerYmm) : '';
+    const reference = enabled ? artwork.getReferencePosition() : null;
+    controls.x.value = enabled ? round(reference.x) : '';
+    controls.y.value = enabled ? round(reference.y) : '';
     controls.width.value = enabled ? round(artwork.displayedWidthMm) : '';
     controls.height.value = enabled ? round(artwork.displayedHeightMm) : '';
     controls.scale.value = enabled ? round(artwork.scale * 100) : '';
@@ -313,6 +315,10 @@ export function createArtworkApp({
       controls.rotateLeft, controls.rotateRight, controls.reset,
     ]) {
       control.disabled = !transformEnabled;
+    }
+    for (const button of controls.referencePointGrid.querySelectorAll('.reference-point-button')) {
+      button.disabled = !transformEnabled;
+      button.setAttribute('aria-pressed', String(button.dataset.point === artwork.referencePoint));
     }
     controls.bgOpacity.disabled = !transformEnabled || layers.showFull;
     controls.replace.disabled = !enabled;
@@ -440,8 +446,6 @@ export function createArtworkApp({
       startPoint: point,
       startCenter: { x: artwork.centerXmm, y: artwork.centerYmm },
       startScale: artwork.scale,
-      startWidth: artwork.unrotatedWidthMm,
-      startHeight: artwork.unrotatedHeightMm,
       rotation: artwork.rotation,
     };
     svg.setPointerCapture(event.pointerId);
@@ -463,25 +467,20 @@ export function createArtworkApp({
       return;
     }
 
-    const oppositeOffset = rotateVector({
-      x: -sx * gesture.startWidth / 2,
-      y: -sy * gesture.startHeight / 2,
-    }, gesture.rotation);
-    const opposite = {
-      x: gesture.startCenter.x + oppositeOffset.x,
-      y: gesture.startCenter.y + oppositeOffset.y,
-    };
-    const local = rotateVector({ x: point.x - opposite.x, y: point.y - opposite.y }, -gesture.rotation);
-    artwork.setScale(Math.max(
-      Math.abs(local.x) / artwork.initialWidthMm,
-      Math.abs(local.y) / artwork.initialHeightMm,
-    ));
-    const centerOffset = rotateVector({
-      x: sx * artwork.unrotatedWidthMm / 2,
-      y: sy * artwork.unrotatedHeightMm / 2,
-    }, gesture.rotation);
-    artwork.centerXmm = opposite.x + centerOffset.x;
-    artwork.centerYmm = opposite.y + centerOffset.y;
+    const anchor = artwork.getReferencePosition();
+    const fraction = getReferenceFraction(artwork.referencePoint);
+    const baseX = Math.abs(sx - fraction.x) * artwork.initialWidthMm / 2;
+    const baseY = Math.abs(sy - fraction.y) * artwork.initialHeightMm / 2;
+    const local = rotateVector({ x: point.x - anchor.x, y: point.y - anchor.y }, -artwork.rotation);
+    let factor = 0;
+    if (baseX > 0 && baseY > 0) {
+      factor = Math.max(Math.abs(local.x) / baseX, Math.abs(local.y) / baseY);
+    } else if (baseX > 0) {
+      factor = Math.abs(local.x) / baseX;
+    } else if (baseY > 0) {
+      factor = Math.abs(local.y) / baseY;
+    }
+    artwork.setScale(Math.max(0.01, factor));
   }
 
   svg.addEventListener('pointermove', (event) => {
@@ -574,13 +573,22 @@ export function createArtworkApp({
       before = null;
     });
   }
-  bindNumberControl(controls.x, 'Set artwork X', (value) => artwork.setCenter(value, artwork.centerYmm));
-  bindNumberControl(controls.y, 'Set artwork Y', (value) => artwork.setCenter(artwork.centerXmm, value));
+  bindNumberControl(controls.x, 'Set artwork X', (value) => artwork.setReferencePosition(value, artwork.getReferencePosition().y));
+  bindNumberControl(controls.y, 'Set artwork Y', (value) => artwork.setReferencePosition(artwork.getReferencePosition().x, value));
   bindNumberControl(controls.width, 'Set artwork width', (value) => artwork.setDisplayedWidth(value));
   bindNumberControl(controls.height, 'Set artwork height', (value) => artwork.setDisplayedHeight(value));
   bindNumberControl(controls.scale, 'Set artwork scale', (value) => artwork.setScale(value / 100));
   bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
+
+  controls.referencePointGrid.addEventListener('click', (event) => {
+    const button = event.target.closest('.reference-point-button');
+    if (!button || button.disabled) return;
+    if (artwork.referencePoint === button.dataset.point) return;
+    artwork.setReferencePoint(button.dataset.point);
+    render();
+    scheduleSave();
+  });
 
   controls.fit.addEventListener('click', () => command('Fit artwork', () => artwork.fitDieline(boxModel.getBounds())));
   controls.fill.addEventListener('click', () => command('Fill artwork', () => artwork.fillDieline(boxModel.getBounds())));
