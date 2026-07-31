@@ -38,11 +38,26 @@ let artworkApp;
 let preview3dFacade;
 let resetArtworkAfterBoxCompletion = false;
 
+function updateStepNavigationStates() {
+  const isBoxComplete = model.isComplete;
+  const hasArtwork = Boolean(artworkApp?.artwork?.hasArtwork);
+
+  const boxBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'box');
+  const artworkBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'artwork');
+  const previewBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'preview');
+
+  if (boxBtn) boxBtn.disabled = false;
+  if (artworkBtn) artworkBtn.disabled = !isBoxComplete && !hasArtwork;
+  if (previewBtn) previewBtn.disabled = !hasArtwork || (!isBoxComplete && !hasArtwork);
+}
+
 function showStep(step) {
   currentStep = step;
   boxStep.hidden = step !== 'box';
   artworkStep.hidden = step !== 'artwork';
   previewStep.hidden = step !== 'preview';
+
+  updateStepNavigationStates();
 
   for (const button of stepButtons) {
     const target = button.dataset.stepTarget;
@@ -79,7 +94,7 @@ const boxApp = createBoxNetApp({
       artworkApp.resetPlacementForNewDimensions();
       resetArtworkAfterBoxCompletion = false;
     }
-    stepButtons.find((button) => button.dataset.stepTarget === 'artwork').disabled = false;
+    updateStepNavigationStates();
     showStep('artwork');
   },
   beforeDimensionReset: () => {
@@ -89,9 +104,16 @@ const boxApp = createBoxNetApp({
   onDimensionReset: () => {
     resetArtworkAfterBoxCompletion = true;
     preview3dFacade?.resetForProject();
+    updateStepNavigationStates();
   },
-  onLayoutReset: () => preview3dFacade?.resetForProject(),
-  onChange: () => artworkApp?.scheduleSave(),
+  onLayoutReset: () => {
+    preview3dFacade?.resetForProject();
+    updateStepNavigationStates();
+  },
+  onChange: () => {
+    updateStepNavigationStates();
+    artworkApp?.scheduleSave();
+  },
 });
 
 artworkApp = createArtworkApp({
@@ -100,14 +122,12 @@ artworkApp = createArtworkApp({
   onBack: () => showStep('box'),
   onPreview: (warnings) => {
     previewWarning.textContent = warnings.join(' ');
-    stepButtons.find((button) => button.dataset.stepTarget === 'preview').disabled = false;
+    updateStepNavigationStates();
     showStep('preview');
   },
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot) => {
     preview3dFacade?.resetForProject();
-    stepButtons.find((button) => button.dataset.stepTarget === 'artwork').disabled = !model.isComplete && !snapshot.artwork;
-    stepButtons.find((button) => button.dataset.stepTarget === 'preview').disabled = !snapshot.artwork;
     
     let targetStep = 'box';
     if (snapshot.workflowStep === 'preview' && snapshot.artwork) {
@@ -119,6 +139,7 @@ artworkApp = createArtworkApp({
     } else if (snapshot.artwork) {
       targetStep = 'artwork';
     }
+    updateStepNavigationStates();
     showStep(targetStep);
   },
   getWorkflowStep: () => currentStep,

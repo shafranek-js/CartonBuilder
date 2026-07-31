@@ -247,6 +247,7 @@ input {
   background: transparent;
   color: #c8c8c8;
   text-align: left;
+  cursor: pointer;
 }
 
 .step span {
@@ -271,7 +272,8 @@ input {
 }
 
 .step:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .workflow-step {
