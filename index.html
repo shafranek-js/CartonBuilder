@@ -34,6 +34,14 @@
         <header class="box-controls-bar">
           <span class="design-hint" data-i18n="designBox">Design your box by adding or removing box panels</span>
 
+          <div class="preset-picker-wrap">
+            <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library">
+              <span>📦 Presets</span>
+              <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <div class="preset-popover" id="presetPopover" hidden></div>
+          </div>
+
           <div class="dimension-list">
             <div class="dimension-row">
               <label for="boxWidth" data-i18n="width">Width:</label>

@@ -1,5 +1,7 @@
 import { createExportSvg, formatNumber, getExportFilename } from '../export/svgExport.js';
 import { getUserErrorMessage, t } from '../i18n.js';
+import { BoxNetModel } from '../model/BoxNetModel.js';
+import { createPresetPicker } from './PresetPicker.js';
 import { createBoxNetRenderer } from './renderer.js';
 
 export function createBoxNetApp({
@@ -19,6 +21,8 @@ export function createBoxNetApp({
   const toast = documentRef.getElementById('toast');
   const announcer = documentRef.getElementById('announcer');
   const workspaceWrap = documentRef.querySelector('.workspace-wrap');
+  const presetTriggerBtn = documentRef.getElementById('presetTriggerBtn');
+  const presetPopover = documentRef.getElementById('presetPopover');
   const dimensionInputs = {
     width: documentRef.getElementById('boxWidth'),
     height: documentRef.getElementById('boxHeight'),
@@ -57,6 +61,38 @@ export function createBoxNetApp({
       input.value = formatNumber(lastDimensions[key]);
     }
   }
+
+  const presetPicker = presetTriggerBtn && presetPopover
+    ? createPresetPicker({
+        triggerButton: presetTriggerBtn,
+        popoverContainer: presetPopover,
+        model,
+        onApplyPreset: (preset) => {
+          if (preset.netState) {
+            try {
+              const restored = BoxNetModel.fromJSON(preset.netState);
+              model.panels = restored.panels;
+              model.rootId = restored.rootId;
+              model.dimensions = restored.dimensions;
+              model.creationSequence = restored.creationSequence;
+            } catch {
+              model.updateDimensions(preset.dimensions);
+            }
+          } else {
+            model.updateDimensions(preset.dimensions);
+          }
+          lastDimensions = { ...model.dimensions };
+          restoreDimensionInputs();
+          onDimensionReset(preset.dimensions);
+          render();
+          onChange();
+        },
+        showToast,
+        announce,
+        windowRef,
+        documentRef,
+      })
+    : null;
 
   function applyDimensionChange({ silent = false } = {}) {
     const nextDimensions = readDimensions();
