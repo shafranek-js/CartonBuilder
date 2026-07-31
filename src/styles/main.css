@@ -58,7 +58,7 @@ body {
   background: var(--body-bg, #343434);
   color: var(--text, #ffffff);
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-weight: 200;
+  font-weight: 100;
   font-size: 12px;
   letter-spacing: 0.01em;
   transition: background-color 0.2s ease, color 0.2s ease;
