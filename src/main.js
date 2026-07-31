@@ -13,6 +13,7 @@ import {
 import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
+import { createFileMenu } from './ui/FileMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 
@@ -25,6 +26,42 @@ const artworkStep = document.getElementById('artworkStep');
 const previewStep = document.getElementById('previewStep');
 const stepButtons = [...document.querySelectorAll('.step')];
 const previewWarning = document.getElementById('previewWarning');
+
+const fileMenuTriggerBtn = document.getElementById('fileMenuTriggerBtn');
+const fileMenuPopover = document.getElementById('fileMenuPopover');
+const projectFileInput = document.getElementById('projectFileInput');
+
+const handleOpenProject = () => {
+  const input = document.getElementById('projectFileInput');
+  if (input) input.click();
+};
+
+const handleSaveProject = () => {
+  const saveBtn = document.getElementById('saveProjectButton');
+  if (saveBtn) {
+    saveBtn.click();
+  }
+};
+
+if (fileMenuTriggerBtn && fileMenuPopover) {
+  createFileMenu({
+    triggerButton: fileMenuTriggerBtn,
+    popoverContainer: fileMenuPopover,
+    onOpenProject: handleOpenProject,
+    onSaveProject: handleSaveProject,
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    handleSaveProject();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+    e.preventDefault();
+    handleOpenProject();
+  }
+});
 
 const settingsTriggerBtn = document.getElementById('settingsTriggerBtn');
 const settingsPopover = document.getElementById('settingsPopover');

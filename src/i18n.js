@@ -3,6 +3,9 @@ import { AppError } from './errors.js';
 const messages = {
   en: {
     language: 'Language',
+    file: 'File',
+    fileMenu: 'File menu',
+    newProject: 'New Project',
     settings: 'Settings',
     createBox: 'Create Box',
     placeArtwork: 'Place Artwork',
@@ -207,6 +210,9 @@ const messages = {
   },
   ru: {
     language: 'Язык',
+    file: 'Файл',
+    fileMenu: 'Меню Файл',
+    newProject: 'Новый проект',
     settings: 'Настройки',
     createBox: 'Создание коробки',
     placeArtwork: 'Размещение макета',
