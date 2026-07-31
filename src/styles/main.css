@@ -1251,6 +1251,34 @@ input[type="checkbox"] {
   margin-top: 10px;
 }
 
+.icon-button-grid {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.tool-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--panel-border, #5a5a5a);
+  border-radius: 6px;
+  background: var(--panel-bg, #3e3e3e);
+  color: var(--text, #ffffff);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tool-icon-btn:hover:not(:disabled),
+.tool-icon-btn:focus-visible:not(:disabled) {
+  border-color: var(--accent, #afca42);
+  background: var(--surface, #4e4e4e);
+  color: var(--accent, #afca42);
+}
+
 .tool-section button,
 .processing-overlay button,
 dialog button {
