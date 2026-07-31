@@ -3,6 +3,7 @@ import { AppError } from './errors.js';
 const messages = {
   en: {
     language: 'Language',
+    settings: 'Settings',
     createBox: 'Create Box',
     placeArtwork: 'Place Artwork',
     previewExport: 'Preview / Export',
@@ -178,6 +179,7 @@ const messages = {
   },
   ru: {
     language: 'Язык',
+    settings: 'Настройки',
     createBox: 'Создание коробки',
     placeArtwork: 'Размещение макета',
     previewExport: 'Просмотр / Экспорт',

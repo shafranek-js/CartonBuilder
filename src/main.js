@@ -12,6 +12,7 @@ import {
 } from './model/geometry.js';
 import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { createBoxNetApp } from './ui/app.js';
+import { createSettingsModal } from './ui/SettingsModal.js';
 
 initializeI18n();
 
@@ -21,6 +22,16 @@ const artworkStep = document.getElementById('artworkStep');
 const previewStep = document.getElementById('previewStep');
 const stepButtons = [...document.querySelectorAll('.step')];
 const previewWarning = document.getElementById('previewWarning');
+
+const settingsTriggerBtn = document.getElementById('settingsTriggerBtn');
+const settingsPopover = document.getElementById('settingsPopover');
+
+if (settingsTriggerBtn && settingsPopover) {
+  createSettingsModal({
+    triggerButton: settingsTriggerBtn,
+    popoverContainer: settingsPopover,
+  });
+}
 
 let currentStep = 'box';
 let artworkApp;
