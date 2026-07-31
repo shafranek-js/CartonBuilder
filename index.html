@@ -173,9 +173,11 @@
             </button>
             <section class="tool-section">
               <h2 data-i18n="transform">Transform</h2>
-              <div class="reference-point">
-                <span class="reference-point-title" data-i18n="referencePoint">Reference point</span>
+              <div class="transform-layout-row">
                 <div class="reference-point-grid" id="referencePointGrid" role="group" aria-label="Reference point" data-i18n-aria-label="referencePointLabel">
+                  <svg class="reference-point-lines" width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+                    <rect x="4" y="4" width="20" height="20" stroke="currentColor" stroke-width="1" shape-rendering="crispEdges"/>
+                  </svg>
                   <button type="button" class="reference-point-button" data-point="top-left" title="Top left" data-i18n-title="referencePointTopLeft" aria-label="Top left" data-i18n-aria-label="referencePointTopLeft" aria-pressed="false"></button>
                   <button type="button" class="reference-point-button" data-point="top-center" title="Top center" data-i18n-title="referencePointTopCenter" aria-label="Top center" data-i18n-aria-label="referencePointTopCenter" aria-pressed="false"></button>
                   <button type="button" class="reference-point-button" data-point="top-right" title="Top right" data-i18n-title="referencePointTopRight" aria-label="Top right" data-i18n-aria-label="referencePointTopRight" aria-pressed="false"></button>
@@ -186,12 +188,14 @@
                   <button type="button" class="reference-point-button" data-point="bottom-center" title="Bottom center" data-i18n-title="referencePointBottomCenter" aria-label="Bottom center" data-i18n-aria-label="referencePointBottomCenter" aria-pressed="false"></button>
                   <button type="button" class="reference-point-button" data-point="bottom-right" title="Bottom right" data-i18n-title="referencePointBottomRight" aria-label="Bottom right" data-i18n-aria-label="referencePointBottomRight" aria-pressed="false"></button>
                 </div>
+                <div class="control-grid transform-fields">
+                  <label><b>X:</b> <span><input id="artworkX" aria-label="Artwork X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled> mm</span></label>
+                  <label><b>W:</b> <span><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
+                  <label><b>Y:</b> <span><input id="artworkY" aria-label="Artwork Y" data-i18n-aria-label="artworkCenterYLabel" type="number" step="0.1" disabled> mm</span></label>
+                  <label><b>H:</b> <span><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
+                </div>
               </div>
               <div class="control-grid">
-                <label><b data-i18n="centerX">X</b> <span><input id="artworkX" aria-label="Artwork X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="centerY">Y</b> <span><input id="artworkY" aria-label="Artwork Y" data-i18n-aria-label="artworkCenterYLabel" type="number" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="width">Width:</b> <span><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="height">Height:</b> <span><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
                 <label><b data-i18n="scale">Scale</b> <span><input id="artworkScale" aria-label="Artwork scale" data-i18n-aria-label="artworkScaleLabel" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
                 <label><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
                 <label><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>

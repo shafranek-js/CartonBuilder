@@ -58,7 +58,7 @@ body {
   background: var(--body-bg, #343434);
   color: var(--text, #ffffff);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -79,7 +79,7 @@ select {
   background-repeat: no-repeat;
   background-size: 10px 6px;
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   outline: none;
   appearance: none;
@@ -237,7 +237,7 @@ input[type="checkbox"] {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--panel-border, #404040);
   margin-bottom: 10px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .settings-group {
@@ -253,14 +253,14 @@ input[type="checkbox"] {
   align-items: center;
   gap: 8px;
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .settings-desc {
   margin: 4px 0 0;
   color: var(--muted-text, #a0a0a0);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.4;
 }
 
@@ -271,7 +271,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   background: #422020;
   color: #ff9e9e;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease;
@@ -293,7 +293,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   background: #3e3e3e;
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
@@ -371,7 +371,7 @@ input[type="checkbox"] {
 
 .design-hint {
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   justify-self: start;
 }
@@ -391,7 +391,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   background: var(--panel-bg, #3e3e3e);
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
@@ -438,7 +438,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   background: #384511;
   color: #d8ef79;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease;
@@ -460,7 +460,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   background: var(--panel-bg, #3e3e3e);
   color: var(--muted-text, #c8c8c8);
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
@@ -482,7 +482,7 @@ input[type="checkbox"] {
 .preset-section-title {
   margin: 0 0 6px;
   color: var(--muted-text, #a0a0a0);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -497,7 +497,7 @@ input[type="checkbox"] {
 .preset-empty-text {
   margin: 4px 0;
   color: var(--muted-text, #888888);
-  font-size: 11px;
+  font-size: 10px;
   font-style: italic;
 }
 
@@ -526,7 +526,7 @@ input[type="checkbox"] {
 
 .preset-title {
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -551,7 +551,7 @@ input[type="checkbox"] {
   border-radius: 3px;
   background: #444444;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
@@ -568,7 +568,7 @@ input[type="checkbox"] {
   border-radius: 3px;
   background: #422020;
   color: #ff9e9e;
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
 }
 
@@ -617,7 +617,7 @@ input[type="checkbox"] {
   outline: none;
   background: var(--panel-bg, #3e3e3e);
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   appearance: textfield;
   -moz-appearance: textfield;
@@ -696,7 +696,7 @@ input[type="checkbox"] {
   border: 1px solid #5a5a5a;
   border-radius: 12px;
   background: #424242;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .placed-count strong {
@@ -918,7 +918,7 @@ input[type="checkbox"] {
 
 .result-dialog h2 {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .result-dialog p {
@@ -1047,7 +1047,7 @@ input[type="checkbox"] {
 
 .drop-state span {
   color: #656565;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .primary-action {
@@ -1218,7 +1218,7 @@ input[type="checkbox"] {
 .tool-section h2 {
   margin: 0 0 9px;
   color: var(--text, #ffffff);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .file-name {
@@ -1284,7 +1284,7 @@ dialog button {
   border-radius: 6px;
   background: var(--panel-bg, #3e3e3e);
   color: var(--text, #ffffff);
-  font-size: 12px;
+  font-size: 11px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1303,49 +1303,59 @@ dialog button {
   flex: 1;
 }
 
-.reference-point {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 9px;
-}
-
-.reference-point-title {
-  color: var(--muted-text, #e6e6e6);
-  font-size: 12px;
+.transform-layout-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .reference-point-grid {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(3, 26px);
-  gap: 4px;
+  grid-template-columns: repeat(3, 8px);
+  grid-template-rows: repeat(3, 8px);
+  gap: 2px;
+}
+
+.reference-point-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+  color: var(--panel-border, #666666);
 }
 
 .reference-point-button {
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  min-height: 8px;
   padding: 0;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--panel-border, #5a5a5a);
-  border-radius: 6px;
+  margin: 0;
+  display: block;
+  border: 1px solid var(--panel-border, #666666);
+  border-radius: 0;
   background: var(--panel-bg, #3e3e3e);
   cursor: pointer;
+  box-sizing: border-box;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .reference-point-button::after {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted-text, #cfcfcf);
-  transition: background-color 0.15s ease;
+  display: none;
 }
 
 .reference-point-button:hover,
 .reference-point-button:focus-visible {
-  border-color: #888888;
+  border-color: var(--text, #ffffff);
+  z-index: 2;
 }
 
 .reference-point-button:focus-visible {
@@ -1354,23 +1364,19 @@ dialog button {
 }
 
 .reference-point-button[aria-pressed="true"] {
-  border-color: var(--accent, #9dbd29);
-  background: var(--accent, #9dbd29);
-}
-
-.reference-point-button[aria-pressed="true"]::after {
-  background: #ffffff;
+  background: var(--text, #ffffff);
+  border-color: var(--text, #ffffff);
 }
 
 .reference-point-button:disabled {
-  opacity: 0.45;
+  opacity: 0.35;
   cursor: default;
 }
 
 .quality-line {
   margin: 9px 0 0;
   color: #ddd;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 #effectiveDpi.low-dpi {
@@ -1517,7 +1523,7 @@ dialog button {
   align-items: center;
   gap: 5px;
   color: #dcdcdc;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .compact-select select {
@@ -1531,7 +1537,7 @@ dialog button {
 .preview-warning {
   flex: 1 1 180px;
   color: #f4d46c;
-  font-size: 12px;
+  font-size: 11px;
   text-align: right;
 }
 
@@ -1593,7 +1599,7 @@ dialog button {
 
 .preview-3d-inspector span {
   color: #d7d7d7;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .technical-proof-notice {
@@ -1602,7 +1608,7 @@ dialog button {
   border-top: 1px solid #696969;
   background: #464646;
   color: #f0d98d;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -1677,7 +1683,7 @@ dialog::backdrop {
 
 dialog h2 {
   margin: 0 0 14px;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 dialog label {
@@ -1749,7 +1755,7 @@ dialog input {
   }
 
   .step span {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .artwork-sidebar {
