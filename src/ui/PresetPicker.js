@@ -74,14 +74,14 @@ export function createPresetPicker({
           💾 Save Current (${defaultName})
         </button>
         <div class="preset-io-btns">
-          <button type="button" class="preset-io-btn" id="importPresetsBtn" title="Import presets from JSON file">
-            📥 Import JSON
+          <button type="button" class="preset-io-btn" id="importPresetsBtn" title="Import presets from .cartonpreset file">
+            📥 Import
           </button>
-          <button type="button" class="preset-io-btn" id="exportPresetsBtn" title="Export my presets to JSON file" ${userPresets.length === 0 ? 'disabled' : ''}>
-            📤 Export JSON
+          <button type="button" class="preset-io-btn" id="exportPresetsBtn" title="Export presets to .cartonpreset file" ${userPresets.length === 0 ? 'disabled' : ''}>
+            📤 Export
           </button>
         </div>
-        <input type="file" id="presetFileInput" accept=".json,application/json" hidden>
+        <input type="file" id="presetFileInput" accept=".cartonpreset,.carton_preset,.json,application/json" hidden>
       </div>
       <div class="preset-section">
         <h4 class="preset-section-title">My Presets</h4>
@@ -126,7 +126,7 @@ export function createPresetPicker({
       const url = URL.createObjectURL(blob);
       const link = documentRef.createElement('a');
       link.href = url;
-      link.download = `carton-builder-presets-${Date.now()}.json`;
+      link.download = `carton-presets-${Date.now()}.cartonpreset`;
       link.click();
       URL.revokeObjectURL(url);
 
