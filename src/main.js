@@ -82,11 +82,17 @@ function showStep(step) {
   }
 
   if (step === 'artwork') {
+    if (resetArtworkAfterBoxCompletion) {
+      artworkApp?.resetPlacementForNewDimensions();
+      resetArtworkAfterBoxCompletion = false;
+    } else {
+      artworkApp?.fitToScreen();
+    }
     preview3dFacade?.suspend();
-    requestAnimationFrame(() => artworkApp.render());
+    requestAnimationFrame(() => artworkApp?.render());
   } else if (step === 'preview') {
     requestAnimationFrame(() => {
-      artworkApp.renderPreview();
+      artworkApp?.renderPreview();
       preview3dFacade?.resume();
     });
   } else {
@@ -101,10 +107,6 @@ function showStep(step) {
 const boxApp = createBoxNetApp({
   model,
   onContinue: () => {
-    if (resetArtworkAfterBoxCompletion) {
-      artworkApp.resetPlacementForNewDimensions();
-      resetArtworkAfterBoxCompletion = false;
-    }
     updateStepNavigationStates();
     showStep('artwork');
   },
