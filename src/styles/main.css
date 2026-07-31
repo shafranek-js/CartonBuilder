@@ -1737,6 +1737,14 @@ dialog button {
   font-size: 11px;
 }
 
+.pdf-layers-section[hidden] {
+  display: none;
+}
+
+.pdf-layer-row {
+  padding-inline: 6px;
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
@@ -1961,6 +1969,7 @@ dialog button {
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
   shape-rendering: crispEdges;
+  pointer-events: none;
 }
 
 .dieline-fold {
@@ -1970,6 +1979,7 @@ dialog button {
   stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
   shape-rendering: crispEdges;
+  pointer-events: none;
 }
 
 .artwork-panel-label {
@@ -1991,12 +2001,14 @@ dialog button {
   fill: rgb(183 220 239 / 22%);
   stroke: #57a9d2;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 .base-highlight {
   fill: rgb(239 166 236 / 22%);
   stroke: #cf60ca;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 dialog {

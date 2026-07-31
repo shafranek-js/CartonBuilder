@@ -168,6 +168,39 @@ describe('ArtworkModel', () => {
     expect(model.referencePoint).toBe('middle-right');
   });
 
+  it('tracks PDF layer visibility and round-trips it', () => {
+    const model = new ArtworkModel().load({
+      ...source,
+      pdfLayers: [
+        { id: 'a', name: 'Background', group: null },
+        { id: 'b', name: 'Labels', group: 'Set' },
+      ],
+      pdfLayerVisibility: { a: true, b: false },
+    }, bounds);
+
+    expect(model.hasPdfLayers).toBe(true);
+    expect(model.hasArtwork).toBe(true);
+    expect(model.source.pdfLayers).toEqual([
+      { id: 'a', name: 'Background', group: null },
+      { id: 'b', name: 'Labels', group: 'Set' },
+    ]);
+    expect(model.pdfLayerVisibility).toEqual({ a: true, b: false });
+
+    model.pdfLayerVisibility.b = true;
+    const restored = new ArtworkModel(model.toJSON());
+    expect(restored.pdfLayerVisibility).toEqual({ a: true, b: true });
+    expect(restored.hasPdfLayers).toBe(true);
+  });
+
+  it('defaults PDF layers to null for old projects', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    expect(model.hasPdfLayers).toBe(false);
+    expect(model.pdfLayerVisibility).toBe(null);
+
+    const restored = new ArtworkModel(model.toJSON());
+    expect(restored.pdfLayerVisibility).toBe(null);
+  });
+
   it('keeps PDF page rotation as the initial canonical rotation', () => {
     const model = new ArtworkModel().load({
       ...source,

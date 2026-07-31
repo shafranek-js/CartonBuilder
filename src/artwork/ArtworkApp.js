@@ -14,8 +14,11 @@ import { ArtworkModel, getReferenceFraction } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
 import { ViewportModel } from './ViewportModel.js';
-import { loadArtworkFile } from './fileLoader.js';
+import { loadArtworkFile, renderPdfWithLayers } from './fileLoader.js';
+import { getSnapOffset, buildSnapTargets, getResizeSnapScale, getDisplayedReferenceFraction } from './snap.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
+
+const SNAP_SCREEN_PX = 6;
 
 function downloadBlob(documentRef, windowRef, blob, fileName) {
   const url = windowRef.URL.createObjectURL(blob);
@@ -114,6 +117,8 @@ export function createArtworkApp({
     redo: documentRef.getElementById('redoButton'),
     preview: documentRef.getElementById('previewButton'),
     referencePointGrid: documentRef.getElementById('referencePointGrid'),
+    pdfLayersSection: documentRef.getElementById('pdfLayersSection'),
+    pdfLayersList: documentRef.getElementById('pdfLayersList'),
   };
 
   const layerControls = {
@@ -140,6 +145,8 @@ export function createArtworkApp({
   let wheelTimer = null;
   let processingGeneration = 0;
   let processingController = null;
+  let pdfRenderGeneration = 0;
+  let pdfRenderController = null;
   let projectCreatedAt = new Date().toISOString();
   let errorRetry = null;
   let currentError = null;
@@ -347,6 +354,110 @@ export function createArtworkApp({
     renderer.render();
   }
 
+  function createSvgElement(name, attributes, innerHtml) {
+    const element = documentRef.createElementNS('http://www.w3.org/2000/svg', name);
+    for (const [key, value] of Object.entries(attributes)) {
+      element.setAttribute(key, String(value));
+    }
+    if (innerHtml) element.innerHTML = innerHtml;
+    return element;
+  }
+
+  function createLayerEyeSvg() {
+    return createSvgElement('svg', {
+      class: 'layer-eye-icon',
+      viewBox: '0 0 24 24',
+      width: 14,
+      height: 14,
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.8,
+    }, '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>');
+  }
+
+  function createLayerThumbSvg() {
+    return createSvgElement('svg', {
+      viewBox: '0 0 16 16',
+      width: 12,
+      height: 12,
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.2,
+    }, '<path d="M8 1l6 3-6 3-6-3 6-3z"/><path d="M2 8l6 3 6-3"/><path d="M2 11l6 3 6-3"/>');
+  }
+
+  function renderPdfLayers() {
+    const layers = artwork.source?.pdfLayers || [];
+    const hasLayers = artwork.hasArtwork && layers.length > 0;
+    controls.pdfLayersSection.hidden = !hasLayers;
+    controls.pdfLayersList.replaceChildren();
+    if (!hasLayers) return;
+    for (const layer of layers) {
+      const row = documentRef.createElement('div');
+      row.className = 'adobe-layer-row pdf-layer-row';
+      row.dataset.layerId = layer.id;
+
+      const eye = documentRef.createElement('label');
+      eye.className = 'layer-toggle-cell eye-cell';
+      eye.title = 'Toggle Visibility';
+      const checkbox = documentRef.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'sr-only';
+      checkbox.checked = artwork.pdfLayerVisibility?.[layer.id] !== false;
+      checkbox.addEventListener('change', () => togglePdfLayer(layer.id, checkbox.checked));
+      eye.appendChild(checkbox);
+      eye.appendChild(createLayerEyeSvg());
+      row.appendChild(eye);
+
+      const thumbnail = documentRef.createElement('span');
+      thumbnail.className = 'layer-thumbnail';
+      thumbnail.appendChild(createLayerThumbSvg());
+      row.appendChild(thumbnail);
+
+      const name = documentRef.createElement('span');
+      name.className = 'layer-title';
+      name.textContent = layer.group ? `${layer.group} / ${layer.name}` : layer.name;
+      name.title = layer.name;
+      row.appendChild(name);
+
+      controls.pdfLayersList.appendChild(row);
+    }
+  }
+
+  async function togglePdfLayer(id, visible) {
+    const layers = artwork.source?.pdfLayers;
+    if (!layers || !artwork.hasArtwork || !originalBlob) return;
+    const next = {};
+    for (const layer of layers) {
+      next[layer.id] = layer.id === id ? visible : artwork.pdfLayerVisibility?.[layer.id] !== false;
+    }
+    artwork.pdfLayerVisibility = next;
+    renderPdfLayers();
+    scheduleSave();
+
+    pdfRenderController?.abort();
+    const controller = new AbortController();
+    pdfRenderController = controller;
+    const generation = ++pdfRenderGeneration;
+    try {
+      const rendered = await renderPdfWithLayers(originalBlob, {
+        pageIndex: artwork.source.pageIndex || 0,
+        visibility: next,
+        signal: controller.signal,
+      });
+      if (generation !== pdfRenderGeneration || disposed) return;
+      previewBlob = rendered.previewBlob;
+      renderer.setPreviewBlob(previewBlob);
+      render();
+    } catch (error) {
+      if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return;
+      console.error(error);
+      showError(error, 'artworkLoadFailed');
+    } finally {
+      if (generation === pdfRenderGeneration) pdfRenderController = null;
+    }
+  }
+
   function commitChange(label, before) {
     history.commit(label, before, captureEditorState());
     recordDiagnostic('editor-change', { command: label });
@@ -390,6 +501,9 @@ export function createArtworkApp({
     const generation = ++processingGeneration;
     processingController?.abort();
     processingController = new AbortController();
+    pdfRenderController?.abort();
+    pdfRenderController = null;
+    pdfRenderGeneration += 1;
     clearError();
     processing.hidden = false;
     canvasWrap.setAttribute('aria-busy', 'true');
@@ -408,6 +522,7 @@ export function createArtworkApp({
       history.clear();
       selected = true;
       renderer.setPreviewBlob(previewBlob);
+      renderPdfLayers();
       render();
       windowRef.requestAnimationFrame(() => renderer.fitToScreen());
       scheduleSave();
@@ -473,30 +588,59 @@ export function createArtworkApp({
   }
 
   function updateResizeGesture(event, point) {
-    if (event.altKey) {
-      const currentDist = Math.hypot(point.x - gesture.startCenter.x, point.y - gesture.startCenter.y);
-      const factor = currentDist / gesture.startDistFromCenter;
-      artwork.setScale(Math.max(0.01, gesture.startScale * factor));
-      artwork.centerXmm = gesture.startCenter.x;
-      artwork.centerYmm = gesture.startCenter.y;
-      return;
-    }
-
-    const currentDist = Math.hypot(point.x - gesture.anchorPos.x, point.y - gesture.anchorPos.y);
-    const factor = currentDist / gesture.startDistFromAnchor;
+    const isAlt = event.altKey;
+    const anchor = isAlt ? gesture.startCenter : artwork.getReferencePosition();
+    const currentDist = Math.hypot(point.x - anchor.x, point.y - anchor.y);
+    const factor = currentDist / (isAlt ? gesture.startDistFromCenter : gesture.startDistFromAnchor);
     const nextScale = Math.max(0.01, gesture.startScale * factor);
 
-    artwork.setScale(nextScale);
+    const fraction = isAlt
+      ? { x: 0, y: 0 }
+      : getDisplayedReferenceFraction(
+        artwork.rotation,
+        getReferenceFraction(artwork.referencePoint),
+      );
+    const snappedScale = getResizeSnapScale({
+      candidateScale: nextScale,
+      anchor,
+      baseW: artwork.initialWidthMm,
+      baseH: artwork.initialHeightMm,
+      fraction,
+      targets: buildSnapTargets(boxModel),
+      threshold: SNAP_SCREEN_PX / viewport.zoom,
+    });
+    artwork.setScale(snappedScale);
+    if (isAlt) {
+      artwork.centerXmm = gesture.startCenter.x;
+      artwork.centerYmm = gesture.startCenter.y;
+    }
   }
 
   svg.addEventListener('pointermove', (event) => {
     if (!gesture || event.pointerId !== gesture.pointerId) return;
     const point = renderer.clientToModel(event.clientX, event.clientY);
     if (gesture.type === 'move') {
-      artwork.setCenter(
-        gesture.startCenter.x + point.x - gesture.startPoint.x,
-        gesture.startCenter.y + point.y - gesture.startPoint.y,
-      );
+      const candidate = {
+        x: gesture.startCenter.x + point.x - gesture.startPoint.x,
+        y: gesture.startCenter.y + point.y - gesture.startPoint.y,
+      };
+      let snapped = candidate;
+      if (!event.altKey) {
+        const offset = getSnapOffset(
+          candidate,
+          {
+            x: artwork.displayedWidthMm / 2,
+            y: artwork.displayedHeightMm / 2,
+          },
+          buildSnapTargets(boxModel),
+          SNAP_SCREEN_PX / viewport.zoom,
+        );
+        snapped = {
+          x: candidate.x + offset.dx,
+          y: candidate.y + offset.dy,
+        };
+      }
+      artwork.setCenter(snapped.x, snapped.y);
     } else if (gesture.type === 'resize') {
       updateResizeGesture(event, point);
     } else if (gesture.type === 'pan') {
@@ -688,12 +832,16 @@ export function createArtworkApp({
   controls.remove.addEventListener('click', () => {
     if (layerLocks.artwork) return;
     if (!windowRef.confirm(t('removeConfirm'))) return;
+    pdfRenderController?.abort();
+    pdfRenderController = null;
+    pdfRenderGeneration += 1;
     artwork.clear();
     history.clear();
     originalBlob = null;
     previewBlob = null;
     renderer.setPreviewBlob(null);
     selected = false;
+    renderPdfLayers();
     render();
     scheduleSave();
   });
@@ -936,6 +1084,7 @@ export function createArtworkApp({
     selected = Boolean(artwork.hasArtwork);
     for (const [key, control] of Object.entries(layerControls)) control.checked = layers[key];
     for (const [key, control] of Object.entries(layerLockControls)) control.checked = layerLocks[key];
+    renderPdfLayers();
     render();
     scheduleSave();
   }
@@ -1005,6 +1154,8 @@ export function createArtworkApp({
     windowRef.clearTimeout(wheelTimer);
     processingController?.abort();
     processingController = null;
+    pdfRenderController?.abort();
+    pdfRenderController = null;
     renderer.dispose();
   }
 

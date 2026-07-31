@@ -84,12 +84,17 @@ export class ArtworkModel {
     this.opacity = 1;
     this.bgOpacity = 0.28;
     this.referencePoint = 'center';
+    this.pdfLayerVisibility = null;
     this.modified = false;
     return this;
   }
 
   get hasArtwork() {
     return Boolean(this.source);
+  }
+
+  get hasPdfLayers() {
+    return Boolean(this.source?.pdfLayers?.length);
   }
 
   get aspectRatio() {
@@ -127,6 +132,13 @@ export class ArtworkModel {
   load(source, dielineBounds) {
     const widthPx = positiveNumber(source.widthPx, 'source.widthPx');
     const heightPx = positiveNumber(source.heightPx, 'source.heightPx');
+    const pdfLayers = Array.isArray(source.pdfLayers)
+      ? source.pdfLayers.map((layer) => ({
+        id: String(layer.id),
+        name: String(layer.name || layer.id),
+        group: layer.group ? String(layer.group) : null,
+      }))
+      : null;
     this.source = {
       id: source.id || crypto.randomUUID(),
       fileName: String(source.fileName || 'artwork'),
@@ -142,7 +154,11 @@ export class ArtworkModel {
       pdfPageRotation: normalizeQuarterTurn(source.pdfPageRotation || 0),
       mediaBox: source.mediaBox ? { ...source.mediaBox } : null,
       sha256: source.sha256 || '',
+      pdfLayers,
     };
+    this.pdfLayerVisibility = source.pdfLayerVisibility && typeof source.pdfLayerVisibility === 'object'
+      ? { ...source.pdfLayerVisibility }
+      : null;
     this.rotation = this.source.pdfPageRotation;
     this.opacity = 1;
     this.fitDieline(dielineBounds, { setInitial: true });
@@ -318,6 +334,7 @@ export class ArtworkModel {
       opacity: this.opacity,
       bgOpacity: this.bgOpacity,
       referencePoint: this.referencePoint,
+      pdfLayerVisibility: this.pdfLayerVisibility ? { ...this.pdfLayerVisibility } : null,
       modified: this.modified,
     };
   }
@@ -338,6 +355,14 @@ export class ArtworkModel {
     this.referencePoint = REFERENCE_POINTS.includes(state.referencePoint)
       ? state.referencePoint
       : 'center';
+    if (state.pdfLayerVisibility && typeof state.pdfLayerVisibility === 'object') {
+      this.pdfLayerVisibility = {};
+      for (const [id, visible] of Object.entries(state.pdfLayerVisibility)) {
+        this.pdfLayerVisibility[id] = visible !== false;
+      }
+    } else {
+      this.pdfLayerVisibility = null;
+    }
     this.modified = Boolean(state.modified);
     return this;
   }
