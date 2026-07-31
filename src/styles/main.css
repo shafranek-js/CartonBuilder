@@ -145,13 +145,24 @@ input[type="checkbox"] {
 .stepper {
   position: relative;
   display: flex;
-  align-items: stretch;
-  justify-content: center;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
   padding: 5px 12px;
   border-bottom: 1px solid var(--stepper-border, #414141);
   background: var(--stepper-bg, #494949);
   transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.stepper-left-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepper-center-steps {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .error-banner {

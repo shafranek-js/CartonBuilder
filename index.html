@@ -12,16 +12,21 @@
   <main class="app-shell" id="appShell">
     <section class="app-content">
       <nav class="stepper" aria-label="Workflow" data-i18n-aria-label="workflowLabel">
-        <div class="file-menu-wrap">
-          <button type="button" class="preset-trigger-btn file-menu-trigger-btn" id="fileMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="File Menu" data-i18n-title="fileMenu">
-            <span>📄 <span data-i18n="file">File</span></span>
-            <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
-          <div class="file-menu-popover" id="fileMenuPopover" hidden></div>
+        <div class="stepper-left-tools">
+          <div class="file-menu-wrap">
+            <button type="button" class="preset-trigger-btn file-menu-trigger-btn" id="fileMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="File Menu" data-i18n-title="fileMenu">
+              <span>📄 <span data-i18n="file">File</span></span>
+              <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <div class="file-menu-popover" id="fileMenuPopover" hidden></div>
+          </div>
         </div>
-        <button class="step active" type="button" data-step-target="box" aria-current="step"><span>1</span><b data-i18n="createBox">Create Box</b></button>
-        <button class="step" type="button" data-step-target="artwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
-        <button class="step" type="button" data-step-target="preview" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
+
+        <div class="stepper-center-steps">
+          <button class="step active" type="button" data-step-target="box" aria-current="step"><span>1</span><b data-i18n="createBox">Create Box</b></button>
+          <button class="step" type="button" data-step-target="artwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
+          <button class="step" type="button" data-step-target="preview" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
+        </div>
         <div class="header-right-tools">
           <div class="preset-picker-wrap">
             <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library">
