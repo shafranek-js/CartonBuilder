@@ -97,11 +97,17 @@ artworkApp = createArtworkApp({
     preview3dFacade?.resetForProject();
     stepButtons.find((button) => button.dataset.stepTarget === 'artwork').disabled = !model.isComplete && !snapshot.artwork;
     stepButtons.find((button) => button.dataset.stepTarget === 'preview').disabled = !snapshot.artwork;
-    const targetStep = snapshot.workflowStep === 'preview' && snapshot.artwork
-      ? 'preview'
-      : (snapshot.workflowStep === 'artwork' || snapshot.artwork)
-        ? 'artwork'
-        : 'box';
+    
+    let targetStep = 'box';
+    if (snapshot.workflowStep === 'preview' && snapshot.artwork) {
+      targetStep = 'preview';
+    } else if (snapshot.workflowStep === 'artwork' && (model.isComplete || snapshot.artwork)) {
+      targetStep = 'artwork';
+    } else if (snapshot.workflowStep === 'box') {
+      targetStep = 'box';
+    } else if (snapshot.artwork) {
+      targetStep = 'artwork';
+    }
     showStep(targetStep);
   },
   getWorkflowStep: () => currentStep,
