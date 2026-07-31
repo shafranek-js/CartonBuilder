@@ -240,11 +240,12 @@ export class ArtworkRenderer {
 
     if (showNames) {
       for (const panel of this.model.getPanels()) {
+        const fontSize = Math.max(3.2, Math.min(6, Math.min(panel.width, panel.height) * 0.1));
         const label = svgElement(documentRef, 'text', {
           class: 'artwork-panel-label',
           x: panel.x + panel.width / 2,
           y: panel.y + panel.height / 2,
-          'font-size': 10,
+          'font-size': fontSize,
         });
         label.textContent = panel.faceName;
         target.appendChild(label);
