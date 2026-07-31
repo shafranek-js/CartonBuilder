@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 const DATABASE_NAME = 'carton-builder';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const STORE_NAME = 'projects';
 const CURRENT_PROJECT_ID = 'current';
 
@@ -10,6 +10,9 @@ async function getDatabase() {
     upgrade(database) {
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME);
+      }
+      if (!database.objectStoreNames.contains('presets')) {
+        database.createObjectStore('presets', { keyPath: 'id' });
       }
     },
   });
