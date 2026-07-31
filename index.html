@@ -13,13 +13,23 @@
         <button class="step active" type="button" data-step-target="box" aria-current="step"><span>1</span><b data-i18n="createBox">Create Box</b></button>
         <button class="step" type="button" data-step-target="artwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
         <button class="step" type="button" data-step-target="preview" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
-        <label class="language-picker">
-          <span class="sr-only" data-i18n="language">Language</span>
-          <select id="localePicker" aria-label="Language" data-i18n-aria-label="languageLabel">
-            <option value="en">EN</option>
-            <option value="ru">RU</option>
-          </select>
-        </label>
+        <div class="header-right-tools">
+          <div class="preset-picker-wrap">
+            <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library">
+              <span>📦 Presets</span>
+              <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <div class="preset-popover" id="presetPopover" hidden></div>
+          </div>
+
+          <label class="language-picker">
+            <span class="sr-only" data-i18n="language">Language</span>
+            <select id="localePicker" aria-label="Language" data-i18n-aria-label="languageLabel">
+              <option value="en">EN</option>
+              <option value="ru">RU</option>
+            </select>
+          </label>
+        </div>
       </nav>
 
       <div class="error-banner" id="errorBanner" role="alert" hidden>
@@ -33,14 +43,6 @@
       <section class="workflow-step box-step" id="boxStep">
         <header class="box-controls-bar">
           <span class="design-hint" data-i18n="designBox">Design your box by adding or removing box panels</span>
-
-          <div class="preset-picker-wrap">
-            <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library">
-              <span>📦 Presets</span>
-              <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            </button>
-            <div class="preset-popover" id="presetPopover" hidden></div>
-          </div>
 
           <div class="dimension-list">
             <div class="dimension-row">

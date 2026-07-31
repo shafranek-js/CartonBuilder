@@ -112,10 +112,17 @@ input {
   font-weight: 400;
 }
 
-.language-picker {
+.header-right-tools {
   position: absolute;
   top: 8px;
   right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-picker {
+  position: static;
 }
 
 .language-picker select {
@@ -235,7 +242,8 @@ input {
 .preset-popover {
   position: absolute;
   top: 32px;
-  left: 0;
+  right: 0;
+  left: auto;
   z-index: 100;
   width: 320px;
   max-height: 420px;
