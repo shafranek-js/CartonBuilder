@@ -23,6 +23,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#ffffff',
       line: '#101010',
       frameBorder: '#70817c',
+      workspace: '#ffffff',
+      gridDot: '#cbd5e1',
     },
   },
   {
@@ -49,6 +51,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#2a2e39',
       line: '#00f0ff',
       frameBorder: '#3b4252',
+      workspace: '#14171d',
+      gridDot: '#282e3d',
     },
   },
   {
@@ -75,6 +79,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#d8dee9',
       line: '#2e3440',
       frameBorder: '#434c5e',
+      workspace: '#2e3440',
+      gridDot: '#434c5e',
     },
   },
   {
@@ -101,6 +107,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#ffffff',
       line: '#ff0055',
       frameBorder: '#543d80',
+      workspace: '#151124',
+      gridDot: '#362954',
     },
   },
   {
@@ -127,6 +135,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#ffffff',
       line: '#111827',
       frameBorder: '#cbd5e1',
+      workspace: '#ffffff',
+      gridDot: '#e5e7eb',
     },
   },
   {
@@ -153,6 +163,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#cad3f5',
       line: '#1e1e2e',
       frameBorder: '#494d64',
+      workspace: '#24273a',
+      gridDot: '#363a4f',
     },
   },
   {
@@ -179,6 +191,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#d1fae5',
       line: '#064e3b',
       frameBorder: '#1f4236',
+      workspace: '#132a22',
+      gridDot: '#1f4236',
     },
   },
   {
@@ -205,6 +219,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#ffffff',
       line: '#ff6b6b',
       frameBorder: '#542d4f',
+      workspace: '#271725',
+      gridDot: '#3f223b',
     },
   },
   {
@@ -231,6 +247,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#fdf6e3',
       line: '#073642',
       frameBorder: '#93a1a1',
+      workspace: '#eee8d5',
+      gridDot: '#d3bfa2',
     },
   },
   {
@@ -257,6 +275,8 @@ export const COLOR_THEMES = Object.freeze([
       panel: '#c0caf5',
       line: '#7dcfff',
       frameBorder: '#414868',
+      workspace: '#24283b',
+      gridDot: '#3b4261',
     },
   },
 ]);
@@ -302,6 +322,8 @@ export function applyTheme(
       root.style.setProperty('--panel', theme.colors.panel);
       root.style.setProperty('--line', theme.colors.line);
       root.style.setProperty('--frame-border', theme.colors.frameBorder);
+      root.style.setProperty('--workspace', theme.colors.workspace || '#ffffff');
+      root.style.setProperty('--grid-dot', theme.colors.gridDot || '#cbd5e1');
     }
   }
 
