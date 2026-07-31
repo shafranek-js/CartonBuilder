@@ -17,7 +17,9 @@ export const COLOR_THEMES = Object.freeze([
       accentText: '#1d2500',
       focus: '#d8ef79',
       front: '#b7dcef',
+      frontText: '#101010',
       base: '#efa6ec',
+      baseText: '#101010',
       panel: '#ffffff',
       line: '#101010',
       frameBorder: '#70817c',
@@ -41,7 +43,9 @@ export const COLOR_THEMES = Object.freeze([
       accentText: '#00252e',
       focus: '#80f8ff',
       front: '#1e3a8a',
+      frontText: '#ffffff',
       base: '#831843',
+      baseText: '#ffffff',
       panel: '#2a2e39',
       line: '#00f0ff',
       frameBorder: '#3b4252',
@@ -65,7 +69,9 @@ export const COLOR_THEMES = Object.freeze([
       accentText: '#1d2d35',
       focus: '#a3be8c',
       front: '#5e81ac',
+      frontText: '#ffffff',
       base: '#b48ead',
+      baseText: '#ffffff',
       panel: '#d8dee9',
       line: '#2e3440',
       frameBorder: '#434c5e',
@@ -89,7 +95,9 @@ export const COLOR_THEMES = Object.freeze([
       accentText: '#1a1600',
       focus: '#ffff80',
       front: '#00f5d4',
+      frontText: '#101010',
       base: '#ff007f',
+      baseText: '#ffffff',
       panel: '#ffffff',
       line: '#ff0055',
       frameBorder: '#543d80',
@@ -113,7 +121,9 @@ export const COLOR_THEMES = Object.freeze([
       accentText: '#ffffff',
       focus: '#34d399',
       front: '#93c5fd',
+      frontText: '#101010',
       base: '#f472b6',
+      baseText: '#101010',
       panel: '#ffffff',
       line: '#111827',
       frameBorder: '#cbd5e1',
@@ -156,7 +166,9 @@ export function applyTheme(
       root.style.setProperty('--accent-text', theme.colors.accentText);
       root.style.setProperty('--focus', theme.colors.focus);
       root.style.setProperty('--front', theme.colors.front);
+      root.style.setProperty('--front-text', theme.colors.frontText || '#101010');
       root.style.setProperty('--base', theme.colors.base);
+      root.style.setProperty('--base-text', theme.colors.baseText || '#101010');
       root.style.setProperty('--panel', theme.colors.panel);
       root.style.setProperty('--line', theme.colors.line);
       root.style.setProperty('--frame-border', theme.colors.frameBorder);

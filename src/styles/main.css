@@ -742,11 +742,19 @@ input[type="checkbox"] {
 }
 
 .panel-label {
-  fill: #101010;
+  fill: var(--line, #101010);
   text-anchor: middle;
   dominant-baseline: middle;
   pointer-events: none;
   user-select: none;
+}
+
+.panel-front .panel-label {
+  fill: var(--front-text, #101010);
+}
+
+.panel-bottom .panel-label {
+  fill: var(--base-text, #101010);
 }
 
 .edge-action,
