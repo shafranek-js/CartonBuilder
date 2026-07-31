@@ -219,11 +219,10 @@ export class ArtworkModel {
 
   getReferenceOffset() {
     const fraction = REFERENCE_FRACTIONS[this.referencePoint] || REFERENCE_FRACTIONS.center;
-    return rotatePoint(
-      fraction.x * this.unrotatedWidthMm / 2,
-      fraction.y * this.unrotatedHeightMm / 2,
-      this.rotation,
-    );
+    return {
+      x: fraction.x * this.displayedWidthMm / 2,
+      y: fraction.y * this.displayedHeightMm / 2,
+    };
   }
 
   getReferencePosition() {

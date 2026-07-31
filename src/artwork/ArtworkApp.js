@@ -439,6 +439,29 @@ export function createArtworkApp({
     event.stopPropagation();
     selected = true;
     const point = renderer.clientToModel(event.clientX, event.clientY);
+    const cornerPointMap = {
+      '-1,-1': 'top-left',
+      '1,-1': 'top-right',
+      '1,1': 'bottom-right',
+      '-1,1': 'bottom-left',
+    };
+    const oppositePointMap = {
+      'top-left': 'bottom-right',
+      'top-right': 'bottom-left',
+      'bottom-right': 'top-left',
+      'bottom-left': 'top-right',
+    };
+    const handlePoint = cornerPointMap[`${detail.sx},${detail.sy}`] || 'top-left';
+    const oppositePoint = oppositePointMap[handlePoint] || 'bottom-right';
+
+    const savedPoint = artwork.referencePoint;
+    artwork.referencePoint = oppositePoint;
+    const oppositePos = artwork.getReferencePosition();
+    artwork.referencePoint = savedPoint;
+
+    const startDistFromOpposite = Math.hypot(point.x - oppositePos.x, point.y - oppositePos.y);
+    const startDistFromCenter = Math.hypot(point.x - artwork.centerXmm, point.y - artwork.centerYmm);
+
     gesture = {
       ...detail,
       pointerId: event.pointerId,
@@ -447,40 +470,34 @@ export function createArtworkApp({
       startCenter: { x: artwork.centerXmm, y: artwork.centerYmm },
       startScale: artwork.scale,
       rotation: artwork.rotation,
+      oppositePoint,
+      oppositePos,
+      startDistFromOpposite: Math.max(0.001, startDistFromOpposite),
+      startDistFromCenter: Math.max(0.001, startDistFromCenter),
     };
     svg.setPointerCapture(event.pointerId);
     render();
   }
 
   function updateResizeGesture(event, point) {
-    const { sx, sy } = gesture;
     if (event.altKey) {
-      const relative = rotateVector({
-        x: point.x - gesture.startCenter.x,
-        y: point.y - gesture.startCenter.y,
-      }, -gesture.rotation);
-      const scaleX = Math.abs(relative.x) / (artwork.initialWidthMm / 2);
-      const scaleY = Math.abs(relative.y) / (artwork.initialHeightMm / 2);
-      artwork.setScale(Math.max(scaleX, scaleY));
+      const currentDist = Math.hypot(point.x - gesture.startCenter.x, point.y - gesture.startCenter.y);
+      const factor = currentDist / gesture.startDistFromCenter;
+      artwork.setScale(Math.max(0.01, gesture.startScale * factor));
       artwork.centerXmm = gesture.startCenter.x;
       artwork.centerYmm = gesture.startCenter.y;
       return;
     }
 
-    const anchor = artwork.getReferencePosition();
-    const fraction = getReferenceFraction(artwork.referencePoint);
-    const baseX = Math.abs(sx - fraction.x) * artwork.initialWidthMm / 2;
-    const baseY = Math.abs(sy - fraction.y) * artwork.initialHeightMm / 2;
-    const local = rotateVector({ x: point.x - anchor.x, y: point.y - anchor.y }, -artwork.rotation);
-    let factor = 0;
-    if (baseX > 0 && baseY > 0) {
-      factor = Math.max(Math.abs(local.x) / baseX, Math.abs(local.y) / baseY);
-    } else if (baseX > 0) {
-      factor = Math.abs(local.x) / baseX;
-    } else if (baseY > 0) {
-      factor = Math.abs(local.y) / baseY;
-    }
-    artwork.setScale(Math.max(0.01, factor));
+    const currentDist = Math.hypot(point.x - gesture.oppositePos.x, point.y - gesture.oppositePos.y);
+    const factor = currentDist / gesture.startDistFromOpposite;
+    const nextScale = Math.max(0.01, gesture.startScale * factor);
+
+    const savedPoint = artwork.referencePoint;
+    artwork.referencePoint = gesture.oppositePoint;
+    artwork.setScale(nextScale);
+    artwork.setReferencePosition(gesture.oppositePos.x, gesture.oppositePos.y);
+    artwork.referencePoint = savedPoint;
   }
 
   svg.addEventListener('pointermove', (event) => {
