@@ -398,6 +398,18 @@
         </form>
       </dialog>
 
+      <dialog id="unsavedChangesDialog" aria-labelledby="unsavedChangesTitle">
+        <form method="dialog">
+          <h2 id="unsavedChangesTitle" data-i18n="unsavedChangesTitle">Save changes before creating a new project?</h2>
+          <p data-i18n="unsavedChangesHint">Your changes will be lost if you don't save them.</p>
+          <div class="dialog-actions triple-actions">
+            <button type="button" class="danger-action" id="dontSaveProjectBtn" data-i18n="dontSave">Don't Save</button>
+            <button type="button" id="cancelNewProjectBtn" data-i18n="cancel">Cancel</button>
+            <button type="button" class="primary-action" id="saveAndNewProjectBtn" data-i18n="save">Save</button>
+          </div>
+        </form>
+      </dialog>
+
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
       <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
     </section>

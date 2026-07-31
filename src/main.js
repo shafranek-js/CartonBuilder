@@ -42,10 +42,72 @@ const handleSaveProject = () => {
   }
 };
 
+const handleNewProject = async () => {
+  const isModified = artworkApp?.hasModifiedArtwork ? artworkApp.hasModifiedArtwork() : false;
+  
+  const resetAndReload = async () => {
+    const { clearCurrentProject } = await import('./project/ProjectStore.js');
+    await clearCurrentProject();
+    window.location.reload();
+  };
+
+  if (!isModified) {
+    await resetAndReload();
+    return;
+  }
+
+  const dialog = document.getElementById('unsavedChangesDialog');
+  if (!dialog) {
+    if (window.confirm('Create new project? Unsaved changes will be cleared.')) {
+      await resetAndReload();
+    }
+    return;
+  }
+
+  const saveBtn = dialog.querySelector('#saveAndNewProjectBtn');
+  const dontSaveBtn = dialog.querySelector('#dontSaveProjectBtn');
+  const cancelBtn = dialog.querySelector('#cancelNewProjectBtn');
+
+  const cleanup = () => {
+    try { dialog.close(); } catch {}
+    saveBtn?.removeEventListener('click', onSave);
+    dontSaveBtn?.removeEventListener('click', onDontSave);
+    cancelBtn?.removeEventListener('click', onCancel);
+  };
+
+  const onSave = async () => {
+    cleanup();
+    try {
+      if (artworkApp?.saveProjectArchive) {
+        await artworkApp.saveProjectArchive();
+      }
+      await resetAndReload();
+    } catch (err) {
+      console.error('Save failed:', err);
+    }
+  };
+
+  const onDontSave = async () => {
+    cleanup();
+    await resetAndReload();
+  };
+
+  const onCancel = () => {
+    cleanup();
+  };
+
+  saveBtn?.addEventListener('click', onSave);
+  dontSaveBtn?.addEventListener('click', onDontSave);
+  cancelBtn?.addEventListener('click', onCancel);
+
+  dialog.showModal();
+};
+
 if (fileMenuTriggerBtn && fileMenuPopover) {
   createFileMenu({
     triggerButton: fileMenuTriggerBtn,
     popoverContainer: fileMenuPopover,
+    onNewProject: handleNewProject,
     onOpenProject: handleOpenProject,
     onSaveProject: handleSaveProject,
   });
@@ -62,15 +124,7 @@ window.addEventListener('keydown', async (e) => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
     e.preventDefault();
-    if (window.confirm('Create new project? Unsaved changes will be cleared.')) {
-      try {
-        const { clearCurrentProject } = await import('./project/ProjectStore.js');
-        await clearCurrentProject();
-        window.location.reload();
-      } catch (err) {
-        console.error(err);
-      }
-    }
+    handleNewProject();
   }
 });
 

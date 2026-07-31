@@ -4,6 +4,7 @@ import { getLocale, t } from '../i18n.js';
 export function createFileMenu({
   triggerButton,
   popoverContainer,
+  onNewProject = () => {},
   onOpenProject = () => {},
   onSaveProject = () => {},
   showToast = () => {},
@@ -37,17 +38,9 @@ export function createFileMenu({
       </button>
     `;
 
-    popoverContainer.querySelector('#menuNewProjectBtn')?.addEventListener('click', async () => {
+    popoverContainer.querySelector('#menuNewProjectBtn')?.addEventListener('click', () => {
       togglePopover(false);
-      if (windowRef.confirm('Create new project? Unsaved changes will be cleared.')) {
-        try {
-          await clearCurrentProject();
-          showToast('New project created');
-          windowRef.setTimeout(() => windowRef.location.reload(), 400);
-        } catch {
-          showToast('Failed to create new project.');
-        }
-      }
+      onNewProject();
     });
 
     popoverContainer.querySelector('#menuOpenProjectBtn')?.addEventListener('click', () => {
