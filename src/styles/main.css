@@ -971,7 +971,7 @@ input[type="checkbox"] {
 
 .artwork-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 318px;
+  grid-template-columns: 240px minmax(0, 1fr) 318px;
   min-height: 0;
   border-bottom: 1px solid #444;
 }
@@ -1090,6 +1090,11 @@ input[type="checkbox"] {
   border-left: 1px solid var(--panel-border, #444);
   background: var(--surface, #4e4e4e);
   color: var(--text, #ffffff);
+}
+
+.artwork-sidebar-left {
+  border-left: none;
+  border-right: 1px solid var(--panel-border, #444);
 }
 
 .tool-section {
@@ -1571,7 +1576,27 @@ dialog input {
   }
 
   .artwork-stage {
-    grid-template-columns: minmax(0, 1fr) 240px;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+
+  .artwork-canvas-wrap {
+    grid-row: 1;
+    min-height: 360px;
+  }
+
+  .artwork-sidebar-left {
+    grid-row: 2;
+    border: none;
+    border-top: 1px solid var(--panel-border, #444);
+    max-height: 220px;
+  }
+
+  .artwork-sidebar {
+    grid-row: 3;
+    border: none;
+    border-top: 1px solid var(--panel-border, #444);
+    max-height: 220px;
   }
 
   .preview-toolbar {

@@ -106,50 +106,14 @@
       </section>
 
       <section class="workflow-step artwork-step" id="artworkStep" hidden>
-        <div class="artwork-stage">
-          <div class="artwork-canvas-wrap" id="artworkCanvasWrap" aria-busy="false">
-            <div class="drop-state" id="dropState">
-              <strong data-i18n="dropArtwork">Drop artwork here</strong>
-              <span data-i18n="fileHint">PNG, JPG or PDF · maximum 100 MB</span>
-              <button class="primary-action" id="chooseArtworkButton" type="button" data-i18n="chooseFile">Choose file</button>
-            </div>
-            <svg id="artworkWorkspace" role="img" tabindex="0" aria-label="Artwork placement canvas" data-i18n-aria-label="artworkCanvasLabel"></svg>
-            <div class="processing-overlay" id="processingOverlay" role="status" aria-live="polite" aria-atomic="true" hidden>
-              <span class="spinner" aria-hidden="true"></span>
-              <strong id="processingText" data-i18n="processing">Processing artwork…</strong>
-              <button type="button" id="cancelProcessingButton" data-i18n="cancel">Cancel</button>
-            </div>
-          </div>
-
-          <aside class="artwork-sidebar" aria-label="Artwork controls" data-i18n-aria-label="artworkControlsLabel">
+          <div class="artwork-stage">
+          <aside class="artwork-sidebar artwork-sidebar-left" aria-label="Artwork file and layers" data-i18n-aria-label="artworkLayersLabel">
             <section class="tool-section file-section">
               <h2 data-i18n="artwork">Artwork</h2>
               <p class="file-name" id="artworkFileName" data-i18n="noFile">No file selected</p>
               <div class="button-row">
                 <button type="button" id="replaceArtworkButton" disabled data-i18n="replace">Replace</button>
                 <button type="button" id="removeArtworkButton" disabled data-i18n="remove">Remove</button>
-              </div>
-            </section>
-
-            <section class="tool-section">
-              <h2 data-i18n="transform">Transform</h2>
-              <div class="control-grid">
-                <label><b data-i18n="centerX">Center X</b> <span><input id="artworkX" aria-label="Artwork center X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="centerY">Center Y</b> <span><input id="artworkY" aria-label="Artwork center Y" data-i18n-aria-label="artworkCenterYLabel" type="number" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="width">Width:</b> <span><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="height">Height:</b> <span><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
-                <label><b data-i18n="scale">Scale</b> <span><input id="artworkScale" aria-label="Artwork scale" data-i18n-aria-label="artworkScaleLabel" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
-                <label><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
-                <label><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>
-              </div>
-              <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
-              <div class="button-grid">
-                <button type="button" id="fitArtworkButton" disabled data-i18n="fitDieline">Fit Dieline</button>
-                <button type="button" id="fillArtworkButton" disabled data-i18n="fillDieline">Fill Dieline</button>
-                <button type="button" id="centerArtworkButton" disabled data-i18n="center">Center</button>
-                <button type="button" id="rotateLeftButton" disabled data-i18n="rotateLeft">Rotate −90°</button>
-                <button type="button" id="rotateRightButton" disabled data-i18n="rotateRight">Rotate +90°</button>
-                <button type="button" id="resetArtworkButton" disabled data-i18n="resetTransform">Reset Transform</button>
               </div>
             </section>
 
@@ -177,6 +141,44 @@
                 <label><input id="lockHighlights" type="checkbox" checked><span class="sr-only" data-i18n="lockHighlightsLabel">Lock Front/Base highlight</span></label>
               </div>
               <label class="toggle-row"><input id="showFullArtwork" type="checkbox"> <span data-i18n="showFull">Show Full Artwork</span></label>
+            </section>
+          </aside>
+
+          <div class="artwork-canvas-wrap" id="artworkCanvasWrap" aria-busy="false">
+            <div class="drop-state" id="dropState">
+              <strong data-i18n="dropArtwork">Drop artwork here</strong>
+              <span data-i18n="fileHint">PNG, JPG or PDF · maximum 100 MB</span>
+              <button class="primary-action" id="chooseArtworkButton" type="button" data-i18n="chooseFile">Choose file</button>
+            </div>
+            <svg id="artworkWorkspace" role="img" tabindex="0" aria-label="Artwork placement canvas" data-i18n-aria-label="artworkCanvasLabel"></svg>
+            <div class="processing-overlay" id="processingOverlay" role="status" aria-live="polite" aria-atomic="true" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <strong id="processingText" data-i18n="processing">Processing artwork…</strong>
+              <button type="button" id="cancelProcessingButton" data-i18n="cancel">Cancel</button>
+            </div>
+          </div>
+
+          <aside class="artwork-sidebar" aria-label="Artwork transform controls" data-i18n-aria-label="artworkTransformLabel">
+            <section class="tool-section">
+              <h2 data-i18n="transform">Transform</h2>
+              <div class="control-grid">
+                <label><b data-i18n="centerX">Center X</b> <span><input id="artworkX" aria-label="Artwork center X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled> mm</span></label>
+                <label><b data-i18n="centerY">Center Y</b> <span><input id="artworkY" aria-label="Artwork center Y" data-i18n-aria-label="artworkCenterYLabel" type="number" step="0.1" disabled> mm</span></label>
+                <label><b data-i18n="width">Width:</b> <span><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
+                <label><b data-i18n="height">Height:</b> <span><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
+                <label><b data-i18n="scale">Scale</b> <span><input id="artworkScale" aria-label="Artwork scale" data-i18n-aria-label="artworkScaleLabel" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
+                <label><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
+                <label><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>
+              </div>
+              <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
+              <div class="button-grid">
+                <button type="button" id="fitArtworkButton" disabled data-i18n="fitDieline">Fit Dieline</button>
+                <button type="button" id="fillArtworkButton" disabled data-i18n="fillDieline">Fill Dieline</button>
+                <button type="button" id="centerArtworkButton" disabled data-i18n="center">Center</button>
+                <button type="button" id="rotateLeftButton" disabled data-i18n="rotateLeft">Rotate −90°</button>
+                <button type="button" id="rotateRightButton" disabled data-i18n="rotateRight">Rotate +90°</button>
+                <button type="button" id="resetArtworkButton" disabled data-i18n="resetTransform">Reset Transform</button>
+              </div>
             </section>
 
             <section class="tool-section">
