@@ -2,6 +2,30 @@ import { clearCurrentProject } from '../project/ProjectStore.js';
 import { COLOR_THEMES, applyTheme, getSavedTheme } from './ThemeManager.js';
 import { getLocale, t } from '../i18n.js';
 
+const HISTORY_SETTING_KEY = 'cartonbuilder_show_history';
+
+export function getShowHistory(windowRef = window) {
+  try {
+    return windowRef.localStorage?.getItem(HISTORY_SETTING_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setShowHistory(show, windowRef = window, documentRef = document) {
+  try {
+    windowRef.localStorage?.setItem(HISTORY_SETTING_KEY, String(show));
+  } catch {}
+  applyHistoryVisibility(documentRef, windowRef);
+}
+
+export function applyHistoryVisibility(documentRef = document, windowRef = window) {
+  const historySection = documentRef.getElementById('historySection');
+  if (historySection) {
+    historySection.hidden = !getShowHistory(windowRef);
+  }
+}
+
 export function createSettingsModal({
   triggerButton,
   popoverContainer,
@@ -10,6 +34,8 @@ export function createSettingsModal({
   documentRef = document,
 }) {
   let isOpen = false;
+
+  applyHistoryVisibility(documentRef, windowRef);
 
   function togglePopover(open) {
     isOpen = open !== undefined ? open : !isOpen;
@@ -23,6 +49,7 @@ export function createSettingsModal({
   function renderContent() {
     const currentThemeId = getSavedTheme();
     const isRu = getLocale() === 'ru';
+    const showHistory = getShowHistory(windowRef);
 
     const themeOptionsHtml = COLOR_THEMES.map((theme) => {
       const selected = theme.id === currentThemeId ? 'selected' : '';
@@ -45,6 +72,14 @@ export function createSettingsModal({
       </div>
 
       <div class="settings-group">
+        <label class="settings-label" for="showHistoryToggle">
+          <input type="checkbox" id="showHistoryToggle" ${showHistory ? 'checked' : ''}>
+          <span>📜 ${t('showHistoryPanel') || 'Show History Panel'}</span>
+        </label>
+        <p class="settings-desc">${t('historyPanelDesc') || 'Display Undo/Redo history buttons on the sidebar.'}</p>
+      </div>
+
+      <div class="settings-group">
         <label class="settings-label">
           <span>CartonBuilder v1.0.0</span>
         </label>
@@ -62,6 +97,11 @@ export function createSettingsModal({
       const selectedTheme = applyTheme(e.target.value, documentRef);
       const name = isRu ? selectedTheme.nameRu : selectedTheme.nameEn;
       showToast(`${t('themeApplied') || 'Theme applied:'} ${name}`);
+    });
+
+    popoverContainer.querySelector('#showHistoryToggle')?.addEventListener('change', (e) => {
+      setShowHistory(e.target.checked, windowRef, documentRef);
+      showToast(e.target.checked ? (t('showHistoryPanel') || 'History panel enabled') : (t('historyPanelHidden') || 'History panel hidden'));
     });
 
     popoverContainer.querySelector('#clearDataBtn')?.addEventListener('click', handleClearData);
