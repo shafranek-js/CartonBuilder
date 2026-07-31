@@ -19,6 +19,12 @@
             </button>
             <div class="file-menu-popover" id="fileMenuPopover" hidden></div>
           </div>
+          <div class="file-menu-wrap">
+            <button type="button" class="file-menu-trigger-btn" id="editMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Edit Menu" data-i18n-title="editMenu">
+              <span data-i18n="edit">Edit</span>
+            </button>
+            <div class="file-menu-popover" id="editMenuPopover" hidden></div>
+          </div>
         </div>
 
         <div class="stepper-center-steps">
@@ -128,11 +134,12 @@
             </button>
             <section class="tool-section file-section">
               <h2 data-i18n="artwork">Artwork</h2>
-              <p class="file-name" id="artworkFileName" data-i18n="noFile">No file selected</p>
-              <div class="button-row">
-                <button type="button" id="replaceArtworkButton" disabled data-i18n="replace">Replace</button>
-                <button type="button" id="removeArtworkButton" disabled data-i18n="remove">Remove</button>
+              <div class="file-picker-row">
+                <span class="file-name" id="artworkFileName" data-i18n="noFile">No file selected</span>
+                <button type="button" id="selectArtworkButton" data-i18n="selectFile">Select File</button>
               </div>
+              <button type="button" id="replaceArtworkButton" hidden></button>
+              <button type="button" id="removeArtworkButton" hidden></button>
             </section>
 
             <section class="tool-section">

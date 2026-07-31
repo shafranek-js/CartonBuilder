@@ -14,6 +14,7 @@ import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
 import { createFileMenu } from './ui/FileMenu.js';
+import { createEditMenu } from './ui/EditMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 
@@ -103,6 +104,33 @@ const handleNewProject = async () => {
   dialog.showModal();
 };
 
+const editMenuTriggerBtn = document.getElementById('editMenuTriggerBtn');
+const editMenuPopover = document.getElementById('editMenuPopover');
+const artworkFileInput = document.getElementById('artworkFileInput');
+
+const handlePlaceArtwork = () => {
+  if (artworkFileInput) artworkFileInput.click();
+};
+
+const handleUndo = () => {
+  if (artworkApp?.history) {
+    artworkApp.history.undo();
+  }
+};
+
+const handleRedo = () => {
+  if (artworkApp?.history) {
+    artworkApp.history.redo();
+  }
+};
+
+const handleRemoveArtwork = () => {
+  const removeBtn = document.getElementById('removeArtworkButton');
+  if (removeBtn) {
+    removeBtn.click();
+  }
+};
+
 if (fileMenuTriggerBtn && fileMenuPopover) {
   createFileMenu({
     triggerButton: fileMenuTriggerBtn,
@@ -110,6 +138,18 @@ if (fileMenuTriggerBtn && fileMenuPopover) {
     onNewProject: handleNewProject,
     onOpenProject: handleOpenProject,
     onSaveProject: handleSaveProject,
+    onPlaceArtwork: handlePlaceArtwork,
+  });
+}
+
+if (editMenuTriggerBtn && editMenuPopover) {
+  createEditMenu({
+    triggerButton: editMenuTriggerBtn,
+    popoverContainer: editMenuPopover,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onReplaceArtwork: handlePlaceArtwork,
+    onRemoveArtwork: handleRemoveArtwork,
   });
 }
 
@@ -125,6 +165,10 @@ window.addEventListener('keydown', async (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
     e.preventDefault();
     handleNewProject();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
+    e.preventDefault();
+    handlePlaceArtwork();
   }
 });
 

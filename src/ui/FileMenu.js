@@ -7,6 +7,7 @@ export function createFileMenu({
   onNewProject = () => {},
   onOpenProject = () => {},
   onSaveProject = () => {},
+  onPlaceArtwork = () => {},
   showToast = () => {},
   windowRef = window,
   documentRef = document,
@@ -36,6 +37,11 @@ export function createFileMenu({
         <span class="file-menu-item-title">${t('saveProjectMenu') || 'Save...'}</span>
         <span class="file-menu-shortcut">Ctrl+S</span>
       </button>
+      <div class="file-menu-divider"></div>
+      <button type="button" class="file-menu-item" id="menuPlaceArtworkBtn">
+        <span class="file-menu-item-title">${t('placeArtworkMenu') || 'Place Artwork...'}</span>
+        <span class="file-menu-shortcut">Shift+Ctrl+P</span>
+      </button>
     `;
 
     popoverContainer.querySelector('#menuNewProjectBtn')?.addEventListener('click', () => {
@@ -51,6 +57,11 @@ export function createFileMenu({
     popoverContainer.querySelector('#menuSaveProjectBtn')?.addEventListener('click', () => {
       togglePopover(false);
       onSaveProject();
+    });
+
+    popoverContainer.querySelector('#menuPlaceArtworkBtn')?.addEventListener('click', () => {
+      togglePopover(false);
+      onPlaceArtwork();
     });
   }
 
