@@ -1,6 +1,18 @@
 import { clearCurrentProject } from '../project/ProjectStore.js';
 import { COLOR_THEMES, applyTheme, getSavedTheme } from './ThemeManager.js';
 import { getLocale, t } from '../i18n.js';
+import { createDiagnosticsBlob } from '../diagnostics.js';
+
+function downloadBlob(documentRef, windowRef, blob, fileName) {
+  const url = windowRef.URL.createObjectURL(blob);
+  const anchor = documentRef.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  documentRef.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  windowRef.URL.revokeObjectURL(url);
+}
 
 const HISTORY_SETTING_KEY = 'cartonbuilder_show_history';
 
@@ -87,6 +99,12 @@ export function createSettingsModal({
       </div>
 
       <div class="settings-group">
+        <button type="button" class="settings-secondary-btn" id="downloadDiagnosticsBtn" style="width: 100%; min-height: 30px; padding: 6px 10px; border: 1px solid var(--panel-border, #5a5a5a); border-radius: 4px; background: var(--panel-bg, #3e3e3e); color: var(--text, #ffffff); font-size: 11px; cursor: pointer; transition: background-color 0.15s ease;">
+          🛠️ ${t('downloadDiagnostics') || 'Export Diagnostics Data'}
+        </button>
+      </div>
+
+      <div class="settings-group">
         <button type="button" class="settings-danger-btn" id="clearDataBtn">
           🗑️ ${t('clearProjectData') || 'Clear Saved Project Data'}
         </button>
@@ -102,6 +120,16 @@ export function createSettingsModal({
     popoverContainer.querySelector('#showHistoryToggle')?.addEventListener('change', (e) => {
       setShowHistory(e.target.checked, windowRef, documentRef);
       showToast(e.target.checked ? (t('showHistoryPanel') || 'History panel enabled') : (t('historyPanelHidden') || 'History panel hidden'));
+    });
+
+    popoverContainer.querySelector('#downloadDiagnosticsBtn')?.addEventListener('click', () => {
+      downloadBlob(
+        documentRef,
+        windowRef,
+        createDiagnosticsBlob({ windowRef }),
+        'carton-builder-diagnostics.json',
+      );
+      showToast(t('diagnosticsExported') || 'Diagnostics data exported');
     });
 
     popoverContainer.querySelector('#clearDataBtn')?.addEventListener('click', handleClearData);

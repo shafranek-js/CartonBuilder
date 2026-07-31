@@ -165,8 +165,9 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   expect((await readFile(await pdf.path(), 'utf8')).slice(0, 5)).toBe('%PDF-');
 
   await page.getByRole('button', { name: 'Back to edit' }).click();
+  await page.locator('#settingsTriggerBtn').click();
   const diagnosticsDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Diagnostics' }).click();
+  await page.locator('#downloadDiagnosticsBtn').click();
   const diagnostics = JSON.parse(await readFile(await (await diagnosticsDownload).path(), 'utf8'));
   expect(diagnostics.privacy).toContain('No artwork bytes');
   expect(JSON.stringify(diagnostics)).not.toContain('sample-artwork.png');

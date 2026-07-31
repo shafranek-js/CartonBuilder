@@ -763,19 +763,6 @@ export function createArtworkApp({
   });
   documentRef.getElementById('loadProjectButton')?.addEventListener('click', () => projectInput.click());
   documentRef.getElementById('loadProjectButtonStep1')?.addEventListener('click', () => projectInput.click());
-  documentRef.getElementById('diagnosticsButton').addEventListener('click', () => {
-    downloadBlob(
-      documentRef,
-      windowRef,
-      createDiagnosticsBlob({
-        boxModel,
-        artwork,
-        workflowStep: documentRef.getElementById('previewStep').hidden ? 'artwork' : 'preview',
-        windowRef,
-      }),
-      'carton-builder-diagnostics.json',
-    );
-  });
   projectInput.addEventListener('change', async () => {
     try {
       clearError();
