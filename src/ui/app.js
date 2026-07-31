@@ -141,6 +141,29 @@ export function createBoxNetApp({
       if (event.key === 'Enter') {
         event.preventDefault();
         input.blur();
+        return;
+      }
+
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+
+        let step = 0.1;
+        let decimals = 1;
+        if (event.ctrlKey || event.metaKey) {
+          step = 1;
+          decimals = 0;
+        } else if (event.altKey) {
+          step = 0.01;
+          decimals = 2;
+        }
+
+        const direction = event.key === 'ArrowUp' ? 1 : -1;
+        const currentVal = Number(input.value) || 0;
+        const rawNewValue = currentVal + direction * step;
+        const newValue = Math.max(0.1, Math.min(100000, Number(rawNewValue.toFixed(decimals))));
+
+        input.value = formatNumber(newValue);
+        applyDimensionChange({ silent: true });
       }
     });
   }
@@ -191,9 +214,19 @@ export function createBoxNetApp({
         delta = (currentDiag - startPos) / Math.SQRT2;
       }
 
-      const step = event.shiftKey ? 0.1 : event.altKey ? 5 : 0.5;
+      let step = 0.1;
+      let decimals = 1;
+      if (event.ctrlKey || event.metaKey) {
+        step = 1;
+        decimals = 0;
+      } else if (event.altKey) {
+        step = 0.01;
+        decimals = 2;
+      }
+
       const rawNewValue = startVal + delta * step;
-      const newValue = Math.max(0.1, Math.min(100000, Math.round(rawNewValue * 10) / 10));
+      const factor = Math.pow(10, decimals);
+      const newValue = Math.max(0.1, Math.min(100000, Math.round(rawNewValue * factor) / factor));
 
       const input = dimensionInputs[key];
       if (input && Number(input.value) !== newValue) {
