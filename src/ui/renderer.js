@@ -154,7 +154,6 @@ export function createBoxNetRenderer({
       y: panel.y,
       width: panel.width,
       height: panel.height,
-      'stroke-width': metrics.strokeWidth,
     }));
 
     if (panel.faceKey === 'front' || panel.faceKey === 'bottom') {
