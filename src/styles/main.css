@@ -234,18 +234,26 @@ input {
 
 .measure-input {
   position: relative;
-  width: 76px;
+  width: 88px;
 }
 
 .measure-input input {
   width: 100%;
   height: 24px;
-  padding: 2px 26px 2px 6px;
+  padding: 2px 24px 2px 6px;
   border: 1px solid #3b3b3b;
   border-radius: 2px;
   outline: none;
   background: #eeeeee;
   color: #1d1d1d;
+  font-size: 12px;
+  -moz-appearance: textfield;
+}
+
+.measure-input input::-webkit-outer-spin-button,
+.measure-input input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .measure-input::after {
