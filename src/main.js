@@ -51,7 +51,7 @@ if (fileMenuTriggerBtn && fileMenuPopover) {
   });
 }
 
-window.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', async (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     handleSaveProject();
@@ -59,6 +59,18 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
     e.preventDefault();
     handleOpenProject();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+    e.preventDefault();
+    if (window.confirm('Create new project? Unsaved changes will be cleared.')) {
+      try {
+        const { clearCurrentProject } = await import('./project/ProjectStore.js');
+        await clearCurrentProject();
+        window.location.reload();
+      } catch (err) {
+        console.error(err);
+      }
+    }
   }
 });
 

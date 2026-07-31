@@ -23,29 +23,19 @@ export function createFileMenu({
 
   function renderContent() {
     popoverContainer.innerHTML = `
+      <button type="button" class="file-menu-item" id="menuNewProjectBtn">
+        <span class="file-menu-item-title">${t('newProjectMenu') || 'New...'}</span>
+        <span class="file-menu-shortcut">Ctrl+N</span>
+      </button>
       <button type="button" class="file-menu-item" id="menuOpenProjectBtn">
-        <span class="file-menu-item-title">📁 ${t('openProject') || 'Open Project'}</span>
-        <kbd class="file-menu-kbd">Ctrl+O</kbd>
+        <span class="file-menu-item-title">${t('openProjectMenu') || 'Open...'}</span>
+        <span class="file-menu-shortcut">Ctrl+O</span>
       </button>
       <button type="button" class="file-menu-item" id="menuSaveProjectBtn">
-        <span class="file-menu-item-title">💾 ${t('saveProject') || 'Save Project'}</span>
-        <kbd class="file-menu-kbd">Ctrl+S</kbd>
-      </button>
-      <div class="file-menu-divider"></div>
-      <button type="button" class="file-menu-item" id="menuNewProjectBtn">
-        <span class="file-menu-item-title">📄 ${t('newProject') || 'New Project'}</span>
+        <span class="file-menu-item-title">${t('saveProjectMenu') || 'Save...'}</span>
+        <span class="file-menu-shortcut">Ctrl+S</span>
       </button>
     `;
-
-    popoverContainer.querySelector('#menuOpenProjectBtn')?.addEventListener('click', () => {
-      togglePopover(false);
-      onOpenProject();
-    });
-
-    popoverContainer.querySelector('#menuSaveProjectBtn')?.addEventListener('click', () => {
-      togglePopover(false);
-      onSaveProject();
-    });
 
     popoverContainer.querySelector('#menuNewProjectBtn')?.addEventListener('click', async () => {
       togglePopover(false);
@@ -58,6 +48,16 @@ export function createFileMenu({
           showToast('Failed to create new project.');
         }
       }
+    });
+
+    popoverContainer.querySelector('#menuOpenProjectBtn')?.addEventListener('click', () => {
+      togglePopover(false);
+      onOpenProject();
+    });
+
+    popoverContainer.querySelector('#menuSaveProjectBtn')?.addEventListener('click', () => {
+      togglePopover(false);
+      onSaveProject();
     });
   }
 
