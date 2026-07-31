@@ -123,6 +123,7 @@ export function createBoxNetRenderer({
   svg,
   panelCount,
   continueButton,
+  cancelButton,
   model,
   onAddPanel,
   onDeletePanel,
@@ -220,6 +221,14 @@ export function createBoxNetRenderer({
 
     panelCount.textContent = `${model.panelCount}/6`;
     continueButton.disabled = !model.isComplete;
+
+    if (cancelButton) {
+      const isModified = model.panelCount > 1 ||
+        model.dimensions.width !== 150 ||
+        model.dimensions.height !== 90 ||
+        model.dimensions.depth !== 40;
+      cancelButton.disabled = !isModified;
+    }
     svg.setAttribute(
       'aria-label',
       `Interactive box net with ${model.panelCount} of 6 panels placed`,

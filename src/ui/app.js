@@ -152,6 +152,7 @@ export function createBoxNetApp({
     svg,
     panelCount,
     continueButton,
+    cancelButton,
     model,
     onAddPanel: addPanel,
     onDeletePanel: deletePanel,
