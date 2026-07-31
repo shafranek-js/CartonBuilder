@@ -758,25 +758,40 @@ input {
 }
 
 .continue-button {
-  border-color: #8b8b8b;
-  background: #4d4d4d;
-  color: #ffffff;
+  border: 1px solid #9eb933;
+  background: var(--accent);
+  color: #1d2500;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.continue-button:hover:not(:disabled) {
+  border-color: #b0cc3d;
+  background: var(--accent-hover);
+  box-shadow: 0 0 10px rgb(175 202 66 / 45%);
 }
 
 .continue-button:disabled {
-  border-color: #777777;
-  background: #565656;
-  color: #919191;
-  cursor: default;
+  border-color: #555555;
+  background: #3e3e3e;
+  color: #888888;
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .cancel-button {
-  background: var(--accent);
+  border: 1px solid #5a5a5a;
+  background: #3e3e3e;
   color: #ffffff;
+  font-weight: 400;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .cancel-button:hover {
-  background: var(--accent-hover);
+  border-color: #777777;
+  background: #4a4a4a;
 }
 
 .dialog-backdrop {
