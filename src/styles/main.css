@@ -276,23 +276,33 @@ input {
   width: 18px;
   height: 18px;
   color: #b0c4de;
+  user-select: none;
+  touch-action: none;
   transition: color 0.15s ease, transform 0.15s ease;
 }
 
-.dimension-row:hover .dimension-icon {
-  transform: scale(1.1);
+.dimension-row:hover .dimension-icon,
+.dimension-icon.scrubbing {
+  transform: scale(1.25);
+}
+
+.dimension-icon.scrubbing {
+  color: var(--focus);
 }
 
 .width-icon {
   color: #a8d5e5;
+  cursor: ew-resize;
 }
 
 .height-icon {
   color: #a8e5b5;
+  cursor: ns-resize;
 }
 
 .depth-icon {
   color: #e5c4a8;
+  cursor: nesw-resize;
 }
 
 .designer {

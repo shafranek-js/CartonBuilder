@@ -145,6 +145,83 @@ export function createBoxNetApp({
     });
   }
 
+  const dimensionIcons = {
+    width: documentRef.querySelector('.width-icon'),
+    height: documentRef.querySelector('.height-icon'),
+    depth: documentRef.querySelector('.depth-icon'),
+  };
+
+  function setupDimensionScrubber(iconElement, key, axis) {
+    if (!iconElement) return;
+
+    let startPos = 0;
+    let startVal = 0;
+    let isDragging = false;
+
+    iconElement.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+
+      isDragging = true;
+      try {
+        iconElement.setPointerCapture(event.pointerId);
+      } catch {
+        // fallback if pointer capture is not supported
+      }
+      iconElement.classList.add('scrubbing');
+
+      const currentDims = readDimensions();
+      startVal = Number.isFinite(currentDims[key]) ? currentDims[key] : model.dimensions[key];
+
+      if (axis === 'horizontal') startPos = event.clientX;
+      else if (axis === 'vertical') startPos = event.clientY;
+      else if (axis === 'diagonal') startPos = event.clientX - event.clientY;
+    });
+
+    iconElement.addEventListener('pointermove', (event) => {
+      if (!isDragging) return;
+
+      let delta = 0;
+      if (axis === 'horizontal') {
+        delta = event.clientX - startPos;
+      } else if (axis === 'vertical') {
+        delta = startPos - event.clientY;
+      } else if (axis === 'diagonal') {
+        const currentDiag = event.clientX - event.clientY;
+        delta = (currentDiag - startPos) / Math.SQRT2;
+      }
+
+      const step = event.shiftKey ? 0.1 : event.altKey ? 5 : 0.5;
+      const rawNewValue = startVal + delta * step;
+      const newValue = Math.max(0.1, Math.min(100000, Math.round(rawNewValue * 10) / 10));
+
+      const input = dimensionInputs[key];
+      if (input && Number(input.value) !== newValue) {
+        input.value = formatNumber(newValue);
+        applyDimensionChange({ silent: true });
+      }
+    });
+
+    const stopDragging = (event) => {
+      if (!isDragging) return;
+      isDragging = false;
+      try {
+        iconElement.releasePointerCapture(event.pointerId);
+      } catch {
+        // fallback
+      }
+      iconElement.classList.remove('scrubbing');
+      applyDimensionChange({ silent: false });
+    };
+
+    iconElement.addEventListener('pointerup', stopDragging);
+    iconElement.addEventListener('pointercancel', stopDragging);
+  }
+
+  setupDimensionScrubber(dimensionIcons.width, 'width', 'horizontal');
+  setupDimensionScrubber(dimensionIcons.height, 'height', 'vertical');
+  setupDimensionScrubber(dimensionIcons.depth, 'depth', 'diagonal');
+
   continueButton.addEventListener('click', () => {
     if (!model.isComplete) return;
     windowRef.dispatchEvent(
