@@ -47,8 +47,8 @@ function updateStepNavigationStates() {
   const previewBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'preview');
 
   if (boxBtn) boxBtn.disabled = false;
-  if (artworkBtn) artworkBtn.disabled = !isBoxComplete && !hasArtwork;
-  if (previewBtn) previewBtn.disabled = !hasArtwork || (!isBoxComplete && !hasArtwork);
+  if (artworkBtn) artworkBtn.disabled = !isBoxComplete;
+  if (previewBtn) previewBtn.disabled = !isBoxComplete || !hasArtwork;
 }
 
 function showStep(step) {
