@@ -58,40 +58,28 @@ export function createBoxNetApp({
     }
   }
 
-  function applyDimensionChange() {
+  function applyDimensionChange({ silent = false } = {}) {
     const nextDimensions = readDimensions();
 
     try {
-      const hasAddedPanels = model.panelCount > 1;
       const changed = Object.keys(nextDimensions).some(
         (key) => nextDimensions[key] !== lastDimensions[key],
       );
       if (!changed) return;
 
-      if (hasAddedPanels) {
-        const resetDecision = beforeDimensionReset(nextDimensions);
-        if (!resetDecision) {
-          restoreDimensionInputs();
-          return;
-        }
-        if (resetDecision !== 'confirmed') {
-          const shouldReset = windowRef.confirm(t('dimensionsReset'));
-          if (!shouldReset) {
-            restoreDimensionInputs();
-            return;
-          }
-        }
-      }
-
-      model.reset(nextDimensions);
+      model.updateDimensions(nextDimensions);
       lastDimensions = { ...model.dimensions };
       onDimensionReset(nextDimensions);
       render();
       onChange();
-      announce(t('dimensionsUpdated'));
+      if (!silent) {
+        announce(t('dimensionsUpdated'));
+      }
     } catch (error) {
-      restoreDimensionInputs();
-      showToast(getUserErrorMessage(error, 'invalidDimensions'));
+      if (!silent) {
+        restoreDimensionInputs();
+        showToast(getUserErrorMessage(error, 'invalidDimensions'));
+      }
     }
   }
 
@@ -147,7 +135,8 @@ export function createBoxNetApp({
   }
 
   for (const input of Object.values(dimensionInputs)) {
-    input.addEventListener('change', applyDimensionChange);
+    input.addEventListener('change', () => applyDimensionChange({ silent: false }));
+    input.addEventListener('input', () => applyDimensionChange({ silent: true }));
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();

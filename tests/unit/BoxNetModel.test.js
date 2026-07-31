@@ -167,6 +167,18 @@ describe('BoxNetModel', () => {
     expect(restored.getPanel('bottom').links.top).toBe('front');
   });
 
+  it('dynamically updates dimensions without clearing placed panels', () => {
+    const model = createReferenceNet({ width: 150, height: 90, depth: 40 });
+    expect(model.panelCount).toBe(6);
+
+    model.updateDimensions({ width: 200, height: 100, depth: 50 });
+
+    expect(model.dimensions).toEqual({ width: 200, height: 100, depth: 50 });
+    expect(model.panelCount).toBe(6);
+    expect(model.getPanel('front')).toMatchObject({ width: 200, height: 100 });
+    expect(model.getPanel('bottom')).toMatchObject({ width: 200, height: 50, y: 100 });
+  });
+
   it('rejects forged serialized topology and geometry', () => {
     const valid = createReferenceNet().toJSON();
     const displaced = structuredClone(valid);

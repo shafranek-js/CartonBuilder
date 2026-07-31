@@ -39,6 +39,49 @@ export class BoxNetModel {
     return this;
   }
 
+  updateDimensions(dimensions) {
+    const normalized = normalizeDimensions(dimensions);
+    const oldDimensions = { ...this.dimensions };
+    this.dimensions = normalized;
+
+    const updatePanelGeometry = (panelId) => {
+      const panel = this.getPanel(panelId);
+      if (!panel) return;
+
+      panel.width = getAxisDimension(panel.basis.right, this.dimensions);
+      panel.height = getAxisDimension(panel.basis.up, this.dimensions);
+
+      if (panel.parentId) {
+        const parent = this.getPanel(panel.parentId);
+        const rect = getPlacedRectangle(parent, panel.parentEdge, panel.width, panel.height);
+        panel.x = rect.x;
+        panel.y = rect.y;
+      } else {
+        panel.x = 0;
+        panel.y = 0;
+      }
+
+      for (const child of this.getChildren(panelId)) {
+        updatePanelGeometry(child.id);
+      }
+    };
+
+    updatePanelGeometry(this.rootId);
+
+    const panels = this.getPanels();
+    for (let i = 0; i < panels.length; i++) {
+      for (let j = i + 1; j < panels.length; j++) {
+        if (rectanglesOverlap(panels[i], panels[j])) {
+          this.dimensions = oldDimensions;
+          updatePanelGeometry(this.rootId);
+          throw new Error('Dimensions cause net panels to overlap.');
+        }
+      }
+    }
+
+    return this;
+  }
+
   _createPanel({ faceKey, faceName, basis, x, y, parentId, parentEdge }) {
     const width = getAxisDimension(basis.right, this.dimensions);
     const height = getAxisDimension(basis.up, this.dimensions);
