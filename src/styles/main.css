@@ -57,11 +57,20 @@ body {
   overflow: hidden;
   background: var(--body-bg, #343434);
   color: var(--text, #ffffff);
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-weight: 100;
+  font-family: 'Public Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 200;
   font-size: 12px;
   letter-spacing: 0.01em;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+b,
+strong,
+h1,
+h2,
+h3,
+th {
+  font-weight: 300;
 }
 
 button,
@@ -256,7 +265,7 @@ input[type="checkbox"] {
   gap: 8px;
   color: var(--text, #ffffff);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 300;
 }
 
 .settings-desc {
@@ -274,7 +283,7 @@ input[type="checkbox"] {
   background: #422020;
   color: #ff9e9e;
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 300;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
@@ -441,7 +450,7 @@ input[type="checkbox"] {
   background: #384511;
   color: #d8ef79;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 300;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
@@ -485,7 +494,7 @@ input[type="checkbox"] {
   margin: 0 0 6px;
   color: var(--muted-text, #a0a0a0);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 300;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -529,7 +538,7 @@ input[type="checkbox"] {
 .preset-title {
   color: var(--text, #ffffff);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 300;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -620,7 +629,7 @@ input[type="checkbox"] {
   background: var(--panel-bg, #3e3e3e);
   color: var(--text, #ffffff);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 300;
   appearance: textfield;
   -moz-appearance: textfield;
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
@@ -640,7 +649,7 @@ input[type="checkbox"] {
   transform: translateY(-50%);
   color: var(--muted-text, #a0a0a0);
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 300;
   pointer-events: none;
 }
 
@@ -703,7 +712,7 @@ input[type="checkbox"] {
 
 .placed-count strong {
   color: var(--focus);
-  font-weight: 600;
+  font-weight: 300;
 }
 
 .workspace-wrap {
@@ -850,7 +859,7 @@ input[type="checkbox"] {
   border: 1px solid #9eb933;
   background: var(--accent);
   color: #1d2500;
-  font-weight: 600;
+  font-weight: 300;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -874,7 +883,7 @@ input[type="checkbox"] {
   border: 1px solid #9eb933;
   background: var(--accent);
   color: #1d2500;
-  font-weight: 600;
+  font-weight: 300;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
