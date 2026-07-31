@@ -2,6 +2,8 @@ import { getDielineSegments, getPanelMaskPath } from '../model/dieline.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+const HANDLE_SCREEN_PX = 5;
+
 function svgElement(documentRef, name, attributes = {}) {
   const element = documentRef.createElementNS(SVG_NS, name);
   for (const [key, value] of Object.entries(attributes)) {
@@ -67,7 +69,7 @@ function getScreenCursor(key, rotation) {
   return (screenCorner === 'nw' || screenCorner === 'se') ? 'nwse-resize' : 'nesw-resize';
 }
 
-function appendSelection(documentRef, parent, artwork, onPointerStart) {
+function appendSelection(documentRef, parent, artwork, onPointerStart, handleSize) {
   const group = svgElement(documentRef, 'g', {
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
   });
@@ -81,6 +83,7 @@ function appendSelection(documentRef, parent, artwork, onPointerStart) {
     height: artwork.unrotatedHeightMm,
   }));
 
+  const half = handleSize / 2;
   const handles = [
     { key: 'nw', x, y, sx: -1, sy: -1 },
     { key: 'ne', x: x + artwork.unrotatedWidthMm, y, sx: 1, sy: -1 },
@@ -91,11 +94,10 @@ function appendSelection(documentRef, parent, artwork, onPointerStart) {
     const cursorStyle = getScreenCursor(handle.key, artwork.rotation);
     const node = svgElement(documentRef, 'rect', {
       class: 'resize-handle',
-      x: handle.x - 3,
-      y: handle.y - 3,
-      width: 6,
-      height: 6,
-      rx: 1,
+      x: handle.x - half,
+      y: handle.y - half,
+      width: handleSize,
+      height: handleSize,
       'data-handle': handle.key,
       style: `cursor: ${cursorStyle};`,
     });
@@ -253,7 +255,13 @@ export class ArtworkRenderer {
     }
 
     if (!preview && this.selected && showArtwork && this.artwork.hasArtwork) {
-      appendSelection(documentRef, target, this.artwork, this.onPointerStart);
+      appendSelection(
+        documentRef,
+        target,
+        this.artwork,
+        this.onPointerStart,
+        HANDLE_SCREEN_PX / this.viewport.zoom,
+      );
     }
 
     if (!preview) {

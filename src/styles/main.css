@@ -1949,22 +1949,27 @@ dialog button {
 }
 
 .resize-handle {
-  fill: #fff;
+  fill: #ffffff;
   stroke: #3157d5;
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .dieline-cut {
   fill: none;
   stroke: #181818;
+  stroke-width: 1px;
   vector-effect: non-scaling-stroke;
+  shape-rendering: crispEdges;
 }
 
 .dieline-fold {
   fill: none;
   stroke: #3157d5;
+  stroke-width: 1px;
   stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
+  shape-rendering: crispEdges;
 }
 
 .artwork-panel-label {
