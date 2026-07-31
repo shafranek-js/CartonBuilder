@@ -439,27 +439,8 @@ export function createArtworkApp({
     event.stopPropagation();
     selected = true;
     const point = renderer.clientToModel(event.clientX, event.clientY);
-    const cornerPointMap = {
-      '-1,-1': 'top-left',
-      '1,-1': 'top-right',
-      '1,1': 'bottom-right',
-      '-1,1': 'bottom-left',
-    };
-    const oppositePointMap = {
-      'top-left': 'bottom-right',
-      'top-right': 'bottom-left',
-      'bottom-right': 'top-left',
-      'bottom-left': 'top-right',
-    };
-    const handlePoint = cornerPointMap[`${detail.sx},${detail.sy}`] || 'top-left';
-    const oppositePoint = oppositePointMap[handlePoint] || 'bottom-right';
-
-    const savedPoint = artwork.referencePoint;
-    artwork.referencePoint = oppositePoint;
-    const oppositePos = artwork.getReferencePosition();
-    artwork.referencePoint = savedPoint;
-
-    const startDistFromOpposite = Math.hypot(point.x - oppositePos.x, point.y - oppositePos.y);
+    const anchorPos = artwork.getReferencePosition();
+    const startDistFromAnchor = Math.hypot(point.x - anchorPos.x, point.y - anchorPos.y);
     const startDistFromCenter = Math.hypot(point.x - artwork.centerXmm, point.y - artwork.centerYmm);
 
     gesture = {
@@ -470,9 +451,8 @@ export function createArtworkApp({
       startCenter: { x: artwork.centerXmm, y: artwork.centerYmm },
       startScale: artwork.scale,
       rotation: artwork.rotation,
-      oppositePoint,
-      oppositePos,
-      startDistFromOpposite: Math.max(0.001, startDistFromOpposite),
+      anchorPos,
+      startDistFromAnchor: Math.max(0.001, startDistFromAnchor),
       startDistFromCenter: Math.max(0.001, startDistFromCenter),
     };
     svg.setPointerCapture(event.pointerId);
@@ -489,15 +469,11 @@ export function createArtworkApp({
       return;
     }
 
-    const currentDist = Math.hypot(point.x - gesture.oppositePos.x, point.y - gesture.oppositePos.y);
-    const factor = currentDist / gesture.startDistFromOpposite;
+    const currentDist = Math.hypot(point.x - gesture.anchorPos.x, point.y - gesture.anchorPos.y);
+    const factor = currentDist / gesture.startDistFromAnchor;
     const nextScale = Math.max(0.01, gesture.startScale * factor);
 
-    const savedPoint = artwork.referencePoint;
-    artwork.referencePoint = gesture.oppositePoint;
     artwork.setScale(nextScale);
-    artwork.setReferencePosition(gesture.oppositePos.x, gesture.oppositePos.y);
-    artwork.referencePoint = savedPoint;
   }
 
   svg.addEventListener('pointermove', (event) => {
