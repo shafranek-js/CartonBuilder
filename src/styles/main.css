@@ -733,7 +733,7 @@ input[type="checkbox"] {
   stroke: var(--line);
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
-  shape-rendering: geometricPrecision;
+  shape-rendering: crispEdges;
 }
 
 .panel-front .panel-shape {
