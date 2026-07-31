@@ -31,8 +31,8 @@ describe('ThemeManager', () => {
     };
   });
 
-  it('contains 5 curated modern color themes', () => {
-    expect(COLOR_THEMES.length).toBe(5);
+  it('contains 10 curated modern color themes', () => {
+    expect(COLOR_THEMES.length).toBe(10);
     const themeIds = COLOR_THEMES.map((t) => t.id);
     expect(themeIds).toEqual([
       'dark-studio',
@@ -40,6 +40,11 @@ describe('ThemeManager', () => {
       'nordic-frost',
       'cyberpunk-neon',
       'clean-light',
+      'dracula-velvet',
+      'emerald-forest',
+      'sunset-warmth',
+      'solarized-light',
+      'tokyo-night',
     ]);
   });
 
