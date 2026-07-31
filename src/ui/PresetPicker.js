@@ -1,8 +1,10 @@
 import {
   BUILT_IN_PRESETS,
   deletePreset,
+  exportPresetsJson,
   formatPresetDimensions,
   getUserPresets,
+  importPresetsFromJson,
   savePreset,
 } from '../project/PresetStore.js';
 import { getUserErrorMessage } from '../i18n.js';
@@ -71,6 +73,15 @@ export function createPresetPicker({
         <button type="button" class="preset-save-btn" id="savePresetBtn">
           💾 Save Current (${defaultName})
         </button>
+        <div class="preset-io-btns">
+          <button type="button" class="preset-io-btn" id="importPresetsBtn" title="Import presets from JSON file">
+            📥 Import JSON
+          </button>
+          <button type="button" class="preset-io-btn" id="exportPresetsBtn" title="Export my presets to JSON file" ${userPresets.length === 0 ? 'disabled' : ''}>
+            📤 Export JSON
+          </button>
+        </div>
+        <input type="file" id="presetFileInput" accept=".json,application/json" hidden>
       </div>
       <div class="preset-section">
         <h4 class="preset-section-title">My Presets</h4>
@@ -83,8 +94,14 @@ export function createPresetPicker({
     `;
 
     // Wire popover action buttons
-    const saveBtn = popoverContainer.querySelector('#savePresetBtn');
-    saveBtn?.addEventListener('click', handleSavePreset);
+    popoverContainer.querySelector('#savePresetBtn')?.addEventListener('click', handleSavePreset);
+    popoverContainer.querySelector('#exportPresetsBtn')?.addEventListener('click', handleExportPresets);
+
+    const importBtn = popoverContainer.querySelector('#importPresetsBtn');
+    const fileInput = popoverContainer.querySelector('#presetFileInput');
+
+    importBtn?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', (e) => handleImportPresets(e.target.files[0]));
 
     popoverContainer.querySelectorAll('[data-action="apply"]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -99,6 +116,42 @@ export function createPresetPicker({
         handleDeletePreset(id);
       });
     });
+  }
+
+  function handleExportPresets() {
+    if (userPresets.length === 0) return;
+    try {
+      const jsonString = exportPresetsJson(userPresets);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = documentRef.createElement('a');
+      link.href = url;
+      link.download = `carton-builder-presets-${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${userPresets.length} presets`);
+      announce(`Exported ${userPresets.length} presets to JSON file`);
+    } catch (error) {
+      showToast(getUserErrorMessage(error, 'exportError'));
+    }
+  }
+
+  async function handleImportPresets(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target.result;
+        const count = await importPresetsFromJson(content);
+        showToast(`Imported ${count} presets!`);
+        announce(`Imported ${count} presets`);
+        await refreshPresetsList();
+      } catch (error) {
+        showToast(error.message || 'Failed to import presets');
+      }
+    };
+    reader.readAsText(file);
   }
 
   async function handleSavePreset() {

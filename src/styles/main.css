@@ -286,6 +286,34 @@ input {
   background: #495a16;
 }
 
+.preset-io-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.preset-io-btn {
+  padding: 4px 8px;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  background: #3e3e3e;
+  color: #c8c8c8;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.preset-io-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: #4a4a4a;
+  color: #ffffff;
+}
+
+.preset-io-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .preset-section {
   margin-bottom: 10px;
 }

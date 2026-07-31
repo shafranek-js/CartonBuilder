@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILT_IN_PRESETS,
   deletePreset,
+  exportPresetsJson,
   formatPresetDimensions,
   getUserPresets,
+  importPresetsFromJson,
   savePreset,
 } from '../../src/project/PresetStore.js';
 
@@ -51,5 +53,21 @@ describe('PresetStore', () => {
 
     expect(saved.name).toBe('210 × 148 × 75 mm');
     await deletePreset(saved.id);
+  });
+
+  it('exports and imports presets JSON cleanly', async () => {
+    const preset1 = { id: 'p1', name: 'Export Box 1', dimensions: { width: 100, height: 100, depth: 50 } };
+    const jsonStr = exportPresetsJson([preset1]);
+
+    expect(jsonStr).toContain('Export Box 1');
+
+    const count = await importPresetsFromJson(jsonStr);
+    expect(count).toBe(1);
+
+    const userPresets = await getUserPresets();
+    const imported = userPresets.find((p) => p.name === 'Export Box 1');
+    expect(imported).toBeDefined();
+
+    if (imported) await deletePreset(imported.id);
   });
 });

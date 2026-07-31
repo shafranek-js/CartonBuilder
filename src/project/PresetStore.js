@@ -140,3 +140,50 @@ export function formatPresetDimensions(dimensions) {
   const { width, height, depth } = dimensions;
   return `${width} × ${height} × ${depth} mm`;
 }
+
+export function exportPresetsJson(presets) {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    presets: presets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      dimensions: p.dimensions,
+      netState: p.netState || null,
+      createdAt: p.createdAt || new Date().toISOString(),
+    })),
+  };
+  return JSON.stringify(data, null, 2);
+}
+
+export async function importPresetsFromJson(jsonString) {
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch {
+    throw new Error('Invalid JSON format.');
+  }
+
+  const rawList = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.presets) ? parsed.presets : null;
+  if (!rawList || rawList.length === 0) {
+    throw new Error('No presets found in file.');
+  }
+
+  let count = 0;
+  for (const item of rawList) {
+    if (item && item.dimensions && Number(item.dimensions.width) > 0) {
+      await savePreset({
+        name: item.name,
+        dimensions: item.dimensions,
+        netState: item.netState || null,
+      });
+      count++;
+    }
+  }
+
+  if (count === 0) {
+    throw new Error('No valid presets could be imported.');
+  }
+
+  return count;
+}
