@@ -1442,6 +1442,11 @@ dialog button {
   cursor: nwse-resize;
 }
 
+.resize-handle[data-handle="ne"],
+.resize-handle[data-handle="sw"] {
+  cursor: nesw-resize;
+}
+
 .dieline-cut {
   fill: none;
   stroke: #181818;
