@@ -63,7 +63,6 @@ export function createArtworkApp({
     dieline: true,
     names: true,
     highlights: true,
-    showFull: false,
   };
   const layerLocks = {
     artwork: false,
@@ -121,7 +120,6 @@ export function createArtworkApp({
     dieline: documentRef.getElementById('layerDieline'),
     names: documentRef.getElementById('layerNames'),
     highlights: documentRef.getElementById('layerHighlights'),
-    showFull: documentRef.getElementById('showFullArtwork'),
   };
   const layerLockControls = {
     artwork: documentRef.getElementById('lockArtwork'),
@@ -328,7 +326,7 @@ export function createArtworkApp({
       button.disabled = !transformEnabled;
       button.setAttribute('aria-pressed', String(button.dataset.point === artwork.referencePoint));
     }
-    controls.bgOpacity.disabled = !transformEnabled || layers.showFull;
+    controls.bgOpacity.disabled = !transformEnabled;
     controls.replace.disabled = !enabled;
     controls.preview.disabled = !enabled;
     controls.undo.disabled = history.undoStack.length === 0;
@@ -587,6 +585,26 @@ export function createArtworkApp({
   bindNumberControl(controls.scale, 'Set artwork scale', (value) => artwork.setScale(value / 100));
   bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
+
+  let lastNonZeroBleed = 0.28;
+  const bgOpacityLabel = controls.bgOpacity?.closest('label');
+  if (bgOpacityLabel) {
+    const bTag = bgOpacityLabel.querySelector('b');
+    if (bTag) {
+      bTag.style.cursor = 'pointer';
+      bTag.addEventListener('click', () => {
+        if (!artwork.hasArtwork || layerLocks.artwork) return;
+        if (artwork.bgOpacity > 0) {
+          lastNonZeroBleed = artwork.bgOpacity;
+          artwork.setBgOpacity(0);
+        } else {
+          artwork.setBgOpacity(lastNonZeroBleed || 0.28);
+        }
+        render();
+        scheduleSave();
+      });
+    }
+  }
 
   controls.referencePointGrid.addEventListener('click', (event) => {
     const button = event.target.closest('.reference-point-button');

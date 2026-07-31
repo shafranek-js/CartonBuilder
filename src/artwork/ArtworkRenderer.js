@@ -210,21 +210,17 @@ export class ArtworkRenderer {
     target.appendChild(defs);
 
     if (showArtwork && this.artwork.hasArtwork && this.previewUrl) {
-      if (!preview && !this.layers.showFull) {
+      if (!preview && this.artwork.bgOpacity > 0) {
         appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity * this.artwork.bgOpacity, null);
       }
-      if (!preview && this.layers.showFull) {
-        appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity, null);
-      } else {
-        appendImage(
-          documentRef,
-          target,
-          this.artwork,
-          this.previewUrl,
-          this.artwork.opacity,
-          `url(#${target.id}-panel-mask)`,
-        );
-      }
+      appendImage(
+        documentRef,
+        target,
+        this.artwork,
+        this.previewUrl,
+        this.artwork.opacity,
+        `url(#${target.id}-panel-mask)`,
+      );
     }
 
     if (showHighlights) {
