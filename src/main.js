@@ -37,9 +37,8 @@ const handleOpenProject = () => {
 };
 
 const handleSaveProject = () => {
-  const saveBtn = document.getElementById('saveProjectButton');
-  if (saveBtn) {
-    saveBtn.click();
+  if (artworkApp?.saveProjectArchive) {
+    artworkApp.saveProjectArchive();
   }
 };
 

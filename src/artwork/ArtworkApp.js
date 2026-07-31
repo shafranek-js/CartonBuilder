@@ -743,7 +743,7 @@ export function createArtworkApp({
     renderer.renderPreview(event.target.checked);
   });
 
-  documentRef.getElementById('saveProjectButton').addEventListener('click', async () => {
+  async function saveProjectArchive() {
     if (!artwork.hasArtwork) {
       showToast(t('loadBeforeSave'));
       return;
@@ -760,9 +760,8 @@ export function createArtworkApp({
       console.error(error);
       showError(error, 'projectSaveFailed');
     }
-  });
-  documentRef.getElementById('loadProjectButton')?.addEventListener('click', () => projectInput.click());
-  documentRef.getElementById('loadProjectButtonStep1')?.addEventListener('click', () => projectInput.click());
+  }
+
   projectInput.addEventListener('change', async () => {
     try {
       clearError();
@@ -964,6 +963,7 @@ export function createArtworkApp({
     fitToScreen: () => renderer.fitToScreen(),
     renderPreview: () => renderer.renderPreview(documentRef.getElementById('previewDieline').checked),
     createSnapshot,
+    saveProjectArchive,
     persistWorkflowStep,
     scheduleSave,
     flushPendingSave,
