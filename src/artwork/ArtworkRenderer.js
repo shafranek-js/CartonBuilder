@@ -58,6 +58,15 @@ function appendDieline(documentRef, parent, model) {
   }
 }
 
+function getScreenCursor(key, rotation) {
+  const corners = ['nw', 'ne', 'se', 'sw'];
+  const baseIndex = corners.indexOf(key);
+  const normalizedRotation = ((Number(rotation) % 360) + 360) % 360;
+  const shift = Math.round(normalizedRotation / 90) % 4;
+  const screenCorner = corners[(baseIndex + shift) % 4];
+  return (screenCorner === 'nw' || screenCorner === 'se') ? 'nwse-resize' : 'nesw-resize';
+}
+
 function appendSelection(documentRef, parent, artwork, onPointerStart) {
   const group = svgElement(documentRef, 'g', {
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
@@ -79,6 +88,7 @@ function appendSelection(documentRef, parent, artwork, onPointerStart) {
     { key: 'sw', x, y: y + artwork.unrotatedHeightMm, sx: -1, sy: 1 },
   ];
   for (const handle of handles) {
+    const cursorStyle = getScreenCursor(handle.key, artwork.rotation);
     const node = svgElement(documentRef, 'rect', {
       class: 'resize-handle',
       x: handle.x - 3,
@@ -87,6 +97,7 @@ function appendSelection(documentRef, parent, artwork, onPointerStart) {
       height: 6,
       rx: 1,
       'data-handle': handle.key,
+      style: `cursor: ${cursorStyle};`,
     });
     node.addEventListener('pointerdown', (event) => onPointerStart(event, {
       type: 'resize',

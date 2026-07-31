@@ -1688,12 +1688,6 @@ dialog button {
   fill: #fff;
   stroke: #3157d5;
   vector-effect: non-scaling-stroke;
-  cursor: nwse-resize;
-}
-
-.resize-handle[data-handle="ne"],
-.resize-handle[data-handle="sw"] {
-  cursor: nesw-resize;
 }
 
 .dieline-cut {
