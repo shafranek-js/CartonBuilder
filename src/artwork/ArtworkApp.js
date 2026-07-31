@@ -586,6 +586,26 @@ export function createArtworkApp({
   bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
 
+  let lastNonZeroArtworkOpacity = 1.0;
+  const opacityLabel = controls.opacity?.closest('label');
+  if (opacityLabel) {
+    const bTag = opacityLabel.querySelector('b');
+    if (bTag) {
+      bTag.style.cursor = 'pointer';
+      bTag.addEventListener('click', () => {
+        if (!artwork.hasArtwork || layerLocks.artwork) return;
+        if (artwork.opacity > 0) {
+          lastNonZeroArtworkOpacity = artwork.opacity;
+          artwork.setOpacity(0);
+        } else {
+          artwork.setOpacity(lastNonZeroArtworkOpacity || 1.0);
+        }
+        render();
+        scheduleSave();
+      });
+    }
+  }
+
   let lastNonZeroBleed = 0.28;
   const bgOpacityLabel = controls.bgOpacity?.closest('label');
   if (bgOpacityLabel) {
