@@ -59,14 +59,25 @@ function showStep(step) {
 
   updateStepNavigationStates();
 
+  const stepOrder = ['box', 'artwork', 'preview'];
+  const currentIndex = stepOrder.indexOf(step);
+
   for (const button of stepButtons) {
     const target = button.dataset.stepTarget;
-    button.classList.toggle('active', target === step);
-    button.classList.toggle(
-      'complete',
-      target === 'box' ? model.isComplete : target === 'artwork' ? artworkApp?.artwork.hasArtwork : false,
+    const targetIndex = stepOrder.indexOf(target);
+    const isActive = target === step;
+    const isCompletedPreviousStep = targetIndex < currentIndex && (
+      target === 'box'
+        ? model.isComplete
+        : target === 'artwork'
+          ? Boolean(artworkApp?.artwork?.hasArtwork)
+          : false
     );
-    if (target === step) button.setAttribute('aria-current', 'step');
+
+    button.classList.toggle('active', isActive);
+    button.classList.toggle('complete', isCompletedPreviousStep);
+
+    if (isActive) button.setAttribute('aria-current', 'step');
     else button.removeAttribute('aria-current');
   }
 
