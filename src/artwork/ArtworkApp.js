@@ -98,6 +98,8 @@ export function createArtworkApp({
     scale: documentRef.getElementById('artworkScale'),
     opacity: documentRef.getElementById('artworkOpacity'),
     opacityValue: documentRef.getElementById('artworkOpacityValue'),
+    bgOpacity: documentRef.getElementById('artworkBgOpacity'),
+    bgOpacityValue: documentRef.getElementById('artworkBgOpacityValue'),
     dpi: documentRef.getElementById('effectiveDpi'),
     choose: documentRef.getElementById('chooseArtworkButton'),
     replace: documentRef.getElementById('replaceArtworkButton'),
@@ -299,6 +301,8 @@ export function createArtworkApp({
     controls.scale.value = enabled ? round(artwork.scale * 100) : '';
     controls.opacity.value = enabled ? Math.round(artwork.opacity * 100) : 100;
     controls.opacityValue.value = `${controls.opacity.value}%`;
+    controls.bgOpacity.value = enabled ? Math.round(artwork.bgOpacity * 100) : 28;
+    controls.bgOpacityValue.value = `${controls.bgOpacity.value}%`;
     const dpi = artwork.getEffectiveDpi();
     controls.dpi.textContent = !enabled ? '—' : dpi == null ? 'Vector' : `${Math.round(dpi)} DPI`;
     controls.dpi.classList.toggle('low-dpi', dpi != null && dpi < 300);
@@ -310,6 +314,7 @@ export function createArtworkApp({
     ]) {
       control.disabled = !transformEnabled;
     }
+    controls.bgOpacity.disabled = !transformEnabled || layers.showFull;
     controls.replace.disabled = !enabled;
     controls.preview.disabled = !enabled;
     controls.undo.disabled = history.undoStack.length === 0;
@@ -557,6 +562,10 @@ export function createArtworkApp({
   controls.opacity.addEventListener('change', () => command(
     'Set artwork opacity',
     () => artwork.setOpacity(Number(controls.opacity.value) / 100),
+  ));
+  controls.bgOpacity.addEventListener('change', () => command(
+    'Set background opacity',
+    () => artwork.setBgOpacity(Number(controls.bgOpacity.value) / 100),
   ));
 
   controls.fit.addEventListener('click', () => command('Fit artwork', () => artwork.fitDieline(boxModel.getBounds())));

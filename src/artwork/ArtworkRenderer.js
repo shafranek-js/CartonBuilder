@@ -200,7 +200,7 @@ export class ArtworkRenderer {
 
     if (showArtwork && this.artwork.hasArtwork && this.previewUrl) {
       if (!preview && !this.layers.showFull) {
-        appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity * 0.28, null);
+        appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity * this.artwork.bgOpacity, null);
       }
       if (!preview && this.layers.showFull) {
         appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity, null);

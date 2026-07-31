@@ -59,6 +59,22 @@ describe('ArtworkModel', () => {
     expect(restored.source.fileName).toBe('artwork.png');
   });
 
+  it('clamps background opacity, persists it and resets to the default', () => {
+    const model = new ArtworkModel().load(source, bounds);
+
+    expect(model.bgOpacity).toBe(0.28);
+    model.setBgOpacity(2);
+    expect(model.bgOpacity).toBe(1);
+    model.setBgOpacity(-1);
+    expect(model.bgOpacity).toBe(0);
+    model.setBgOpacity(0.5);
+
+    const restored = new ArtworkModel(model.toJSON());
+    expect(restored.bgOpacity).toBe(0.5);
+    restored.resetTransform();
+    expect(restored.bgOpacity).toBe(0.28);
+  });
+
   it('keeps PDF page rotation as the initial canonical rotation', () => {
     const model = new ArtworkModel().load({
       ...source,

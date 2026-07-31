@@ -44,6 +44,7 @@ export class ArtworkModel {
     this.scale = 1;
     this.rotation = 0;
     this.opacity = 1;
+    this.bgOpacity = 0.28;
     this.modified = false;
     return this;
   }
@@ -202,6 +203,12 @@ export class ArtworkModel {
     return this;
   }
 
+  setBgOpacity(bgOpacity) {
+    this.bgOpacity = Math.min(1, Math.max(0, finiteNumber(bgOpacity, 'bgOpacity')));
+    this.modified = true;
+    return this;
+  }
+
   rotateQuarterTurns(turns) {
     this.rotation = normalizeQuarterTurn(this.rotation + Number(turns) * 90);
     this.modified = true;
@@ -212,6 +219,7 @@ export class ArtworkModel {
     this.scale = 1;
     this.rotation = this.source?.pdfPageRotation || 0;
     this.opacity = 1;
+    this.bgOpacity = 0.28;
     this.modified = false;
     return this;
   }
@@ -233,6 +241,7 @@ export class ArtworkModel {
       scale: this.scale,
       rotation: this.rotation,
       opacity: this.opacity,
+      bgOpacity: this.bgOpacity,
       modified: this.modified,
     };
   }
@@ -247,6 +256,9 @@ export class ArtworkModel {
     this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(state.scale, 'scale')));
     this.rotation = normalizeQuarterTurn(state.rotation);
     this.opacity = Math.min(1, Math.max(0, finiteNumber(state.opacity, 'opacity')));
+    this.bgOpacity = state.bgOpacity != null
+      ? Math.min(1, Math.max(0, finiteNumber(state.bgOpacity, 'bgOpacity')))
+      : 0.28;
     this.modified = Boolean(state.modified);
     return this;
   }
