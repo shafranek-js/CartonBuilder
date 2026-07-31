@@ -740,6 +740,14 @@ export function createArtworkApp({
     render();
     onBackToEditor();
   });
+  documentRef.querySelectorAll('.adobe-layer-row').forEach((row) => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.layer-toggle-cell')) return;
+      documentRef.querySelectorAll('.adobe-layer-row').forEach((r) => r.classList.remove('active'));
+      row.classList.add('active');
+    });
+  });
+
   documentRef.getElementById('previewDieline').addEventListener('change', (event) => {
     renderer.renderPreview(event.target.checked);
   });

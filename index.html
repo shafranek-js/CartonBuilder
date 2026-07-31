@@ -142,28 +142,120 @@
               <button type="button" id="removeArtworkButton" hidden></button>
             </section>
 
-            <section class="tool-section">
+            <section class="tool-section layers-tool-section">
               <h2 data-i18n="layers">Layers</h2>
-              <div class="layer-heading" aria-hidden="true"><span data-i18n="layer">Layer</span><span data-i18n="show">Show</span><span data-i18n="lock">Lock</span></div>
-              <div class="layer-row">
-                <span data-i18n="artwork">Artwork</span>
-                <label><input id="layerArtwork" type="checkbox" checked><span class="sr-only" data-i18n="showArtworkLabel">Show Artwork</span></label>
-                <label><input id="lockArtwork" type="checkbox"><span class="sr-only" data-i18n="lockArtworkLabel">Lock Artwork</span></label>
-              </div>
-              <div class="layer-row">
-                <span data-i18n="dieline">Dieline</span>
-                <label><input id="layerDieline" type="checkbox" checked><span class="sr-only" data-i18n="showDielineLabel">Show Dieline</span></label>
-                <label><input id="lockDieline" type="checkbox" checked><span class="sr-only" data-i18n="lockDielineLabel">Lock Dieline</span></label>
-              </div>
-              <div class="layer-row">
-                <span data-i18n="panelNames">Panel names</span>
-                <label><input id="layerNames" type="checkbox" checked><span class="sr-only" data-i18n="showPanelNamesLabel">Show Panel names</span></label>
-                <label><input id="lockNames" type="checkbox" checked><span class="sr-only" data-i18n="lockPanelNamesLabel">Lock Panel names</span></label>
-              </div>
-              <div class="layer-row">
-                <span data-i18n="highlights">Front/Base highlight</span>
-                <label><input id="layerHighlights" type="checkbox" checked><span class="sr-only" data-i18n="showHighlightsLabel">Show Front/Base highlight</span></label>
-                <label><input id="lockHighlights" type="checkbox" checked><span class="sr-only" data-i18n="lockHighlightsLabel">Lock Front/Base highlight</span></label>
+              <div class="adobe-layers-table">
+                <!-- Artwork Layer -->
+                <div class="adobe-layer-row active" data-layer-id="artwork">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerArtwork" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockArtwork" type="checkbox" class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-color-stripe" style="background-color: #4b97ea;"></span>
+                  <span class="layer-thumbnail">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
+                      <rect x="2" y="2" width="12" height="12" rx="1"/>
+                      <circle cx="5.5" cy="5.5" r="1.5"/>
+                      <path d="M14 11l-3-3-5 5"/>
+                    </svg>
+                  </span>
+                  <span class="layer-title" data-i18n="artwork">Artwork</span>
+                  <button type="button" class="layer-target-btn" title="Target Layer" aria-label="Target Layer">
+                    <span class="target-circle"></span>
+                  </button>
+                </div>
+
+                <!-- Dieline Layer -->
+                <div class="adobe-layer-row" data-layer-id="dieline">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerDieline" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockDieline" type="checkbox" checked class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-color-stripe" style="background-color: #42ca65;"></span>
+                  <span class="layer-thumbnail">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
+                      <rect x="2" y="2" width="12" height="12" rx="1" stroke-dasharray="2 2"/>
+                    </svg>
+                  </span>
+                  <span class="layer-title" data-i18n="dieline">Dieline</span>
+                  <button type="button" class="layer-target-btn" title="Target Layer" aria-label="Target Layer">
+                    <span class="target-circle"></span>
+                  </button>
+                </div>
+
+                <!-- Panel Names Layer -->
+                <div class="adobe-layer-row" data-layer-id="names">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerNames" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockNames" type="checkbox" checked class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-color-stripe" style="background-color: #ca42b6;"></span>
+                  <span class="layer-thumbnail text-thumbnail">
+                    <span>T</span>
+                  </span>
+                  <span class="layer-title" data-i18n="panelNames">Panel names</span>
+                  <button type="button" class="layer-target-btn" title="Target Layer" aria-label="Target Layer">
+                    <span class="target-circle"></span>
+                  </button>
+                </div>
+
+                <!-- Highlights Layer -->
+                <div class="adobe-layer-row" data-layer-id="highlights">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerHighlights" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockHighlights" type="checkbox" checked class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-color-stripe" style="background-color: #eab44b;"></span>
+                  <span class="layer-thumbnail">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
+                      <polygon points="8,2 14,14 2,14"/>
+                    </svg>
+                  </span>
+                  <span class="layer-title" data-i18n="highlights">Front/Base highlight</span>
+                  <button type="button" class="layer-target-btn" title="Target Layer" aria-label="Target Layer">
+                    <span class="target-circle"></span>
+                  </button>
+                </div>
               </div>
             </section>
           </aside>

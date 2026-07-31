@@ -1647,33 +1647,123 @@ dialog button {
   color: #f4d46c;
 }
 
-.layer-heading,
-.layer-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px 42px;
+.adobe-layers-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border, #454545);
+  border-radius: 4px;
+  background: var(--panel-bg, #2b2b2b);
+  overflow: hidden;
+}
+
+.adobe-layer-row {
+  display: flex;
   align-items: center;
-  gap: 4px;
+  height: 28px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--panel-border, #3a3a3a);
+  background: transparent;
+  color: var(--text, #ffffff);
+  font-size: 11px;
+  font-weight: 300;
+  user-select: none;
+  transition: background-color 0.1s ease;
 }
 
-.layer-heading {
-  margin-bottom: 4px;
-  color: #929292;
+.adobe-layer-row:last-child {
+  border-bottom: none;
+}
+
+.adobe-layer-row:hover {
+  background: var(--surface, #383838);
+}
+
+.adobe-layer-row.active {
+  background: rgba(75, 151, 234, 0.18);
+}
+
+.layer-toggle-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--muted-text, #a0a0a0);
+  cursor: pointer;
+}
+
+.layer-toggle-cell:hover {
+  color: var(--text, #ffffff);
+}
+
+.layer-toggle-cell input:not(:checked) ~ svg {
+  opacity: 0;
+}
+
+.layer-toggle-cell input:checked ~ svg {
+  opacity: 1;
+}
+
+.layer-color-stripe {
+  width: 3px;
+  height: 18px;
+  margin: 0 5px;
+  border-radius: 1.5px;
+}
+
+.layer-thumbnail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  border: 1px solid var(--panel-border, #555);
+  border-radius: 2px;
+  background: var(--surface, #3a3a3a);
+  color: var(--text, #ffffff);
+}
+
+.layer-thumbnail.text-thumbnail span {
+  font-family: sans-serif;
   font-size: 10px;
-  text-transform: uppercase;
+  font-weight: bold;
+  line-height: 1;
 }
 
-.layer-heading span:not(:first-child),
-.layer-row label {
-  text-align: center;
+.layer-title {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 300;
 }
 
-.layer-row {
-  min-height: 28px;
+.layer-target-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 
-.layer-row label {
-  display: grid;
-  place-items: center;
+.target-circle {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--panel-border, #777);
+  border-radius: 50%;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.adobe-layer-row.active .target-circle {
+  border-color: #4b97ea;
+  box-shadow: 0 0 0 1px #4b97ea;
+  background-color: #4b97ea;
 }
 
 .toggle-row {
