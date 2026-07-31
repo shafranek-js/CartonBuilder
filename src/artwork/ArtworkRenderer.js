@@ -11,7 +11,7 @@ function svgElement(documentRef, name, attributes = {}) {
 }
 
 function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath) {
-  const image = svgElement(documentRef, 'image', {
+  const imageProps = {
     class: 'artwork-image',
     href: previewUrl,
     x: artwork.centerXmm - artwork.unrotatedWidthMm / 2,
@@ -21,8 +21,17 @@ function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath
     opacity,
     preserveAspectRatio: 'none',
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
-    'clip-path': clipPath,
-  });
+  };
+
+  if (clipPath) {
+    const clipGroup = svgElement(documentRef, 'g', { 'clip-path': clipPath });
+    const image = svgElement(documentRef, 'image', imageProps);
+    clipGroup.appendChild(image);
+    parent.appendChild(clipGroup);
+    return image;
+  }
+
+  const image = svgElement(documentRef, 'image', imageProps);
   parent.appendChild(image);
   return image;
 }
