@@ -1,5 +1,6 @@
 import { clearCurrentProject } from '../project/ProjectStore.js';
-import { t } from '../i18n.js';
+import { COLOR_THEMES, applyTheme, getSavedTheme } from './ThemeManager.js';
+import { getLocale, t } from '../i18n.js';
 
 export function createSettingsModal({
   triggerButton,
@@ -20,9 +21,27 @@ export function createSettingsModal({
   }
 
   function renderContent() {
+    const currentThemeId = getSavedTheme();
+    const isRu = getLocale() === 'ru';
+
+    const themeOptionsHtml = COLOR_THEMES.map((theme) => {
+      const selected = theme.id === currentThemeId ? 'selected' : '';
+      const name = isRu ? theme.nameRu : theme.nameEn;
+      return `<option value="${theme.id}" ${selected}>${name}</option>`;
+    }).join('');
+
     popoverContainer.innerHTML = `
       <div class="settings-popover-header">
         <strong>⚙️ ${t('settings') || 'Settings'}</strong>
+      </div>
+
+      <div class="settings-group">
+        <label class="settings-label" for="themeSelect">
+          🎨 <span>${t('theme') || 'Color Theme'}</span>
+        </label>
+        <select id="themeSelect" class="settings-select">
+          ${themeOptionsHtml}
+        </select>
       </div>
 
       <div class="settings-group">
@@ -34,10 +53,16 @@ export function createSettingsModal({
 
       <div class="settings-group">
         <button type="button" class="settings-danger-btn" id="clearDataBtn">
-          🗑️ Clear Saved Project Data
+          🗑️ ${t('clearProjectData') || 'Clear Saved Project Data'}
         </button>
       </div>
     `;
+
+    popoverContainer.querySelector('#themeSelect')?.addEventListener('change', (e) => {
+      const selectedTheme = applyTheme(e.target.value, documentRef);
+      const name = isRu ? selectedTheme.nameRu : selectedTheme.nameEn;
+      showToast(`${t('themeApplied') || 'Theme applied:'} ${name}`);
+    });
 
     popoverContainer.querySelector('#clearDataBtn')?.addEventListener('click', handleClearData);
   }

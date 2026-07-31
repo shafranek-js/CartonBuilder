@@ -30,13 +30,16 @@ body {
   place-items: center;
   padding: 0;
   overflow: hidden;
-  background: #343434;
+  background: var(--body-bg, #343434);
+  color: var(--text, #ffffff);
   font-family: Arial, Helvetica, sans-serif;
   font-size: 13px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -50,16 +53,18 @@ input {
   overflow: hidden;
   border: 1px solid var(--frame-border);
   border-radius: 0;
-  background: #535353;
+  background: var(--surface, #535353);
   box-shadow: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .app-content {
   display: grid;
   grid-template-rows: 42px minmax(0, 1fr);
   min-height: 0;
-  background: #535353;
-  color: var(--text);
+  background: var(--surface, #535353);
+  color: var(--text, #ffffff);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .stepper {
@@ -69,8 +74,9 @@ input {
   justify-content: center;
   gap: 2px;
   padding: 5px 12px;
-  border-bottom: 1px solid #414141;
-  background: #494949;
+  border-bottom: 1px solid var(--stepper-border, #414141);
+  background: var(--stepper-bg, #494949);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .error-banner {

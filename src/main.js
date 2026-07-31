@@ -13,8 +13,10 @@ import {
 import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
+import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 
 initializeI18n();
+applyTheme(getSavedTheme());
 
 const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
 const boxStep = document.getElementById('boxStep');
