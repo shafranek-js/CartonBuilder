@@ -305,6 +305,14 @@ export function createArtworkApp({
     controls.opacityValue.value = `${controls.opacity.value}%`;
     controls.bgOpacity.value = enabled ? Math.round(artwork.bgOpacity * 100) : 28;
     controls.bgOpacityValue.value = `${controls.bgOpacity.value}%`;
+
+    for (const slider of [controls.opacity, controls.bgOpacity]) {
+      if (slider) {
+        const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+        slider.style.setProperty('--slider-progress', `${pct}%`);
+      }
+    }
+
     const dpi = artwork.getEffectiveDpi();
     controls.dpi.textContent = !enabled ? '—' : dpi == null ? 'Vector' : `${Math.round(dpi)} DPI`;
     controls.dpi.classList.toggle('low-dpi', dpi != null && dpi < 300);
@@ -548,14 +556,20 @@ export function createArtworkApp({
   }
   function bindSliderControl(control, label, apply) {
     let before = null;
+    const updateProgress = () => {
+      const pct = ((control.value - control.min) / (control.max - control.min)) * 100;
+      control.style.setProperty('--slider-progress', `${pct}%`);
+    };
     control.addEventListener('input', () => {
       if (!artwork.hasArtwork || layerLocks.artwork) return;
       if (!before) before = captureEditorState();
+      updateProgress();
       apply(Number(control.value));
       render();
     });
     control.addEventListener('change', () => {
       if (!artwork.hasArtwork || layerLocks.artwork) return;
+      updateProgress();
       apply(Number(control.value));
       render();
       if (before) {

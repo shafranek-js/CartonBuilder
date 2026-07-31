@@ -1338,8 +1338,99 @@ dialog button {
 }
 
 .control-grid input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
   min-width: 0;
   flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent, #afca42) 0%, var(--accent, #afca42) var(--slider-progress, 50%), var(--panel-border, #4a4a4a) var(--slider-progress, 50%), var(--panel-border, #4a4a4a) 100%);
+  outline: none;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+.control-grid input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+}
+
+.control-grid input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text, #ffffff);
+  border: 2px solid var(--panel-bg, #3e3e3e);
+  margin-top: -4px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.control-grid input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.25);
+  background: var(--accent, #afca42);
+  box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.control-grid input[type="range"]:active:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.1);
+  background: var(--accent, #afca42);
+}
+
+.control-grid input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--focus, #59c2ff), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Firefox */
+.control-grid input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+}
+
+.control-grid input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text, #ffffff);
+  border: 2px solid var(--panel-bg, #3e3e3e);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.control-grid input[type="range"]:hover:not(:disabled)::-moz-range-thumb {
+  transform: scale(1.25);
+  background: var(--accent, #afca42);
+  box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.control-grid input[type="range"]:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.control-grid input[type="range"]:disabled::-webkit-slider-thumb {
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.control-grid input[type="range"]:disabled::-moz-range-thumb {
+  cursor: default;
+  transform: none;
+  box-shadow: none;
 }
 
 .transform-layout-row {
