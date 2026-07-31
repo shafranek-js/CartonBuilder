@@ -554,19 +554,33 @@ export function createArtworkApp({
   function bindNumberControl(control, label, apply) {
     control.addEventListener('change', () => command(label, () => apply(Number(control.value))));
   }
+  function bindSliderControl(control, label, apply) {
+    let before = null;
+    control.addEventListener('input', () => {
+      if (!artwork.hasArtwork || layerLocks.artwork) return;
+      if (!before) before = captureEditorState();
+      apply(Number(control.value));
+      render();
+    });
+    control.addEventListener('change', () => {
+      if (!artwork.hasArtwork || layerLocks.artwork) return;
+      apply(Number(control.value));
+      render();
+      if (before) {
+        commitChange(label, before);
+      } else {
+        command(label, () => {});
+      }
+      before = null;
+    });
+  }
   bindNumberControl(controls.x, 'Set artwork X', (value) => artwork.setCenter(value, artwork.centerYmm));
   bindNumberControl(controls.y, 'Set artwork Y', (value) => artwork.setCenter(artwork.centerXmm, value));
   bindNumberControl(controls.width, 'Set artwork width', (value) => artwork.setDisplayedWidth(value));
   bindNumberControl(controls.height, 'Set artwork height', (value) => artwork.setDisplayedHeight(value));
   bindNumberControl(controls.scale, 'Set artwork scale', (value) => artwork.setScale(value / 100));
-  controls.opacity.addEventListener('change', () => command(
-    'Set artwork opacity',
-    () => artwork.setOpacity(Number(controls.opacity.value) / 100),
-  ));
-  controls.bgOpacity.addEventListener('change', () => command(
-    'Set background opacity',
-    () => artwork.setBgOpacity(Number(controls.bgOpacity.value) / 100),
-  ));
+  bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
+  bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
 
   controls.fit.addEventListener('click', () => command('Fit artwork', () => artwork.fitDieline(boxModel.getBounds())));
   controls.fill.addEventListener('click', () => command('Fill artwork', () => artwork.fillDieline(boxModel.getBounds())));
