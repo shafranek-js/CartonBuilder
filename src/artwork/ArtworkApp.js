@@ -334,6 +334,12 @@ export function createArtworkApp({
     controls.redo.disabled = history.redoStack.length === 0;
     dropState.hidden = enabled;
     renderer.selected = selected && enabled;
+    const isArtworkSelected = selected && enabled;
+    documentRef.querySelectorAll('.adobe-layer-row').forEach((row) => {
+      if (row.dataset.layerId === 'artwork') {
+        row.classList.toggle('active', isArtworkSelected);
+      }
+    });
   }
 
   function render() {
@@ -743,8 +749,20 @@ export function createArtworkApp({
   documentRef.querySelectorAll('.adobe-layer-row').forEach((row) => {
     row.addEventListener('click', (e) => {
       if (e.target.closest('.layer-toggle-cell')) return;
+
+      const layerId = row.dataset.layerId;
       documentRef.querySelectorAll('.adobe-layer-row').forEach((r) => r.classList.remove('active'));
       row.classList.add('active');
+
+      if (layerId === 'artwork') {
+        if (artwork.hasArtwork) {
+          selected = true;
+          render();
+        }
+      } else {
+        selected = false;
+        render();
+      }
     });
   });
 
