@@ -337,17 +337,14 @@
                 <div class="transform-fields">
                   <label><b>X:</b> <span><input id="artworkX" aria-label="Artwork X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled> mm</span></label>
                   <label><b>W:</b> <span><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
+                  <button type="button" id="constrainProportionsBtn" class="chain-toggle chain-toggle--inline" title="Constrain proportions" data-i18n-title="constrainProportions" aria-pressed="true">🔗</button>
                   <label><b>Y:</b> <span><input id="artworkY" aria-label="Artwork Y" data-i18n-aria-label="artworkCenterYLabel" type="number" step="0.1" disabled> mm</span></label>
                   <label><b>H:</b> <span><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
                 </div>
               </div>
-              <button type="button" id="constrainProportionsBtn" class="chain-toggle" title="Constrain proportions" data-i18n-title="constrainProportions" aria-pressed="true">🔗</button>
-              <div class="control-grid">
-                <label><b data-i18n="scale">Scale</b> <span><input id="artworkScale" aria-label="Artwork scale" data-i18n-aria-label="artworkScaleLabel" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
-                <span id="scaleXYGroup" hidden>
-                  <label><b data-i18n="scaleX">Scale X</b> <span><input id="artworkScaleX" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
-                  <label><b data-i18n="scaleY">Scale Y</b> <span><input id="artworkScaleY" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
-                </span>
+              <div class="scale-fields">
+                <label><b data-i18n="scaleX">Scale X</b> <span><input id="artworkScaleX" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
+                <label><b data-i18n="scaleY">Scale Y</b> <span><input id="artworkScaleY" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
               </div>
               <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
               <div class="button-grid icon-button-grid">
@@ -396,8 +393,14 @@
 
             <section class="tool-section" id="opacitySection" hidden>
               <h2 data-i18n="opacityPanel">Opacity</h2>
-              <label class="opacity-row"><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
-              <label class="opacity-row"><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>
+              <div class="opacity-row">
+                <b data-i18n="opacity">Artwork</b>
+                <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span>
+              </div>
+              <div class="opacity-row">
+                <b data-i18n="bgOpacity">Bleed</b>
+                <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span>
+              </div>
             </section>
 
             <section class="tool-section" id="cropSection" hidden>

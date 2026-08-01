@@ -144,7 +144,6 @@ export function createArtworkApp({
     y: documentRef.getElementById('artworkY'),
     width: documentRef.getElementById('artworkWidth'),
     height: documentRef.getElementById('artworkHeight'),
-    scale: documentRef.getElementById('artworkScale'),
     opacity: documentRef.getElementById('artworkOpacity'),
     opacityValue: documentRef.getElementById('artworkOpacityValue'),
     bgOpacity: documentRef.getElementById('artworkBgOpacity'),
@@ -173,7 +172,6 @@ export function createArtworkApp({
     cropStatus: documentRef.getElementById('cropStatus'),
     scaleX: documentRef.getElementById('artworkScaleX'),
     scaleY: documentRef.getElementById('artworkScaleY'),
-    scaleXYGroup: documentRef.getElementById('scaleXYGroup'),
     constrainBtn: documentRef.getElementById('constrainProportionsBtn'),
   };
 
@@ -215,6 +213,7 @@ export function createArtworkApp({
   let cropPreview = null;
   let cropGesture = null;
   let cropDrawStart = null;
+  let cropBeforeState = null;
   let constrainProportions = true;
   let artworkGroupCollapsed = false;
   let selectedArtworkIndices = new Set();
@@ -282,6 +281,7 @@ export function createArtworkApp({
   }
 
   function applyEditorState(state) {
+    resetCropInteraction({ updateUi: false });
     artworks.length = 0;
     for (const entry of state.artworks || []) {
       artworks.push({
@@ -514,9 +514,6 @@ export function createArtworkApp({
     controls.y.value = enabled ? round(reference.y) : '';
     controls.width.value = enabled ? round(artwork.displayedWidthMm) : '';
     controls.height.value = enabled ? round(artwork.displayedHeightMm) : '';
-    controls.scale.value = enabled ? round(artwork.scaleX * 100) : '';
-    controls.scale.parentElement.parentElement.hidden = !constrainProportions;
-    controls.scaleXYGroup.hidden = constrainProportions;
     if (enabled) {
       controls.scaleX.value = round(artwork.scaleX * 100);
       controls.scaleY.value = round(artwork.scaleY * 100);
@@ -545,7 +542,7 @@ export function createArtworkApp({
     controls.dpi.classList.toggle('low-dpi', dpi != null && dpi < 300);
 
     for (const control of [
-      controls.x, controls.y, controls.width, controls.height, controls.scale, controls.opacity,
+      controls.x, controls.y, controls.width, controls.height, controls.opacity,
       controls.remove, controls.fit, controls.fill, controls.center,
       controls.rotateLeft, controls.rotateRight, controls.reset,
     ]) {
@@ -1206,6 +1203,7 @@ export function createArtworkApp({
   }
 
   function startArtworkGesture(event, detail) {
+    if (cropMode) return;
     if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1303,15 +1301,28 @@ export function createArtworkApp({
     render();
   });
 
+  function releasePointerCapture(pointerId) {
+    try {
+      if (pointerId != null && svg.hasPointerCapture?.(pointerId)) {
+        svg.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // Pointer capture may already have been released by the browser.
+    }
+  }
+
   function finishGesture(event) {
     if (!gesture || event.pointerId !== gesture.pointerId) return;
+    const pointerId = gesture.pointerId;
     if (gesture.type === 'move' || gesture.type === 'resize') {
       commitChange(gesture.type === 'move' ? 'Move artwork' : 'Resize artwork', gesture.before);
     }
     gesture = null;
+    releasePointerCapture(pointerId);
   }
-  function finishCropGesture() {
-    if (!cropGesture) return;
+  function finishCropGesture(event) {
+    if (!cropGesture || event.pointerId !== cropGesture.pointerId) return;
+    const pointerId = cropGesture.pointerId;
     if (cropDrawStart) {
       if (cropPreview && cropPreview.width >= 1 && cropPreview.height >= 1) {
         renderer.drawRect = null;
@@ -1326,6 +1337,8 @@ export function createArtworkApp({
       cropDrawStart = null;
     }
     cropGesture = null;
+    releasePointerCapture(pointerId);
+    render();
   }
 
   function clamp(value, min, max) {
@@ -1337,8 +1350,7 @@ export function createArtworkApp({
     event.stopPropagation();
     const point = renderer.clientToModel(event.clientX, event.clientY);
     const unrotated = rotateVector(
-      point.x - artwork.centerXmm,
-      point.y - artwork.centerYmm,
+      { x: point.x - artwork.centerXmm, y: point.y - artwork.centerYmm },
       -artwork.rotation,
     );
     const localX = clamp(unrotated.x + artwork.unrotatedWidthMm / 2, 0, artwork.unrotatedWidthMm);
@@ -1359,12 +1371,11 @@ export function createArtworkApp({
     event.stopPropagation();
     const point = renderer.clientToModel(event.clientX, event.clientY);
     const unrotated = rotateVector(
-      point.x - artwork.centerXmm,
-      point.y - artwork.centerYmm,
+      { x: point.x - artwork.centerXmm, y: point.y - artwork.centerYmm },
       -artwork.rotation,
     );
-    const localX = unrotated.x + artwork.unrotatedWidthMm / 2;
-    const localY = unrotated.y + artwork.unrotatedHeightMm / 2;
+    const localX = clamp(unrotated.x + artwork.unrotatedWidthMm / 2, 0, artwork.unrotatedWidthMm);
+    const localY = clamp(unrotated.y + artwork.unrotatedHeightMm / 2, 0, artwork.unrotatedHeightMm);
     cropGesture = {
       pointerId: event.pointerId,
       type: 'move',
@@ -1393,8 +1404,7 @@ export function createArtworkApp({
     if (!cropGesture || event.pointerId !== cropGesture.pointerId || !cropPreview) return;
     const point = renderer.clientToModel(event.clientX, event.clientY);
     const unrotated = rotateVector(
-      point.x - artwork.centerXmm,
-      point.y - artwork.centerYmm,
+      { x: point.x - artwork.centerXmm, y: point.y - artwork.centerYmm },
       -artwork.rotation,
     );
     const localX = clamp(unrotated.x + artwork.unrotatedWidthMm / 2, 0, artwork.unrotatedWidthMm);
@@ -1444,12 +1454,24 @@ export function createArtworkApp({
   }
 
   svg.addEventListener('pointerup', (event) => {
-    if (cropGesture) { finishCropGesture(); return; }
+    if (cropGesture) { finishCropGesture(event); return; }
     finishGesture(event);
   });
   svg.addEventListener('pointercancel', (event) => {
-    if (cropGesture) { finishCropGesture(); return; }
+    if (cropGesture) { finishCropGesture(event); return; }
     finishGesture(event);
+  });
+  // Pointer capture normally routes these events back to the SVG, but a
+  // browser can cancel capture when the pointer leaves the document or the
+  // target is rebuilt during a render. Keep a document-level fallback so a
+  // crop gesture can never remain stuck in its transient drawing state.
+  documentRef.addEventListener('pointerup', (event) => {
+    if (cropGesture) finishCropGesture(event);
+    else if (gesture) finishGesture(event);
+  });
+  documentRef.addEventListener('pointercancel', (event) => {
+    if (cropGesture) finishCropGesture(event);
+    else if (gesture) finishGesture(event);
   });
   svg.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
@@ -1540,10 +1562,6 @@ export function createArtworkApp({
     artwork.setDisplayedHeight(value);
     if (constrainProportions) artwork.setScaleX(artwork.scaleY);
   });
-  bindNumberControl(controls.scale, 'Set artwork scale', (value) => {
-    artwork.setScaleX(value / 100);
-    if (constrainProportions) artwork.setScaleY(value / 100);
-  });
   bindNumberControl(controls.scaleX, 'Set artwork scale X', (value) => {
     artwork.setScaleX(value / 100);
     if (constrainProportions) artwork.setScaleY(artwork.scaleX);
@@ -1556,7 +1574,7 @@ export function createArtworkApp({
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
 
   let lastNonZeroArtworkOpacity = 1.0;
-  const opacityLabel = controls.opacity?.closest('label');
+  const opacityLabel = controls.opacity?.closest('.opacity-row');
   if (opacityLabel) {
     const bTag = opacityLabel.querySelector('b');
     if (bTag) {
@@ -1576,7 +1594,7 @@ export function createArtworkApp({
   }
 
   let lastNonZeroBleed = 0.28;
-  const bgOpacityLabel = controls.bgOpacity?.closest('label');
+  const bgOpacityLabel = controls.bgOpacity?.closest('.opacity-row');
   if (bgOpacityLabel) {
     const bTag = bgOpacityLabel.querySelector('b');
     if (bTag) {
@@ -1643,42 +1661,53 @@ export function createArtworkApp({
     }
   });
 
-  controls.cropFrameBtn.addEventListener('click', () => {
-    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
-    if (cropMode === 'frame') { exitCropMode(false); return; }
-    if (cropMode === 'draw') { exitCropMode(false); }
-    enterCropFrame();
-  });
-  controls.cropDrawBtn.addEventListener('click', () => {
-    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
-    if (cropMode === 'draw') { exitCropMode(false); return; }
-    if (cropMode === 'frame') { exitCropMode(false); }
-    enterCropDraw();
-  });
-  controls.clearCrop.addEventListener('click', clearCrop);
-  controls.constrainBtn.addEventListener('click', () => {
-    constrainProportions = !constrainProportions;
-    controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
-    controls.constrainBtn.textContent = constrainProportions ? '🔗' : '⛓️‍💥';
-    renderControls();
-    if (!constrainProportions && artwork.hasArtwork) {
-      controls.scaleX.value = round(artwork.scaleX * 100);
-      controls.scaleY.value = round(artwork.scaleY * 100);
+  function isValidCrop(value) {
+    return Boolean(
+      value
+      && Number.isFinite(Number(value.x))
+      && Number.isFinite(Number(value.y))
+      && Number.isFinite(Number(value.width))
+      && Number.isFinite(Number(value.height))
+      && Number(value.width) >= 1
+      && Number(value.height) >= 1,
+    );
+  }
+
+  function cropsEqual(left, right) {
+    if (!left || !right) return !left && !right;
+    return left.x === right.x
+      && left.y === right.y
+      && left.width === right.width
+      && left.height === right.height;
+  }
+
+  function resetCropInteraction({ updateUi = true } = {}) {
+    const pointerId = cropGesture?.pointerId;
+    cropMode = null;
+    cropPreview = null;
+    cropGesture = null;
+    cropDrawStart = null;
+    cropBeforeState = null;
+    renderer.cropFrame = null;
+    renderer.drawRect = null;
+    svg.style.cursor = '';
+    releasePointerCapture(pointerId);
+    if (updateUi) {
+      updateCropButtons();
+      updateCropStatus();
+      controls.clearCrop.disabled = !artwork.crop;
     }
-  });
+  }
 
   function updateCropButtons() {
     const isFrame = cropMode === 'frame';
     const isDraw = cropMode === 'draw';
     controls.cropFrameBtn.classList.toggle('active', isFrame);
     controls.cropDrawBtn.classList.toggle('active', isDraw);
-    if (isFrame || isDraw) {
-      controls.cropFrameBtn.querySelector('span').textContent = t('applyCrop');
-      controls.cropDrawBtn.querySelector('span').textContent = t('applyCrop');
-    } else {
-      controls.cropFrameBtn.querySelector('span').textContent = t('cropFrame');
-      controls.cropDrawBtn.querySelector('span').textContent = t('cropDraw');
-    }
+    controls.cropFrameBtn.setAttribute('aria-pressed', String(isFrame));
+    controls.cropDrawBtn.setAttribute('aria-pressed', String(isDraw));
+    controls.cropFrameBtn.querySelector('span').textContent = isFrame ? t('applyCrop') : t('cropFrame');
+    controls.cropDrawBtn.querySelector('span').textContent = isDraw ? t('applyCrop') : t('cropDraw');
   }
 
   function updateCropStatus(idleKey = null) {
@@ -1693,6 +1722,7 @@ export function createArtworkApp({
 
   function enterCropFrame() {
     cropMode = 'frame';
+    cropBeforeState = captureEditorState();
     cropGesture = null;
     cropDrawStart = null;
     const existingCrop = artwork.crop;
@@ -1710,6 +1740,7 @@ export function createArtworkApp({
 
   function enterCropDraw() {
     cropMode = 'draw';
+    cropBeforeState = captureEditorState();
     cropGesture = null;
     cropDrawStart = null;
     cropPreview = null;
@@ -1724,39 +1755,66 @@ export function createArtworkApp({
   }
 
   function exitCropMode(commit) {
-    if (commit && cropPreview) {
-      artwork.crop = { ...cropPreview };
-      artwork.modified = true;
+    if (!cropMode) return false;
+    if (!commit || !isValidCrop(cropPreview)) {
+      resetCropInteraction();
+      render();
+      return false;
     }
-    cropMode = null;
-    cropPreview = null;
-    cropGesture = null;
-    cropDrawStart = null;
-    renderer.cropFrame = null;
-    renderer.drawRect = null;
-    svg.style.cursor = '';
-    updateCropButtons();
-    updateCropStatus();
-    controls.clearCrop.disabled = !artwork.crop;
-    render();
-    if (commit) scheduleSave();
+
+    const before = cropBeforeState || captureEditorState();
+    const previousCrop = before.artworks?.[activeArtworkIndex]?.artwork?.crop || null;
+    const nextCrop = {
+      x: Number(cropPreview.x),
+      y: Number(cropPreview.y),
+      width: Number(cropPreview.width),
+      height: Number(cropPreview.height),
+    };
+    const changed = !cropsEqual(previousCrop, nextCrop);
+    artwork.crop = nextCrop;
+    if (changed) artwork.modified = true;
+    resetCropInteraction();
+    if (changed) {
+      commitChange('Crop artwork', before);
+    } else {
+      render();
+    }
+    return changed;
   }
 
   function clearCrop() {
+    if (!artwork.crop && !cropMode) return;
+    const before = captureEditorState();
+    const hadCrop = Boolean(artwork.crop);
     artwork.crop = null;
-    cropMode = null;
-    cropPreview = null;
-    cropGesture = null;
-    cropDrawStart = null;
-    renderer.cropFrame = null;
-    renderer.drawRect = null;
-    svg.style.cursor = '';
-    updateCropButtons();
-    updateCropStatus();
-    controls.clearCrop.disabled = true;
-    render();
-    scheduleSave();
+    if (hadCrop) artwork.modified = true;
+    resetCropInteraction();
+    if (hadCrop) {
+      commitChange('Clear crop', before);
+    } else {
+      render();
+    }
   }
+
+  controls.cropFrameBtn.addEventListener('click', () => {
+    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
+    if (cropMode === 'frame') { exitCropMode(true); return; }
+    if (cropMode === 'draw') exitCropMode(true);
+    enterCropFrame();
+  });
+  controls.cropDrawBtn.addEventListener('click', () => {
+    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
+    if (cropMode === 'draw') { exitCropMode(true); return; }
+    if (cropMode === 'frame') exitCropMode(true);
+    enterCropDraw();
+  });
+  controls.clearCrop.addEventListener('click', clearCrop);
+  controls.constrainBtn.addEventListener('click', () => {
+    constrainProportions = !constrainProportions;
+    controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
+    controls.constrainBtn.textContent = constrainProportions ? '🔗' : '⛓️‍💥';
+    renderControls();
+  });
 
   controls.choose.addEventListener('click', () => input.click());
   controls.replace.addEventListener('click', () => {

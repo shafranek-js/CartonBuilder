@@ -74,7 +74,7 @@ describe('project schema', () => {
     expect(snapshot.artwork.centerXmm).toBe(75);
   });
 
-  it('migrates v2 snapshots to v3 without changing canonical artwork and box data', async () => {
+  it('migrates v2 snapshots through v4 without changing canonical artwork and box data', async () => {
     const { snapshot } = await createBundle();
     const v2 = migrateProjectSnapshot(snapshot);
     const canonical = {
@@ -87,8 +87,10 @@ describe('project schema', () => {
     v2.schemaVersion = 2;
     const migrated = migrateProjectSnapshot(v2);
 
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(migrated.render).toMatchObject({ presetId: 'clean-studio', longEdge: 2048 });
+    expect(migrated.render.effects).toMatchObject({ gtao: { enabled: true }, dof: { enabled: false } });
+    expect(migrated.render.boardAppearance).toBeUndefined();
     expect(migrated.box).toEqual(canonical.box);
     expect(migrated.artworks).toEqual(canonical.artworks);
     expect(migrated.history).toEqual(canonical.history);
