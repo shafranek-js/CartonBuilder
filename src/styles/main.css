@@ -2473,19 +2473,15 @@ dialog button {
   background: transparent;
   color: var(--muted-text, #808080);
   cursor: pointer;
+  font-size: 11px;
 }
 
 .chain-toggle:hover {
-  color: var(--text, #ffffff);
   background: var(--surface, #383838);
 }
 
 .chain-toggle[aria-pressed="false"] {
-  color: var(--accent, #4a9eff);
-}
-
-.chain-toggle[aria-pressed="true"] svg line {
-  stroke-width: 1.8;
+  opacity: 0.45;
 }
 
 /* Scale XY group */

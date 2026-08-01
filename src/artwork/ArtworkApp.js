@@ -526,6 +526,7 @@ export function createArtworkApp({
       controls.scaleY.value = '';
     }
     controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
+    controls.constrainBtn.textContent = constrainProportions ? '🔗' : '⛓️‍💥';
     controls.opacity.value = enabled ? Math.round(artwork.opacity * 100) : 100;
     controls.opacityValue.value = `${controls.opacity.value}%`;
     controls.bgOpacity.value = enabled ? Math.round(artwork.bgOpacity * 100) : 28;
@@ -1656,6 +1657,7 @@ export function createArtworkApp({
   controls.constrainBtn.addEventListener('click', () => {
     constrainProportions = !constrainProportions;
     controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
+    controls.constrainBtn.textContent = constrainProportions ? '🔗' : '⛓️‍💥';
     renderControls();
     if (!constrainProportions && artwork.hasArtwork) {
       controls.scaleX.value = round(artwork.scaleX * 100);
