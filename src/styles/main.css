@@ -2465,7 +2465,7 @@ dialog button {
   align-items: center;
   justify-content: center;
   width: 22px;
-  height: 18px;
+  height: 28px;
   padding: 0;
   margin: 2px auto;
   border: none;
@@ -2634,8 +2634,9 @@ dialog input {
   }
 
   .step span {
-    font-size: 11px;
-  }
+  font-size: 11px;
+  transform: rotate(90deg);
+}
 
   .artwork-sidebar {
     width: 240px;
