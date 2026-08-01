@@ -10,8 +10,9 @@ The current workflow is:
 1. **Create Box** — enter width, height and depth, then build a valid six-face net.
 2. **Place Artwork** — load PNG, JPEG, or one page of a PDF; move, scale, rotate,
    inspect effective DPI, and control fixed system layers.
-3. **Preview / Export** — switch between the clipped 2D proof and a folded 3D
-   carton, then export PNG, JPG, SVG dieline, or a physical-size PDF.
+3. **Preview** — inspect the clipped 2D proof and a folded technical 3D carton.
+4. **Render** — create a reproducible closed-carton presentation and export PNG
+   or JPG stills at 2048 or 4096 pixels on the long edge.
 
 All artwork processing happens in the browser. The application does not upload
 assets or project data to a server.
@@ -64,6 +65,8 @@ texture replacement.
   adapters. Heavy PDF code is loaded only when required.
 - `src/preview3d/` — lazy-loaded Three.js fold graph, procedural panel geometry,
   shared artwork texture, cameras, scene presets, picking, and GPU lifecycle.
+- `src/render/` — persisted presentation settings, Render scene descriptor,
+  separate WebGL presentation renderer, presets, and offscreen PNG/JPG export.
 - `src/ui/` — the existing box-net controller and renderer.
 - `src/i18n.js` — English/Russian runtime strings.
 - `src/diagnostics.js` — bounded local event history and explicit anonymized
@@ -77,6 +80,8 @@ of them is a second source of transform state.
 
 The detailed runtime contract is in
 [`docs/3. artwork-placement-runtime-specification.md`](docs/3.%20artwork-placement-runtime-specification.md).
+The presentation Render contract is in
+[`docs/9. render-runtime-specification.md`](docs/9.%20render-runtime-specification.md).
 
 ## Artwork and projects
 
@@ -127,6 +132,27 @@ off in Preview by default.
 - Three.js is downloaded only when 3D is first opened. WebGL 2 is required for
   3D, but not for 2D editing, project files, or export.
 
+## Presentation Render
+
+Render is intentionally separate from the technical Preview. It always starts
+with `foldProgress = 1`, owns its own Three.js scene, and never becomes a second
+source of artwork or box geometry. The artwork is composited in flat-net space,
+so crop, rotation, opacity, PDF-layer visibility, and layer order remain aligned
+with the 2D editor and Preview.
+
+The first raster release provides Clean Studio, Catalogue, Soft Grey, and
+Transparent presets; Front, Front-right, Front-left, Top-front, Isometric, and
+Custom cameras; Uncoated, Matte, and Gloss board profiles; 1:1, 4:3, 16:9, and
+3:4 frames; environment/light/shadow controls; transparent or solid backgrounds;
+and PNG/JPG still export at 2048 or 4096 pixels on the long edge. Export uses a
+fixed offscreen render target and does not depend on `preserveDrawingBuffer`.
+
+Render settings are part of project schema version 3 and are restored by
+IndexedDB autosave and `.carton` archives. GPU resources, progress, and renderer
+diagnostics remain transient. WebGL 2 is required for the presentation scene;
+when unavailable, the 2D editor, technical exports, and project files remain
+usable.
+
 ## Export
 
 - PNG: 300 DPI, transparent outside the panel union.
@@ -167,7 +193,9 @@ The transient 3D facade is available as
 `window.cartonBuilderApp.preview3d`. It exposes activation, fold progress,
 camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
-autosave and `.carton` version 1.
+autosave and `.carton`. Presentation state is available as
+`window.cartonBuilderApp.render`; its serializable settings are included in the
+schema v3 project snapshot.
 
 The existing events are unchanged:
 
@@ -176,13 +204,15 @@ The existing events are unchanged:
 
 ## Current limitations
 
-- The 3D view is a derived proof preview, not a second artwork editor or a
-  production render.
+- Technical Preview and Presentation Render are derived views, not second
+  artwork editors. Render output is an sRGB presentation image, not a CMYK,
+  ICC, Pantone, overprint, or certified print-proof workflow.
 - There are no flaps, bleed, safe area, material thickness, trapping, crop
   marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
   production validation, collision simulation, or free-angle rotation.
-- Camera position, fold progress, panel selection, and scene preset are not
-  persisted. 3D image export is not provided.
+- Presentation Render does not yet provide material thickness/edge solids,
+  collision simulation, GTAO/TAA, WebGPU, WebP, or path tracing. Technical PDF
+  and SVG exports remain separate from presentation rendering.
 - One artwork asset is supported; replacement is not part of undo history.
 - Touch workflows are out of scope. The target is desktop Chrome at
   approximately 1024×720 or larger, including 4K displays. WebGL 1 and

@@ -62,7 +62,13 @@ async function createFixture() {
       { artwork: second.artwork, visible: true },
     ],
     activeArtworkIndex: 0,
-    render: structuredClone(DEFAULT_RENDER_SETTINGS),
+    render: {
+      ...structuredClone(DEFAULT_RENDER_SETTINGS),
+      aspect: 'wide',
+      longEdge: 4096,
+      background: { mode: 'transparent', color: '#112233' },
+      lighting: { ...structuredClone(DEFAULT_RENDER_SETTINGS.lighting), environment: 'cool' },
+    },
     view: {},
     history: { undo: [], redo: [] },
   };

@@ -217,6 +217,7 @@ export class BoxScene {
     materialProfile = null,
     windowRef = window,
     onSelection = () => {},
+    onCameraChange = () => {},
     onContextLost = () => {},
     onContextRestored = () => {},
   }) {
@@ -225,6 +226,7 @@ export class BoxScene {
     this.boxModel = boxModel;
     this.windowRef = windowRef;
     this.onSelection = onSelection;
+    this.onCameraChange = onCameraChange;
     this.onContextLost = onContextLost;
     this.onContextRestored = onContextRestored;
     this.disposed = false;
@@ -240,6 +242,7 @@ export class BoxScene {
     this.panelObjects = new Map();
     this.pickMeshes = [];
     this.pointerStart = null;
+    this.suppressCameraChange = 0;
     this.environmentTexture = null;
     this.pmremGenerator = null;
 
@@ -295,7 +298,9 @@ export class BoxScene {
     this.cameraPreset = CAMERA_PRESETS[cameraPreset] ? cameraPreset : 'isometric';
     this.cameraFov = Math.max(10, Math.min(120, Number(cameraFov) || PERSPECTIVE_FOV));
     this.perspectiveCamera.fov = this.cameraFov;
-    if (backgroundColor) this.scene.background.set(backgroundColor);
+    // Transparent scenes intentionally keep `scene.background` null. Only
+    // update a solid scene's Color instance during initialization.
+    if (backgroundColor && this.scene.background) this.scene.background.set(backgroundColor);
 
     this.groundMaterial = new ShadowMaterial({ color: 0x1d2428, opacity: 0.25 });
     this.ground = new Mesh(new PlaneGeometry(1, 1), this.groundMaterial);
@@ -316,12 +321,14 @@ export class BoxScene {
     this.texture.anisotropy = Math.min(this.renderer.capabilities.getMaxAnisotropy(), 8);
     this.texture.needsUpdate = true;
 
+    this.suppressCameraChange += 1;
     this.buildBox();
     this.createControls();
     this.setScenePreset(this.scenePreset, { render: false });
     this.applyFold(foldProgress, { render: false });
     this.setSelectedPanel(selectedPanelId, { notify: false, render: false });
     this.resetView({ render: false });
+    this.suppressCameraChange -= 1;
 
     this.raycaster = new Raycaster();
     this.pointer = new Vector2();
@@ -454,7 +461,13 @@ export class BoxScene {
     this.controls.screenSpacePanning = true;
     this.controls.zoomToCursor = true;
     this.controls.listenToKeyEvents(this.canvas);
-    this.controls.addEventListener('change', () => this.render());
+    this.controls.addEventListener('change', () => {
+      this.render();
+      if (!this.suppressCameraChange) {
+        this.cameraPreset = 'custom';
+        this.onCameraChange(this.getCameraState());
+      }
+    });
   }
 
   applyFold(progress, { render = true } = {}) {
@@ -533,6 +546,8 @@ export class BoxScene {
 
   setCameraProjection(projection) {
     if (!CAMERA_PROJECTIONS.has(projection) || projection === this.cameraProjection) return;
+    this.suppressCameraChange += 1;
+    try {
     const oldCamera = this.camera;
     const target = this.controls.target.clone();
     const direction = oldCamera.position.clone().sub(target).normalize();
@@ -563,6 +578,9 @@ export class BoxScene {
     this.controls.target.copy(target);
     this.controls.update();
     this.render();
+    } finally {
+      this.suppressCameraChange -= 1;
+    }
   }
 
   setOrthographicHeight(height, aspectOverride = null) {
@@ -726,11 +744,16 @@ export class BoxScene {
   setCameraPreset(preset) {
     const direction = CAMERA_PRESETS[preset];
     if (!direction) return;
+    this.suppressCameraChange += 1;
+    try {
     this.cameraPreset = preset;
     const distance = this.camera.position.distanceTo(this.controls.target);
     this.camera.position.copy(this.controls.target).addScaledVector(direction, distance);
     this.controls.update();
     this.render();
+    } finally {
+      this.suppressCameraChange -= 1;
+    }
   }
 
   setBackgroundColor(color) {
@@ -781,6 +804,9 @@ export class BoxScene {
   }
 
   setCameraState(state = {}) {
+    this.suppressCameraChange += 1;
+    try {
+    if (state.preset === 'custom' || CAMERA_PRESETS[state.preset]) this.cameraPreset = state.preset;
     if (CAMERA_PROJECTIONS.has(state.projection) && state.projection !== this.cameraProjection) {
       this.setCameraProjection(state.projection);
     }
@@ -795,6 +821,9 @@ export class BoxScene {
     this.camera.updateProjectionMatrix();
     this.controls.update();
     this.render();
+    } finally {
+      this.suppressCameraChange -= 1;
+    }
   }
 
   async renderToPixels({ width, height, backgroundMode = this.backgroundMode, backgroundColor = this.backgroundColor, includeShadow = true, signal }) {
@@ -805,6 +834,7 @@ export class BoxScene {
       depthBuffer: true,
       stencilBuffer: false,
     });
+    target.texture.colorSpace = SRGBColorSpace;
     const previousSize = this.renderer.getSize(new Vector2());
     const previousTarget = this.renderer.getRenderTarget();
     const previousBackgroundMode = this.backgroundMode;
@@ -947,10 +977,11 @@ export class BoxScene {
     if (render) this.render();
   }
 
-  resize({ render = true } = {}) {
+  resize({ render = true, width: requestedWidth, height: requestedHeight, pixelRatio } = {}) {
     if (this.disposed) return;
-    const width = Math.max(1, this.container.clientWidth);
-    const height = Math.max(1, this.container.clientHeight);
+    const width = Math.max(1, Number(requestedWidth) || this.container.clientWidth);
+    const height = Math.max(1, Number(requestedHeight) || this.container.clientHeight);
+    if (Number.isFinite(pixelRatio) && pixelRatio > 0) this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
     this.perspectiveCamera.aspect = width / height;
     this.perspectiveCamera.updateProjectionMatrix();

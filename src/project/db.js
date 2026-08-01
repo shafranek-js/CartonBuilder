@@ -1,11 +1,12 @@
 import { openDB } from 'idb';
 
 const DATABASE_NAME = 'carton-builder';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 
 export const PROJECTS_STORE = 'projects';
 export const PRESETS_STORE = 'presets';
 export const SCENE_PRESETS_STORE = 'scenePresets';
+export const RENDER_PRESETS_STORE = 'renderPresets';
 
 let databasePromise = null;
 
@@ -21,6 +22,9 @@ export function getDatabase() {
         }
         if (!database.objectStoreNames.contains(SCENE_PRESETS_STORE)) {
           database.createObjectStore(SCENE_PRESETS_STORE, { keyPath: 'id' });
+        }
+        if (!database.objectStoreNames.contains(RENDER_PRESETS_STORE)) {
+          database.createObjectStore(RENDER_PRESETS_STORE, { keyPath: 'id' });
         }
       },
     });

@@ -4,7 +4,7 @@ import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 3;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 4;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -35,6 +35,16 @@ MIGRATIONS.set(2, (snapshot) => {
       return { ...entry, artwork };
     });
   }
+  return migrated;
+});
+
+MIGRATIONS.set(3, (snapshot) => {
+  const migrated = { ...snapshot };
+  migrated.schemaVersion = 4;
+  migrated.render = sanitizeRenderSettings({
+    ...snapshot.render,
+    effects: snapshot.render?.effects,
+  });
   return migrated;
 });
 
