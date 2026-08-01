@@ -401,14 +401,7 @@
 
       <section class="workflow-step preview-step" id="previewStep" hidden>
         <div class="preview-toolbar">
-          <div class="preview-mode-tabs" role="tablist" aria-label="Preview mode" data-i18n-aria-label="previewModeLabel">
-            <button id="previewMode2d" type="button" role="tab" aria-selected="true" aria-controls="preview2dPanel" data-i18n="preview2d">2D Preview</button>
-            <button id="previewMode3d" type="button" role="tab" aria-selected="false" aria-controls="preview3dPanel" tabindex="-1" data-i18n="preview3d">3D Preview</button>
-          </div>
-          <div class="preview-view-controls" id="preview2dControls">
-            <label><input type="checkbox" id="previewDieline" checked> <span data-i18n="showDieline">Show dieline</span></label>
-          </div>
-          <div class="preview-view-controls preview-3d-controls" id="preview3dControls" hidden>
+          <div class="preview-view-controls preview-3d-controls">
             <button id="open3dButton" type="button" data-i18n="open3d">Open</button>
             <label class="fold-control">
               <span class="sr-only" data-i18n="foldProgress3d">Open to folded</span>
@@ -435,10 +428,7 @@
           </div>
           <span class="preview-warning" id="previewWarning" role="status" aria-live="polite"></span>
         </div>
-        <div class="preview-canvas-wrap checkerboard" id="preview2dPanel" role="tabpanel" aria-labelledby="previewMode2d">
-          <svg id="previewWorkspace" role="img" aria-label="Clipped artwork preview" data-i18n-aria-label="clippedPreviewLabel"></svg>
-        </div>
-        <div class="preview-canvas-wrap preview-3d-panel" id="preview3dPanel" role="tabpanel" aria-labelledby="previewMode3d" aria-busy="false" hidden>
+        <div class="preview-canvas-wrap preview-3d-panel" id="preview3dPanel" aria-busy="false">
           <canvas id="preview3dCanvas" role="img" tabindex="0" aria-label="Interactive folded carton preview" data-i18n-aria-label="preview3dCanvasLabel"></canvas>
           <div class="preview-3d-busy" id="preview3dBusy" role="status" aria-live="polite" hidden>
             <span class="spinner" aria-hidden="true"></span>
@@ -448,7 +438,6 @@
             <strong id="preview3dRecoveryMessage" data-i18n="webglUnavailable3d">3D preview is unavailable in this browser.</strong>
             <div>
               <button id="retry3dButton" type="button" data-i18n="retry3d">Retry 3D</button>
-              <button id="return2dButton" type="button" data-i18n="return2d">Return to 2D</button>
             </div>
           </div>
           <aside class="preview-3d-inspector" id="preview3dInspector" aria-live="polite" hidden>
@@ -461,10 +450,6 @@
         <footer class="app-footer preview-footer">
           <button class="footer-button" id="backToArtworkButton" type="button" data-i18n="backToEdit">Back to edit</button>
           <div class="footer-spacer"></div>
-          <button class="footer-button" id="exportPngButton" type="button" data-i18n="exportPng">Export PNG</button>
-          <button class="footer-button" id="exportJpgButton" type="button" data-i18n="exportJpg">Export JPG</button>
-          <button class="footer-button" id="exportSvgButton" type="button" data-i18n="dielineSvg">Dieline SVG</button>
-          <button class="footer-button continue-button" id="exportPdfButton" type="button" data-i18n="exportPdf">Export PDF</button>
         </footer>
       </section>
 

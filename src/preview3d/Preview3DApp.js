@@ -45,11 +45,6 @@ export function createPreview3DApp({
   onModeChange = () => {},
 }) {
   const elements = {
-    tab2d: documentRef.getElementById('previewMode2d'),
-    tab3d: documentRef.getElementById('previewMode3d'),
-    controls2d: documentRef.getElementById('preview2dControls'),
-    controls3d: documentRef.getElementById('preview3dControls'),
-    panel2d: documentRef.getElementById('preview2dPanel'),
     panel3d: documentRef.getElementById('preview3dPanel'),
     canvas: documentRef.getElementById('preview3dCanvas'),
     foldSlider: documentRef.getElementById('foldProgress'),
@@ -67,7 +62,6 @@ export function createPreview3DApp({
     recovery: documentRef.getElementById('preview3dRecovery'),
     recoveryMessage: documentRef.getElementById('preview3dRecoveryMessage'),
     retry: documentRef.getElementById('retry3dButton'),
-    return2d: documentRef.getElementById('return2dButton'),
   };
 
   let state = cloneState(DEFAULT_STATE);
@@ -121,14 +115,6 @@ export function createPreview3DApp({
   }
 
   function updateModeDom() {
-    elements.tab2d.setAttribute('aria-selected', String(!state.active));
-    elements.tab3d.setAttribute('aria-selected', String(state.active));
-    elements.tab2d.tabIndex = state.active ? -1 : 0;
-    elements.tab3d.tabIndex = state.active ? 0 : -1;
-    elements.controls2d.hidden = state.active;
-    elements.controls3d.hidden = !state.active;
-    elements.panel2d.hidden = state.active;
-    elements.panel3d.hidden = !state.active;
     onModeChange(state.active);
   }
 
@@ -145,7 +131,6 @@ export function createPreview3DApp({
     elements.panel3d.setAttribute('aria-busy', String(value));
     elements.busy.hidden = !value;
   }
-
   function hideRecovery() {
     elements.recovery.hidden = true;
     lastRecoveryKey = '';
@@ -360,8 +345,6 @@ export function createPreview3DApp({
     updateControls();
   }
 
-  listen(elements.tab2d, 'click', deactivate);
-  listen(elements.tab3d, 'click', () => activate());
   listen(elements.open, 'click', () => animateFold(0));
   listen(elements.fold, 'click', () => animateFold(1));
   listen(elements.reset, 'click', resetView);
@@ -370,7 +353,6 @@ export function createPreview3DApp({
   listen(elements.camera, 'change', (event) => setCameraProjection(event.target.value));
   listen(elements.preset, 'change', (event) => setScenePreset(event.target.value));
   listen(elements.retry, 'click', () => syncScene({ force: true }));
-  listen(elements.return2d, 'click', deactivate);
   listen(elements.canvas, 'keydown', (event) => {
     if (event.key !== 'Escape') return;
     event.preventDefault();
@@ -384,8 +366,7 @@ export function createPreview3DApp({
   updateModeDom();
   updateControls();
 
-  return {
-    activate,
+  return {    activate,
     deactivate,
     suspend,
     setFoldProgress,

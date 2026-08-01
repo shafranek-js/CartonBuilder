@@ -7,6 +7,7 @@ export function createEditMenu({
   onRedo = () => {},
   onReplaceArtwork = () => {},
   onRemoveArtwork = () => {},
+  onOpen = () => {},
   windowRef = window,
   documentRef = document,
 }) {
@@ -63,6 +64,7 @@ export function createEditMenu({
 
   triggerButton.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!isOpen) onOpen();
     togglePopover();
   });
 

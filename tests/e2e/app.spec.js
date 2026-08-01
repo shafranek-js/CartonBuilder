@@ -26,6 +26,14 @@ async function buildReferenceNet(page) {
   await activate(page, 'Add Right Panel to the right edge of Back Panel');
 }
 
+async function openMenuExport(page, group, buttonSelector) {
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await page.locator('#menuExportItem').hover();
+  const groupIndex = group === '3d' ? 1 : 0;
+  await page.locator('#menuExportItem > .file-menu-submenu > .file-menu-submenu-anchor').nth(groupIndex).hover();
+  return page.locator(buttonSelector);
+}
+
 async function openArtworkStep(page) {
   await buildReferenceNet(page);
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -76,6 +84,23 @@ test.beforeEach(async ({ page }) => {
       request.onerror = resolve;
     });
   });
+});
+
+test('opening one top menu closes the other', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForTimeout(1200);
+
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await expect(page.locator('#fileMenuPopover')).toBeVisible();
+  await expect(page.locator('#editMenuPopover')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#editMenuPopover')).toBeVisible();
+  await expect(page.locator('#fileMenuPopover')).toBeHidden();
+
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await expect(page.locator('#fileMenuPopover')).toBeVisible();
+  await expect(page.locator('#editMenuPopover')).toBeHidden();
 });
 
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
@@ -142,16 +167,16 @@ test('completes the three-step artwork workflow and exports every deliverable', 
 
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(page.locator('#previewStep')).toBeVisible();
-  await expect(page.locator('#previewWorkspace image.artwork-image')).toHaveCount(1);
+  await expect(page.locator('#preview3dPanel')).toBeVisible();
 
   const svgDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Dieline SVG' }).click();
+  await (await openMenuExport(page, '2d', '#menuExportSvgBtn')).click();
   const svg = await svgDownload;
   expect(svg.suggestedFilename()).toBe('box-net-150x90x40mm.svg');
   expect((await readFile(await svg.path(), 'utf8')).match(/<rect /g)).toHaveLength(6);
 
   const pngDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export PNG' }).click();
+  await (await openMenuExport(page, '2d', '#menuExportPngBtn')).click();
   const png = await pngDownload;
   expect(png.suggestedFilename()).toBe('carton-artwork-preview.png');
   expect((await readFile(await png.path())).subarray(0, 8)).toEqual(
@@ -159,7 +184,7 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   );
 
   const pdfDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export PDF' }).click();
+  await (await openMenuExport(page, '2d', '#menuExportPdfBtn')).click();
   const pdf = await pdfDownload;
   expect(pdf.suggestedFilename()).toBe('carton-artwork.pdf');
   expect((await readFile(await pdf.path(), 'utf8')).slice(0, 5)).toBe('%PDF-');
@@ -289,7 +314,7 @@ test('handles invalid and multi-file input, PDF page selection and rotated vecto
 
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export PDF' }).click();
+  await (await openMenuExport(page, '2d', '#menuExportPdfBtn')).click();
   const downloaded = await downloadPromise;
   const exported = await PDFDocument.load(await readFile(await downloaded.path()));
   const exportedPage = exported.getPage(0);

@@ -75,7 +75,6 @@ export function createArtworkApp({
     highlights: true,
   };
   const svg = documentRef.getElementById('artworkWorkspace');
-  const previewSvg = documentRef.getElementById('previewWorkspace');
   const canvasWrap = documentRef.getElementById('artworkCanvasWrap');
   const dropState = documentRef.getElementById('dropState');
   const input = documentRef.getElementById('artworkFileInput');
@@ -218,7 +217,6 @@ export function createArtworkApp({
 
   const renderer = new ArtworkRenderer({
     svg,
-    previewSvg,
     model: boxModel,
     artwork,
     viewport,
@@ -886,7 +884,6 @@ export function createArtworkApp({
 
   documentRef.getElementById('backToBoxButton').addEventListener('click', onBack);
   controls.preview.addEventListener('click', () => {
-    renderer.renderPreview(documentRef.getElementById('previewDieline').checked);
     onPreview(getExportWarnings(boxModel, artwork, t));
   });
   documentRef.getElementById('backToArtworkButton').addEventListener('click', () => {
@@ -912,10 +909,6 @@ export function createArtworkApp({
         render();
       }
     });
-  });
-
-  documentRef.getElementById('previewDieline').addEventListener('change', (event) => {
-    renderer.renderPreview(event.target.checked);
   });
 
   async function saveProjectArchive() {
@@ -963,104 +956,66 @@ export function createArtworkApp({
     }
   });
 
-  documentRef.getElementById('exportSvgButton').addEventListener('click', async () => {
+  async function exportDeliverable(type) {
     try {
       clearError();
-      await saveOrDownloadFile({
-        blob: new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' }),
-        suggestedName: getExportFilename(boxModel.dimensions),
-        types: [
-          {
-            description: 'Scalable Vector Graphics (*.svg)',
-            accept: { 'image/svg+xml': ['.svg'] },
-          },
-        ],
-        windowRef,
-        documentRef,
-      });
+      let blob;
+      let suggestedName;
+      let types;
+      let fallback = 'unexpectedError';
+
+      if (type === 'svg') {
+        blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
+        suggestedName = getExportFilename(boxModel.dimensions);
+        types = [{
+          description: 'Scalable Vector Graphics (*.svg)',
+          accept: { 'image/svg+xml': ['.svg'] },
+        }];
+      } else if (type === 'png' || type === 'jpg') {
+        const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
+        const { createPreviewBlob } = await import('../export/artworkExport.js');
+        blob = await createPreviewBlob({
+          boxModel,
+          artwork,
+          originalBlob,
+          previewBlob,
+          type: mimeType,
+        });
+        suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
+        types = type === 'png'
+          ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
+          : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
+        fallback = type === 'png' ? 'exportPngFailed' : 'exportJpgFailed';
+      } else if (type === 'pdf') {
+        const { createPdfExport } = await import('../export/artworkExport.js');
+        blob = await createPdfExport({ boxModel, artwork, originalBlob, previewBlob });
+        suggestedName = 'carton-artwork.pdf';
+        types = [{
+          description: 'PDF Document (*.pdf)',
+          accept: { 'application/pdf': ['.pdf'] },
+        }];
+        fallback = 'exportPdfFailed';
+      } else if (type === 'html') {
+        const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
+        blob = await createInteractive3dHtml({ boxModel, artwork, previewBlob, documentRef });
+        suggestedName = 'carton-3d.html';
+        types = [{
+          description: 'Interactive 3D HTML (*.html)',
+          accept: { 'text/html': ['.html'] },
+        }];
+        fallback = 'exportPdfFailed';
+      } else {
+        return false;
+      }
+
+      await saveOrDownloadFile({ blob, suggestedName, types, windowRef, documentRef });
+      return true;
     } catch (error) {
       console.error(error);
-      showError(error, 'unexpectedError');
+      showError(error, fallback);
+      return false;
     }
-  });
-  documentRef.getElementById('exportPngButton').addEventListener('click', async () => {
-    try {
-      clearError();
-      const { createPreviewBlob } = await import('../export/artworkExport.js');
-      const blob = await createPreviewBlob({
-        boxModel,
-        artwork,
-        originalBlob,
-        previewBlob,
-        type: 'image/png',
-      });
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: 'carton-artwork-preview.png',
-        types: [
-          {
-            description: 'PNG Image (*.png)',
-            accept: { 'image/png': ['.png'] },
-          },
-        ],
-        windowRef,
-        documentRef,
-      });
-    } catch (error) {
-      console.error(error);
-      showError(error, 'exportPngFailed');
-    }
-  });
-  documentRef.getElementById('exportJpgButton').addEventListener('click', async () => {
-    try {
-      clearError();
-      const { createPreviewBlob } = await import('../export/artworkExport.js');
-      const blob = await createPreviewBlob({
-        boxModel,
-        artwork,
-        originalBlob,
-        previewBlob,
-        type: 'image/jpeg',
-      });
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: 'carton-artwork-preview.jpg',
-        types: [
-          {
-            description: 'JPEG Image (*.jpg)',
-            accept: { 'image/jpeg': ['.jpg', '.jpeg'] },
-          },
-        ],
-        windowRef,
-        documentRef,
-      });
-    } catch (error) {
-      console.error(error);
-      showError(error, 'exportJpgFailed');
-    }
-  });
-  documentRef.getElementById('exportPdfButton').addEventListener('click', async () => {
-    try {
-      clearError();
-      const { createPdfExport } = await import('../export/artworkExport.js');
-      const blob = await createPdfExport({ boxModel, artwork, originalBlob, previewBlob });
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: 'carton-artwork.pdf',
-        types: [
-          {
-            description: 'PDF Document (*.pdf)',
-            accept: { 'application/pdf': ['.pdf'] },
-          },
-        ],
-        windowRef,
-        documentRef,
-      });
-    } catch (error) {
-      console.error(error);
-      showError(error, 'exportPdfFailed');
-    }
-  });
+  }
 
   function restoreProject({ snapshot, originalBlob: sourceBlob, previewBlob: storedPreview }) {
     boxApp.loadState(snapshot.box);
@@ -1189,7 +1144,6 @@ export function createArtworkApp({
     layerLocks,
     render,
     fitToScreen: () => renderer.fitToScreen(),
-    renderPreview: () => renderer.renderPreview(documentRef.getElementById('previewDieline').checked),
     createSnapshot,
     saveProjectArchive,
     persistWorkflowStep,
@@ -1200,6 +1154,7 @@ export function createArtworkApp({
     get originalBlob() { return originalBlob; },
     get previewBlob() { return previewBlob; },
     hasModifiedArtwork: () => artwork.hasArtwork && artwork.modified,
+    exportDeliverable,
     resetPlacementForNewDimensions() {
       if (!artwork.hasArtwork) return;
       artwork.fitDieline(boxModel.getBounds(), { setInitial: true });

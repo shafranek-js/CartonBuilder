@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import os from 'node:os';
+import path from 'node:path';
+import url from 'node:url';
 
 async function activate(page, label) {
   const action = page.getByRole('button', { name: label, exact: true });
@@ -61,7 +64,9 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
   });
   await page.goto('/');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openPreview(page);
+  await buildReferenceNet(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await loadGeneratedPng(page);
 
   expect(preview3dRequests).toHaveLength(0);
   const canonicalBefore = await page.evaluate(() => ({
@@ -69,7 +74,8 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
     artwork: window.cartonBuilderApp.artwork.artwork.toJSON(),
   }));
 
-  await page.getByRole('tab', { name: '3D Preview' }).click();
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dPanel')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
   await expect(page.locator('#preview3dRecovery')).toBeHidden();
@@ -146,13 +152,11 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
   }));
   expect(canonicalAfter).toEqual(canonicalBefore);
 
-  await page.getByRole('tab', { name: '2D Preview' }).click();
-  await expect(page.locator('#preview2dPanel')).toBeVisible();
-  await expect(page.locator('#preview3dPanel')).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await expect(page.locator('#menuExportItem')).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.locator('#localePicker').selectOption('ru');
-  await expect(page.getByRole('tab', { name: '3D-просмотр' })).toBeVisible();
   await expect(page.locator('#preview3dCanvas')).toHaveAttribute(
     'aria-label',
     'Интерактивный 3D-просмотр собранной коробки',
@@ -162,7 +166,7 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
   await expect(page.locator('#previewStep')).toBeVisible();
   expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState()))
     .toMatchObject({
-      active: false,
+      active: true,
       foldProgress: 1,
       cameraProjection: 'perspective',
       scenePreset: 'studio',
@@ -172,7 +176,6 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
 test('updates the texture after repeated artwork replacement without resource growth', async ({ page }) => {
   await page.goto('/');
   await openPreview(page);
-  await page.getByRole('tab', { name: '3D Preview' }).click();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
   await expect.poll(
     () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo().panels),
@@ -197,7 +200,7 @@ test('updates the texture after repeated artwork replacement without resource gr
   expect(finalResources.textures).toBeLessThanOrEqual(initialResources.textures);
 });
 
-test('keeps 2D preview and exports available when WebGL 2 is unavailable', async ({ page }) => {
+test('keeps exports available when WebGL 2 is unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     const getContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function patchedContext(type, ...args) {
@@ -207,14 +210,22 @@ test('keeps 2D preview and exports available when WebGL 2 is unavailable', async
   });
   await page.goto('/');
   await openPreview(page);
-  await page.getByRole('tab', { name: '3D Preview' }).click();
 
   await expect(page.locator('#preview3dRecovery')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('#preview3dRecovery')).toContainText('requires WebGL 2');
-  await page.getByRole('button', { name: 'Return to 2D' }).click();
-  await expect(page.locator('#preview2dPanel')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Export PNG' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await expect(page.locator('#menuExportItem')).toBeVisible();
+  await page.locator('#menuExportItem').hover();
+  await expect(page.locator('#menuExportItem > .file-menu-submenu')).toBeVisible();
+  await expect(page.getByText('Export 2D', { exact: true })).toBeVisible();
+  await expect(page.getByText('Export 3D', { exact: true })).toBeVisible();
+  await page.locator('#menuExportItem > .file-menu-submenu > .file-menu-submenu-anchor').nth(0).hover();
+  await expect(page.locator('#menuExportPngBtn')).toBeVisible();
+  await expect(page.locator('#menuExportPdfBtn')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Back to edit' }).click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
 });
 
 test.describe('high-DPI 3D rendering', () => {
@@ -222,11 +233,9 @@ test.describe('high-DPI 3D rendering', () => {
     viewport: { width: 1024, height: 720 },
     deviceScaleFactor: 2,
   });
-
   test('caps the drawing buffer at DPR 2 and keeps the controls usable', async ({ page }) => {
     await page.goto('/');
     await openPreview(page);
-    await page.getByRole('tab', { name: '3D Preview' }).click();
     await expect.poll(
       () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo().panels),
     ).toBe(6);
@@ -242,4 +251,56 @@ test.describe('high-DPI 3D rendering', () => {
     await expect(page.getByRole('button', { name: 'Reset View' })).toBeVisible();
     await expect(page.locator('#foldProgress')).toBeVisible();
   });
+});
+
+test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
+  await page.goto('/');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openPreview(page);
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
+  });
+
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await page.locator('#menuExportItem').hover();
+  await page.locator('#menuExportItem > .file-menu-submenu > .file-menu-submenu-anchor').nth(1).hover();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#menuExport3dHtmlBtn').click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('carton-3d.html');
+
+  const stream = await download.createReadStream();
+  let content = '';
+  for await (const chunk of stream) content += chunk.toString('utf8');
+  expect(content).toContain('<!doctype html>');
+  expect(content).toContain('import * as THREE from \'data:text/javascript;base64,');
+  expect(content).toContain('"rootId":"front"');
+  expect(content).toContain('data:image/png;base64,');
+  expect(content).toContain('id="viewer"');
+
+  const viewerPage = await page.context().newPage();
+  const errors = [];
+  viewerPage.on('pageerror', (error) => errors.push(error.message));
+  const savedPath = path.join(os.tmpdir(), `carton-3d-${Date.now()}.html`);
+  await download.saveAs(savedPath);
+  await viewerPage.goto(url.pathToFileURL(savedPath).href);
+  await expect.poll(() => viewerPage.evaluate(async () => {
+    const canvas = document.getElementById('viewer');
+    if (!canvas) return false;
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    const context = probe.getContext('2d');
+    context.drawImage(canvas, 0, 0);
+    const data = context.getImageData(0, 0, probe.width, probe.height).data;
+    for (let i = 0; i < data.length; i += 40) {
+      if (data[i] !== data[i + 1] || data[i] !== data[i + 2]) return true;
+    }
+    return false;
+  })).toBe(true);
+  expect(errors).toEqual([]);
+  await viewerPage.close();
 });

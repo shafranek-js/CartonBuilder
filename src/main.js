@@ -131,25 +131,31 @@ const handleRemoveArtwork = () => {
   }
 };
 
+let fileMenu = null;
+let editMenu = null;
+
 if (fileMenuTriggerBtn && fileMenuPopover) {
-  createFileMenu({
+  fileMenu = createFileMenu({
     triggerButton: fileMenuTriggerBtn,
     popoverContainer: fileMenuPopover,
     onNewProject: handleNewProject,
     onOpenProject: handleOpenProject,
     onSaveProject: handleSaveProject,
     onPlaceArtwork: handlePlaceArtwork,
+    onExport: (type) => artworkApp?.exportDeliverable?.(type),
+    onOpen: () => editMenu?.togglePopover(false),
   });
 }
 
 if (editMenuTriggerBtn && editMenuPopover) {
-  createEditMenu({
+  editMenu = createEditMenu({
     triggerButton: editMenuTriggerBtn,
     popoverContainer: editMenuPopover,
     onUndo: handleUndo,
     onRedo: handleRedo,
     onReplaceArtwork: handlePlaceArtwork,
     onRemoveArtwork: handleRemoveArtwork,
+    onOpen: () => fileMenu?.togglePopover(false),
   });
 }
 
@@ -252,8 +258,7 @@ function showStep(step) {
     requestAnimationFrame(() => artworkApp?.render());
   } else if (step === 'preview') {
     requestAnimationFrame(() => {
-      artworkApp?.renderPreview();
-      preview3dFacade?.resume();
+      preview3dFacade?.activate();
     });
   } else {
     preview3dFacade?.suspend();

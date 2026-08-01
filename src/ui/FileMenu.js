@@ -8,6 +8,8 @@ export function createFileMenu({
   onOpenProject = () => {},
   onSaveProject = () => {},
   onPlaceArtwork = () => {},
+  onExport = () => {},
+  onOpen = () => {},
   showToast = () => {},
   windowRef = window,
   documentRef = document,
@@ -21,6 +23,13 @@ export function createFileMenu({
     if (isOpen) {
       renderContent();
     }
+  }
+
+  function bindExportButton(selector, type) {
+    popoverContainer.querySelector(selector)?.addEventListener('click', () => {
+      togglePopover(false);
+      onExport(type);
+    });
   }
 
   function renderContent() {
@@ -42,6 +51,40 @@ export function createFileMenu({
         <span class="file-menu-item-title">${t('placeArtworkMenu') || 'Place Artwork...'}</span>
         <span class="file-menu-shortcut">Shift+Ctrl+P</span>
       </button>
+      <div class="file-menu-divider"></div>
+      <div class="file-menu-item file-menu-submenu-anchor" id="menuExportItem">
+        <span class="file-menu-item-title">${t('exportMenu') || 'Export'}</span>
+        <span class="file-menu-submenu-caret">▸</span>
+        <div class="file-menu-submenu">
+          <div class="file-menu-item file-menu-submenu-anchor">
+            <span class="file-menu-item-title">${t('export2d') || 'Export 2D'}</span>
+            <span class="file-menu-submenu-caret">▸</span>
+            <div class="file-menu-submenu">
+              <button type="button" class="file-menu-item" id="menuExportPngBtn">
+                <span class="file-menu-item-title">${t('exportPng') || 'Export PNG'}</span>
+              </button>
+              <button type="button" class="file-menu-item" id="menuExportJpgBtn">
+                <span class="file-menu-item-title">${t('exportJpg') || 'Export JPG'}</span>
+              </button>
+              <button type="button" class="file-menu-item" id="menuExportSvgBtn">
+                <span class="file-menu-item-title">${t('dielineSvg') || 'Dieline SVG'}</span>
+              </button>
+              <button type="button" class="file-menu-item" id="menuExportPdfBtn">
+                <span class="file-menu-item-title">${t('exportPdf') || 'Export PDF'}</span>
+              </button>
+            </div>
+          </div>
+          <div class="file-menu-item file-menu-submenu-anchor">
+            <span class="file-menu-item-title">${t('export3d') || 'Export 3D'}</span>
+            <span class="file-menu-submenu-caret">▸</span>
+            <div class="file-menu-submenu">
+              <button type="button" class="file-menu-item" id="menuExport3dHtmlBtn">
+                <span class="file-menu-item-title">${t('export3dHtml') || 'Export HTML'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
 
     popoverContainer.querySelector('#menuNewProjectBtn')?.addEventListener('click', () => {
@@ -63,10 +106,17 @@ export function createFileMenu({
       togglePopover(false);
       onPlaceArtwork();
     });
+
+    bindExportButton('#menuExportPngBtn', 'png');
+    bindExportButton('#menuExportJpgBtn', 'jpg');
+    bindExportButton('#menuExportSvgBtn', 'svg');
+    bindExportButton('#menuExportPdfBtn', 'pdf');
+    bindExportButton('#menuExport3dHtmlBtn', 'html');
   }
 
   triggerButton.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!isOpen) onOpen();
     togglePopover();
   });
 

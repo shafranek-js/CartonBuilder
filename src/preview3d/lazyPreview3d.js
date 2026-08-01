@@ -9,12 +9,10 @@ const INITIAL_STATE = Object.freeze({
 
 export function createLazyPreview3DFacade({
   getOptions,
-  documentRef = document,
 }) {
   let controller = null;
   let loadPromise = null;
   let disposed = false;
-  const initialTab = documentRef.getElementById('previewMode3d');
 
   async function ensureController() {
     if (disposed) return null;
@@ -24,7 +22,6 @@ export function createLazyPreview3DFacade({
         .then(({ createPreview3DApp }) => {
           if (disposed) return null;
           controller = createPreview3DApp(getOptions());
-          initialTab.removeEventListener('click', onInitialActivate);
           return controller;
         })
         .catch((error) => {
@@ -34,11 +31,6 @@ export function createLazyPreview3DFacade({
     }
     return loadPromise;
   }
-
-  function onInitialActivate() {
-    facade.activate();
-  }
-  initialTab.addEventListener('click', onInitialActivate);
 
   const facade = {
     async activate() {
@@ -89,7 +81,6 @@ export function createLazyPreview3DFacade({
     dispose() {
       if (disposed) return;
       disposed = true;
-      initialTab.removeEventListener('click', onInitialActivate);
       controller?.dispose();
       controller = null;
       loadPromise = null;

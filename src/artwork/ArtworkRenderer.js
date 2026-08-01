@@ -114,7 +114,6 @@ function appendSelection(documentRef, parent, artwork, onPointerStart, handleSiz
 export class ArtworkRenderer {
   constructor({
     svg,
-    previewSvg,
     model,
     artwork,
     viewport,
@@ -122,7 +121,6 @@ export class ArtworkRenderer {
     onPointerStart,
   }) {
     this.svg = svg;
-    this.previewSvg = previewSvg;
     this.model = model;
     this.artwork = artwork;
     this.viewport = viewport;
@@ -176,22 +174,6 @@ export class ArtworkRenderer {
       showNames: this.layers.names,
       showHighlights: this.layers.highlights,
       showArtwork: this.layers.artwork,
-    });
-  }
-
-  renderPreview(showDieline = true) {
-    const bounds = this.model.getBounds();
-    const padding = Math.max(4, Math.max(bounds.width, bounds.height) * 0.035);
-    this.previewSvg.setAttribute(
-      'viewBox',
-      `${bounds.minX - padding} ${bounds.minY - padding} ${bounds.width + padding * 2} ${bounds.height + padding * 2}`,
-    );
-    this.renderScene(this.previewSvg, {
-      preview: true,
-      showDieline,
-      showNames: false,
-      showHighlights: false,
-      showArtwork: true,
     });
   }
 
