@@ -1,5 +1,6 @@
 import threeCoreSource from '../../node_modules/three/build/three.core.min.js?raw';
 import threeModuleSource from '../../node_modules/three/build/three.module.min.js?raw';
+import roomEnvironmentSource from '../../node_modules/three/examples/jsm/environments/RoomEnvironment.js?raw';
 
 import { buildFoldGraph } from '../preview3d/foldGraph.js';
 import { composeArtworkTexture } from '../preview3d/textureComposer.js';
@@ -14,21 +15,33 @@ const VIEWER_SCRIPT = `
   const openButton = document.getElementById('open');
   const closeButton = document.getElementById('close');
   const resetButton = document.getElementById('reset');
+  const bgColorInput = document.getElementById('bgColor');
 
   const nodes = new Map(DATA.nodes.map((node) => [node.id, node]));
 
   let foldProgress = 1;
   let animationFrame = null;
 
+  const DEFAULT_BACKGROUND = '#e8e8e8';
+
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x23262a);
+  scene.background = new THREE.Color(DEFAULT_BACKGROUND);
+
+  function applyBackground(color) {
+    scene.background = new THREE.Color(color);
+    document.body.style.background = color;
+    canvas.style.background = color;
+  }
+
+  bgColorInput.value = DEFAULT_BACKGROUND;
+  applyBackground(DEFAULT_BACKGROUND);
+  bgColorInput.addEventListener('input', () => applyBackground(bgColorInput.value));
 
   let projection = 'perspective';
   let camera;
   let renderer;
 
-  const radiusBase = Math.max(DATA.bounds.width, DATA.bounds.height, DATA.bounds.depth || 1);
-  let radius = radiusBase * 1.5;
+  let radius = 300;
   let theta = 0.65;
   let phi = 1.15;
   const target = new THREE.Vector3(0, 0, 0);
@@ -37,16 +50,26 @@ const VIEWER_SCRIPT = `
   textureImage.src = DATA.texture;
   const texture = new THREE.Texture(textureImage);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   textureImage.onload = () => { texture.needsUpdate = true; };
+  textureImage.onerror = () => { console.error('texture failed to load'); };
 
-  const frontMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.FrontSide });
-  const backMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.FrontSide });
-  const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x14171a });
-  const foldMaterial = new THREE.LineBasicMaterial({ color: 0x3157d5 });
+  const frontMaterial = new THREE.MeshPhysicalMaterial({
+    map: texture,
+    side: THREE.FrontSide,
+    roughness: 0.68,
+    metalness: 0,
+    clearcoat: 0.05,
+    clearcoatRoughness: 0.85,
+  });
+  const backMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0xf4f2ec,
+    side: THREE.BackSide,
+    roughness: 0.95,
+    metalness: 0,
+  });
 
   const meshes = new Map();
-  const outlines = new Map();
-  const foldLines = new Map();
 
   function buildPanelObjects(node) {
     const hw = node.width / 2;
@@ -56,58 +79,83 @@ const VIEWER_SCRIPT = `
     const v0 = 1 - (node.rect.y - DATA.bounds.minY) / DATA.bounds.height;
     const v1 = 1 - (node.rect.y + node.height - DATA.bounds.minY) / DATA.bounds.height;
 
-    const positions = new Float32Array([
-      -hw, -hh, 0, hw, -hh, 0, hw, hh, 0, -hw, hh, 0,
-      -hw, -hh, 0, hw, -hh, 0, hw, hh, 0, -hw, hh, 0,
-    ]);
-    const uvs = new Float32Array([
-      u0, v1, u1, v1, u1, v0, u0, v0,
-      u1, v1, u0, v1, u0, v0, u1, v0,
-    ]);
-    const indices = [0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6];
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    geometry.setIndex(indices);
-    geometry.addGroup(0, 6, 0);
-    geometry.addGroup(6, 6, 1);
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      -hw, -hh, 0, hw, -hh, 0, hw, hh, 0, -hw, hh, 0,
+    ]), 3));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
+      u0, v1, u1, v1, u1, v0, u0, v0,
+    ]), 2));
+    geometry.setIndex([0, 1, 2, 0, 2, 3]);
     geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
 
-    const mesh = new THREE.Mesh(geometry, [frontMaterial, backMaterial]);
-    mesh.matrixAutoUpdate = false;
-    scene.add(mesh);
-    meshes.set(node.id, mesh);
-
-    const outlinePositions = new Float32Array([
-      -hw, -hh, 0.02, hw, -hh, 0.02, hw, hh, 0.02, -hw, hh, 0.02,
-      -hw, -hh, 0.02, hw, -hh, 0.02, hw, hh, 0.02, -hw, hh, 0.02,
-    ]);
-    const outlineGeometry = new THREE.BufferGeometry();
-    outlineGeometry.setAttribute('position', new THREE.BufferAttribute(outlinePositions, 3));
-    outlineGeometry.setIndex([0, 1, 2, 3, 0, 4, 5, 6, 7, 4]);
-    const outline = new THREE.LineSegments(outlineGeometry, outlineMaterial);
-    outline.matrixAutoUpdate = false;
-    scene.add(outline);
-    outlines.set(node.id, outline);
-
-    if (node.parentEdge) {
-      let foldPositions;
-      switch (node.parentEdge) {
-        case 'top': foldPositions = [-hw, hh, 0.04, hw, hh, 0.04]; break;
-        case 'right': foldPositions = [hw, hh, 0.04, hw, -hh, 0.04]; break;
-        case 'bottom': foldPositions = [hw, -hh, 0.04, -hw, -hh, 0.04]; break;
-        default: foldPositions = [-hw, -hh, 0.04, -hw, hh, 0.04]; break;
-      }
-      const foldGeometry = new THREE.BufferGeometry();
-      foldGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(foldPositions), 3));
-      const foldLine = new THREE.LineSegments(foldGeometry, foldMaterial);
-      foldLine.matrixAutoUpdate = false;
-      scene.add(foldLine);
-      foldLines.set(node.id, foldLine);
-    }
+    const exterior = new THREE.Mesh(geometry, frontMaterial);
+    exterior.matrixAutoUpdate = false;
+    exterior.castShadow = true;
+    const interior = new THREE.Mesh(geometry, backMaterial);
+    interior.matrixAutoUpdate = false;
+    scene.add(exterior, interior);
+    meshes.set(node.id, [exterior, interior]);
   }
 
   DATA.nodes.forEach(buildPanelObjects);
+
+  function computeBoxExtents() {
+    const transforms = computeTransforms(1);
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let maxRadius = 0;
+    const corner = new THREE.Vector3();
+    for (const node of DATA.nodes) {
+      const matrix = transforms.get(node.id);
+      if (!matrix) continue;
+      const hw = node.width / 2;
+      const hh = node.height / 2;
+      for (const point of [[-hw, -hh, 0], [hw, -hh, 0], [hw, hh, 0], [-hw, hh, 0]]) {
+        corner.set(point[0], point[1], point[2]).applyMatrix4(matrix);
+        if (corner.y < minY) minY = corner.y;
+        if (corner.y > maxY) maxY = corner.y;
+        const radial = Math.hypot(corner.x, corner.z);
+        if (radial > maxRadius) maxRadius = radial;
+      }
+    }
+    return { minY, maxY, maxRadius: Math.max(1, maxRadius) };
+  }
+
+  const extents = computeBoxExtents();
+  const boxRadius = extents.maxRadius;
+  const shadowExtent = boxRadius * 2.2;
+
+  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x73777a, 0.4);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  directionalLight.position.set(1, 2, 2);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.set(1024, 1024);
+  directionalLight.shadow.bias = -0.0002;
+  directionalLight.shadow.normalBias = 0.2;
+  directionalLight.shadow.camera.left = -shadowExtent;
+  directionalLight.shadow.camera.right = shadowExtent;
+  directionalLight.shadow.camera.top = shadowExtent;
+  directionalLight.shadow.camera.bottom = -shadowExtent;
+  directionalLight.shadow.camera.near = 1;
+  directionalLight.shadow.camera.far = shadowExtent * 3;
+  directionalLight.shadow.camera.updateProjectionMatrix();
+  scene.add(hemisphereLight, directionalLight);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.ShadowMaterial({ color: 0x1d2428, opacity: 0.18 }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.scale.set(shadowExtent, shadowExtent, 1);
+  ground.position.y = extents.minY - Math.max(2, boxRadius * 0.04);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  radius = boxRadius * 2.4;
+  let radiusMin = boxRadius * 0.4;
+  let radiusMax = boxRadius * 20;
 
   function computeTransforms(progress) {
     const transforms = new Map();
@@ -146,24 +194,39 @@ const VIEWER_SCRIPT = `
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 0.85;
+
+    const environment = new RoomEnvironment();
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(environment, 0.04).texture;
+    scene.environmentIntensity = 0.65;
+    pmremGenerator.dispose();
+    environment.dispose();
   }
 
   function applyProgress(progress) {
     foldProgress = Math.min(1, Math.max(0, progress));
     foldSlider.value = String(foldProgress);
     foldValue.textContent = Math.round(foldProgress * 100) + '%';
+    foldSlider.style.setProperty('--slider-progress', (foldProgress * 100) + '%');
   }
 
   function animate() {
     const transforms = computeTransforms(foldProgress);
-    for (const [id, mesh] of meshes) mesh.matrix.copy(transforms.get(id));
-    for (const [id, outline] of outlines) outline.matrix.copy(transforms.get(id));
-    for (const [id, line] of foldLines) line.matrix.copy(transforms.get(id));
+    for (const [id, pair] of meshes) {
+      const matrix = transforms.get(id);
+      pair[0].matrix.copy(matrix);
+      pair[1].matrix.copy(matrix);
+    }
 
     camera.position.set(
-      target.x + radius * Math.sin(phi) * Math.cos(theta),
+      target.x + radius * Math.sin(phi) * Math.sin(theta),
       target.y + radius * Math.cos(phi),
-      target.z + radius * Math.sin(phi) * Math.sin(theta),
+      target.z + radius * Math.sin(phi) * Math.cos(theta),
     );
     camera.lookAt(target);
     renderer.render(scene, camera);
@@ -211,7 +274,7 @@ const VIEWER_SCRIPT = `
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
     radius *= Math.exp(event.deltaY * 0.001);
-    radius = Math.max(radiusBase * 0.2, Math.min(radiusBase * 20, radius));
+    radius = Math.max(radiusMin, Math.min(radiusMax, radius));
     if (projection === 'orthographic') rebuildCamera();
   }, { passive: false });
 
@@ -224,7 +287,7 @@ const VIEWER_SCRIPT = `
     theta = 0.65;
     phi = 1.15;
     target.set(0, 0, 0);
-    radius = radiusBase * 1.5;
+    radius = boxRadius * 2.4;
     rebuildCamera();
   });
   cameraToggle.addEventListener('click', () => {
@@ -255,6 +318,13 @@ function toBase64(source) {
 function inlineThreeModule(moduleSource, coreSource) {
   const coreUrl = `data:text/javascript;base64,${toBase64(coreSource)}`;
   return moduleSource.replaceAll('from"./three.core.min.js"', `from"${coreUrl}"`);
+}
+
+function inlineRoomEnvironment(source) {
+  const prologue = 'const { BackSide, BoxGeometry, InstancedMesh, Mesh, MeshLambertMaterial, MeshStandardMaterial, PointLight, Scene, Object3D } = THREE;\n';
+  return source
+    .replace(/import \{[\s\S]*?\} from 'three';/, prologue)
+    .replace(/export \{ RoomEnvironment \};/, '');
 }
 
 async function canvasToDataUrl(canvas) {
@@ -320,7 +390,8 @@ export async function createInteractive3dHtml({
 
   const threeModuleDataUrl = `data:text/javascript;base64,${toBase64(inlineThreeModule(threeModuleSource, threeCoreSource))}`;
   const viewer = VIEWER_SCRIPT.replace('__DATA__', JSON.stringify(data));
-  const moduleScript = `import * as THREE from '${threeModuleDataUrl}';\n${viewer}`;
+  const roomEnvironment = inlineRoomEnvironment(roomEnvironmentSource);
+  const moduleScript = `import * as THREE from '${threeModuleDataUrl}';\n${roomEnvironment}\n${viewer}`;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -329,16 +400,79 @@ export async function createInteractive3dHtml({
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CartonBuilder — folded box</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; font-family: Arial, Helvetica, sans-serif; background: #23262a; color: #e8eaed; }
-  #viewer { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
-  #panel { position: fixed; top: 12px; left: 12px; padding: 10px 12px; background: rgb(20 22 25 / 85%); border: 1px solid #3a3f46; border-radius: 8px; font-size: 13px; display: grid; gap: 8px; min-width: 190px; user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: Arial, Helvetica, sans-serif; background: #e8e8e8; color: #e8eaed; }
+  #viewer { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; background: #e8e8e8; }
+  #panel { position: fixed; top: 12px; left: 12px; padding: 10px 12px; background: rgb(20 22 25 / 85%); border: 1px solid #3a3f46; border-radius: 8px; font-size: 13px; display: grid; gap: 8px; min-width: 200px; user-select: none; }
   #panel h1 { margin: 0; font-size: 13px; font-weight: 600; }
+  #bgRow { display: flex; align-items: center; gap: 8px; }
+  #bgRow input[type="color"] {
+    width: 26px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid #4a5058;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+  }
   #foldRow { display: flex; align-items: center; gap: 8px; }
-  #foldRow input[type="range"] { flex: 1; }
+  #foldRow input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    min-width: 0;
+    height: 6px;
+    margin: 0;
+    padding: 0;
+    border-radius: 999px;
+    background: linear-gradient(to right, #afca42 0%, #afca42 var(--slider-progress, 100%), #4a4a4a var(--slider-progress, 100%), #4a4a4a 100%);
+    outline: none;
+    cursor: pointer;
+  }
+  #foldRow input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+  }
+  #foldRow input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -4px;
+    border: 2px solid #3e3e3e;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+  }
+  #foldRow input[type="range"]:hover::-webkit-slider-thumb {
+    background: #afca42;
+  }
+  #foldRow input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+  }
+  #foldRow input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #3e3e3e;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+  }
+  #foldRow input[type="range"]:hover::-moz-range-thumb {
+    background: #afca42;
+  }
   #buttons { display: flex; gap: 6px; flex-wrap: wrap; }
   button { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid #4a5058; border-radius: 6px; background: #2c3138; color: inherit; cursor: pointer; }
   button:hover { background: #383e46; }
-  #hint { position: fixed; bottom: 12px; left: 12px; color: #9aa3ad; font-size: 11px; }
+  #hint { position: fixed; bottom: 12px; left: 12px; padding: 4px 10px; border-radius: 6px; background: rgb(20 22 25 / 70%); color: #d0d4d8; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -355,6 +489,10 @@ export async function createInteractive3dHtml({
     <button id="close" type="button">Fold</button>
     <button id="reset" type="button">Reset view</button>
     <button id="camera" type="button">Camera: perspective</button>
+  </div>
+  <div id="bgRow">
+    <label for="bgColor">Background</label>
+    <input id="bgColor" type="color" value="#e8e8e8">
   </div>
 </div>
 <div id="hint">Drag to orbit · wheel to zoom · right-drag to pan</div>

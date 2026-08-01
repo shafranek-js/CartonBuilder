@@ -296,11 +296,21 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
     const context = probe.getContext('2d');
     context.drawImage(canvas, 0, 0);
     const data = context.getImageData(0, 0, probe.width, probe.height).data;
-    for (let i = 0; i < data.length; i += 40) {
-      if (data[i] !== data[i + 1] || data[i] !== data[i + 2]) return true;
+    let colored = 0;
+    for (let i = 0; i < data.length; i += 16) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 24) colored += 1;
     }
-    return false;
+    return colored > 400;
   })).toBe(true);
   expect(errors).toEqual([]);
+  const viewerState = await viewerPage.evaluate(() => ({
+    bgValue: document.getElementById('bgColor').value,
+    bgPicker: Boolean(document.getElementById('bgColor')),
+  }));
+  expect(viewerState.bgPicker).toBe(true);
+  expect(viewerState.bgValue).toBe('#e8e8e8');
   await viewerPage.close();
 });
