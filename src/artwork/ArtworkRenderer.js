@@ -38,6 +38,82 @@ function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath
   return image;
 }
 
+function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, outerClip, crop) {
+  const cx = artwork.centerXmm;
+  const cy = artwork.centerYmm;
+  const halfW = artwork.unrotatedWidthMm / 2;
+  const halfH = artwork.unrotatedHeightMm / 2;
+  const rotateGroup = svgElement(documentRef, 'g', {
+    transform: `rotate(${artwork.rotation} ${cx} ${cy})`,
+  });
+  const clipRect = svgElement(documentRef, 'rect', {
+    x: -halfW + (crop.x || 0),
+    y: -halfH + (crop.y || 0),
+    width: crop.width,
+    height: crop.height,
+  });
+  const cropId = `crop-${Math.random().toString(36).slice(2)}`;
+  const clipDef = svgElement(documentRef, 'clipPath', { id: cropId });
+  clipDef.appendChild(clipRect);
+  const defs = parent.closest('svg')?.querySelector('defs');
+  if (defs) defs.appendChild(clipDef);
+  const clipGroup = svgElement(documentRef, 'g', { 'clip-path': `url(#${cropId})` });
+  const image = svgElement(documentRef, 'image', {
+    class: 'artwork-image',
+    href: previewUrl,
+    x: -halfW,
+    y: -halfH,
+    width: artwork.unrotatedWidthMm,
+    height: artwork.unrotatedHeightMm,
+    opacity,
+    preserveAspectRatio: 'none',
+  });
+  clipGroup.appendChild(image);
+  rotateGroup.appendChild(clipGroup);
+  if (outerClip) {
+    const outer = svgElement(documentRef, 'g', { 'clip-path': outerClip });
+    outer.appendChild(rotateGroup);
+    parent.appendChild(outer);
+  } else {
+    parent.appendChild(rotateGroup);
+  }
+  return image;
+}
+
+function appendCropFrame(documentRef, parent, artwork, crop) {
+  const halfW = artwork.unrotatedWidthMm / 2;
+  const halfH = artwork.unrotatedHeightMm / 2;
+  const group = svgElement(documentRef, 'g', {
+    transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
+  });
+  group.appendChild(svgElement(documentRef, 'rect', {
+    class: 'crop-frame',
+    x: -halfW + (crop.x || 0),
+    y: -halfH + (crop.y || 0),
+    width: crop.width,
+    height: crop.height,
+  }));
+  const handleSize = 5;
+  const halfHandle = handleSize / 2;
+  const corners = [
+    { x: crop.x || 0, y: crop.y || 0 },
+    { x: (crop.x || 0) + crop.width, y: crop.y || 0 },
+    { x: (crop.x || 0) + crop.width, y: (crop.y || 0) + crop.height },
+    { x: crop.x || 0, y: (crop.y || 0) + crop.height },
+  ];
+  for (let i = 0; i < corners.length; i++) {
+    group.appendChild(svgElement(documentRef, 'rect', {
+      class: 'crop-handle',
+      x: -halfW + corners[i].x - halfHandle,
+      y: -halfH + corners[i].y - halfHandle,
+      width: handleSize,
+      height: handleSize,
+      'data-crop-corner': i,
+    }));
+  }
+  parent.appendChild(group);
+}
+
 function appendDieline(documentRef, parent, model) {
   const { cut, fold } = getDielineSegments(model);
   for (const segment of cut) {
@@ -126,7 +202,14 @@ export class ArtworkRenderer {
     this.legacyPreviewUrl = '';
     this.selectionColor = null;
     this.selected = false;
+    this._cropFrame = null;
+    this._drawRect = null;
   }
+
+  get cropFrame() { return this._cropFrame; }
+  set cropFrame(v) { this._cropFrame = v || null; }
+  get drawRect() { return this._drawRect; }
+  set drawRect(v) { this._drawRect = v || null; }
 
   setPreviewBlob(blob) {
     if (this.legacyPreviewUrl) URL.revokeObjectURL(this.legacyPreviewUrl);
@@ -233,24 +316,19 @@ export class ArtworkRenderer {
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
         if (!entry.visible || !entry.model.hasArtwork || !entry.previewUrl) continue;
+        const crop = entry.model.crop;
         if (!preview && entry.model.bgOpacity > 0) {
-          appendImage(
-            documentRef,
-            target,
-            entry.model,
-            entry.previewUrl,
-            entry.model.opacity * entry.model.bgOpacity,
-            null,
-          );
+          if (crop) {
+            appendCroppedImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity * entry.model.bgOpacity, `url(#${target.id}-panel-mask)`, crop);
+          } else {
+            appendImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity * entry.model.bgOpacity, null);
+          }
         }
-        appendImage(
-          documentRef,
-          target,
-          entry.model,
-          entry.previewUrl,
-          entry.model.opacity,
-          `url(#${target.id}-panel-mask)`,
-        );
+        if (crop) {
+          appendCroppedImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity, `url(#${target.id}-panel-mask)`, crop);
+        } else {
+          appendImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity, `url(#${target.id}-panel-mask)`);
+        }
       }
     }
 
@@ -295,6 +373,24 @@ export class ArtworkRenderer {
     }
 
     if (!preview) {
+      if (this.drawRect && showArtwork) {
+        const halfW = this.artwork.unrotatedWidthMm / 2;
+        const halfH = this.artwork.unrotatedHeightMm / 2;
+        const drGroup = svgElement(documentRef, 'g', {
+          transform: `rotate(${this.artwork.rotation} ${this.artwork.centerXmm} ${this.artwork.centerYmm})`,
+        });
+        drGroup.appendChild(svgElement(documentRef, 'rect', {
+          class: 'crop-drawing-rect',
+          x: -halfW + (this.drawRect.x || 0),
+          y: -halfH + (this.drawRect.y || 0),
+          width: this.drawRect.width || 0,
+          height: this.drawRect.height || 0,
+        }));
+        target.appendChild(drGroup);
+      }
+      if (this.cropFrame && showArtwork) {
+        appendCropFrame(documentRef, target, this.artwork, this.cropFrame);
+      }
       for (const node of target.querySelectorAll('.artwork-image')) {
         node.addEventListener('pointerdown', (event) => this.onPointerStart(event, { type: 'move' }));
       }

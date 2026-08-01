@@ -390,6 +390,22 @@
               </div>
             </section>
 
+            <section class="tool-section" id="cropSection" hidden>
+              <h2 data-i18n="imageCrop">Image Crop</h2>
+              <div class="button-row">
+                <button type="button" id="cropFrameButton" title="Crop by adjusting frame handles" data-i18n-title="cropFrameTitle">
+                  <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="2" y1="6" x2="6" y2="6"/><line x1="2" y1="6" x2="2" y2="2"/><line x1="10" y1="10" x2="14" y2="10"/><line x1="14" y1="10" x2="14" y2="14"/></svg>
+                  <span>Crop</span>
+                </button>
+                <button type="button" id="cropDrawButton" title="Draw a crop area on the artwork" data-i18n-title="cropDrawTitle">
+                  <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2"/><line x1="8" y1="1" x2="8" y2="5"/><line x1="8" y1="11" x2="8" y2="15"/><line x1="1" y1="8" x2="5" y2="8"/><line x1="11" y1="8" x2="15" y2="8"/></svg>
+                  <span>Draw</span>
+                </button>
+                <button type="button" id="clearCropButton" disabled data-i18n="clearCrop" title="Remove crop mask">Clear</button>
+              </div>
+              <div class="crop-status" id="cropStatus" data-i18n="cropIdle">Click Crop or Draw to start.</div>
+            </section>
+
             <section class="tool-section" id="historySection" hidden>
               <h2 data-i18n="history">History</h2>
               <div class="button-row">

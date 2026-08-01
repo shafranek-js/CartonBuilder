@@ -161,6 +161,11 @@ export function createArtworkApp({
     referencePointGrid: documentRef.getElementById('referencePointGrid'),
     pdfLayersSection: documentRef.getElementById('pdfLayersSection'),
     pdfLayersList: documentRef.getElementById('pdfLayersList'),
+    cropSection: documentRef.getElementById('cropSection'),
+    cropFrameBtn: documentRef.getElementById('cropFrameButton'),
+    cropDrawBtn: documentRef.getElementById('cropDrawButton'),
+    clearCrop: documentRef.getElementById('clearCropButton'),
+    cropStatus: documentRef.getElementById('cropStatus'),
   };
 
   const layerControls = {
@@ -197,6 +202,10 @@ export function createArtworkApp({
   let renamingSublayerIndex = -1;
   let cancelRename = false;
   let pendingReplace = false;
+  let cropMode = null;
+  let cropPreview = null;
+  let cropGesture = null;
+  let cropDrawStart = null;
   let artworkGroupCollapsed = false;
   let selectedArtworkIndices = new Set();
   const thumbnailUrlCache = new Map();
@@ -525,6 +534,9 @@ export function createArtworkApp({
     controls.preview.disabled = artworks.length === 0;
     controls.undo.disabled = history.undoStack.length === 0;
     controls.redo.disabled = history.redoStack.length === 0;
+    controls.cropSection.hidden = !enabled;
+    controls.clearCrop.disabled = !artwork.crop && !cropMode;
+    updateCropButtons();
     dropState.hidden = artworks.length > 0;
     const countElement = documentRef.getElementById('artworkLayerCount');
     if (countElement) {
@@ -1222,6 +1234,7 @@ export function createArtworkApp({
   }
 
   svg.addEventListener('pointermove', (event) => {
+    if (cropGesture) { moveCropGesture(event); return; }
     if (!gesture || event.pointerId !== gesture.pointerId) return;
     const point = renderer.clientToModel(event.clientX, event.clientY);
     if (gesture.type === 'move') {
@@ -1263,9 +1276,157 @@ export function createArtworkApp({
     }
     gesture = null;
   }
-  svg.addEventListener('pointerup', finishGesture);
-  svg.addEventListener('pointercancel', finishGesture);
+  function finishCropGesture() {
+    if (!cropGesture) return;
+    if (cropDrawStart) {
+      if (cropPreview && cropPreview.width >= 1 && cropPreview.height >= 1) {
+        renderer.drawRect = null;
+        renderer.cropFrame = cropPreview;
+        updateCropStatus();
+      } else {
+        cropPreview = null;
+        renderer.drawRect = null;
+        renderer.cropFrame = null;
+        updateCropStatus();
+      }
+      cropDrawStart = null;
+    }
+    cropGesture = null;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function startDrawCrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const point = renderer.clientToModel(event.clientX, event.clientY);
+    const unrotated = rotateVector(
+      point.x - artwork.centerXmm,
+      point.y - artwork.centerYmm,
+      -artwork.rotation,
+    );
+    const localX = clamp(unrotated.x + artwork.unrotatedWidthMm / 2, 0, artwork.unrotatedWidthMm);
+    const localY = clamp(unrotated.y + artwork.unrotatedHeightMm / 2, 0, artwork.unrotatedHeightMm);
+    cropDrawStart = { localX, localY };
+    cropPreview = { x: localX, y: localY, width: 0, height: 0 };
+    cropGesture = { pointerId: event.pointerId, type: 'draw' };
+    renderer.drawRect = cropPreview;
+    renderer.cropFrame = null;
+    updateCropStatus();
+    svg.setPointerCapture(event.pointerId);
+    selected = false;
+  }
+
+  function startCropGesture(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = renderer.clientToModel(event.clientX, event.clientY);
+    const unrotated = rotateVector(
+      point.x - artwork.centerXmm,
+      point.y - artwork.centerYmm,
+      -artwork.rotation,
+    );
+    const localX = unrotated.x + artwork.unrotatedWidthMm / 2;
+    const localY = unrotated.y + artwork.unrotatedHeightMm / 2;
+    cropGesture = {
+      pointerId: event.pointerId,
+      type: 'move',
+      startX: event.clientX,
+      startY: event.clientY,
+      startCrop: { ...cropPreview },
+      initialLocalX: localX,
+      initialLocalY: localY,
+    };
+    const cornerEl = event.target.closest('.crop-handle');
+    if (cornerEl) {
+      cropGesture.type = 'resize';
+      cropGesture.corner = Number(cornerEl.dataset.cropCorner);
+      switch (cropGesture.corner) {
+        case 0: cropGesture.anchorX = cropPreview.x + cropPreview.width; cropGesture.anchorY = cropPreview.y + cropPreview.height; break;
+        case 1: cropGesture.anchorX = cropPreview.x; cropGesture.anchorY = cropPreview.y + cropPreview.height; break;
+        case 2: cropGesture.anchorX = cropPreview.x; cropGesture.anchorY = cropPreview.y; break;
+        case 3: cropGesture.anchorX = cropPreview.x + cropPreview.width; cropGesture.anchorY = cropPreview.y; break;
+      }
+    }
+    svg.setPointerCapture(event.pointerId);
+    selected = false;
+  }
+
+  function moveCropGesture(event) {
+    if (!cropGesture || event.pointerId !== cropGesture.pointerId || !cropPreview) return;
+    const point = renderer.clientToModel(event.clientX, event.clientY);
+    const unrotated = rotateVector(
+      point.x - artwork.centerXmm,
+      point.y - artwork.centerYmm,
+      -artwork.rotation,
+    );
+    const localX = clamp(unrotated.x + artwork.unrotatedWidthMm / 2, 0, artwork.unrotatedWidthMm);
+    const localY = clamp(unrotated.y + artwork.unrotatedHeightMm / 2, 0, artwork.unrotatedHeightMm);
+    const maxW = artwork.unrotatedWidthMm;
+    const maxH = artwork.unrotatedHeightMm;
+    if (cropGesture.type === 'draw' && cropDrawStart) {
+      const minX = Math.min(cropDrawStart.localX, localX);
+      const minY = Math.min(cropDrawStart.localY, localY);
+      const maxX = Math.max(cropDrawStart.localX, localX);
+      const maxY = Math.max(cropDrawStart.localY, localY);
+      cropPreview.x = minX;
+      cropPreview.y = minY;
+      cropPreview.width = Math.max(1, maxX - minX);
+      cropPreview.height = Math.max(1, maxY - minY);
+      renderer.drawRect = cropPreview;
+      renderer.render();
+      return;
+    }
+    if (cropGesture.type === 'move') {
+      const dx = localX - cropGesture.initialLocalX;
+      const dy = localY - cropGesture.initialLocalY;
+      let newX = cropGesture.startCrop.x + dx;
+      let newY = cropGesture.startCrop.y + dy;
+      newX = Math.max(0, Math.min(maxW - cropPreview.width, newX));
+      newY = Math.max(0, Math.min(maxH - cropPreview.height, newY));
+      cropPreview.x = newX;
+      cropPreview.y = newY;
+    } else {
+      const { anchorX, anchorY } = cropGesture;
+      const minDim = 1;
+      const minX = Math.min(anchorX, localX);
+      const minY = Math.min(anchorY, localY);
+      const maxDimX = Math.max(anchorX, localX);
+      const maxDimY = Math.max(anchorY, localY);
+      const newX = Math.max(0, minX);
+      const newY = Math.max(0, minY);
+      const newW = Math.max(minDim, Math.min(maxW - newX, maxDimX - newX));
+      const newH = Math.max(minDim, Math.min(maxH - newY, maxDimY - newY));
+      cropPreview.x = newX;
+      cropPreview.y = newY;
+      cropPreview.width = newW;
+      cropPreview.height = newH;
+    }
+    renderer.cropFrame = cropPreview;
+    renderer.render();
+  }
+
+  svg.addEventListener('pointerup', (event) => {
+    if (cropGesture) { finishCropGesture(); return; }
+    finishGesture(event);
+  });
+  svg.addEventListener('pointercancel', (event) => {
+    if (cropGesture) { finishCropGesture(); return; }
+    finishGesture(event);
+  });
   svg.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    if (cropMode === 'draw' && event.target.closest('.artwork-image')) {
+      startDrawCrop(event);
+      return;
+    }
+    if (cropMode && (event.target.closest('.crop-handle') || event.target.closest('.crop-frame'))) {
+      startCropGesture(event);
+      return;
+    }
     if (event.target.closest('.artwork-image, .resize-handle')) return;
     if (event.button === 1 || (event.button === 0 && spacePressed)) {
       event.preventDefault();
@@ -1429,6 +1590,111 @@ export function createArtworkApp({
       scheduleSave();
     }
   });
+
+  controls.cropFrameBtn.addEventListener('click', () => {
+    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
+    if (cropMode === 'frame') { exitCropMode(false); return; }
+    if (cropMode === 'draw') { exitCropMode(false); }
+    enterCropFrame();
+  });
+  controls.cropDrawBtn.addEventListener('click', () => {
+    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
+    if (cropMode === 'draw') { exitCropMode(false); return; }
+    if (cropMode === 'frame') { exitCropMode(false); }
+    enterCropDraw();
+  });
+  controls.clearCrop.addEventListener('click', clearCrop);
+
+  function updateCropButtons() {
+    const isFrame = cropMode === 'frame';
+    const isDraw = cropMode === 'draw';
+    controls.cropFrameBtn.classList.toggle('active', isFrame);
+    controls.cropDrawBtn.classList.toggle('active', isDraw);
+    if (isFrame || isDraw) {
+      controls.cropFrameBtn.querySelector('span').textContent = t('applyCrop');
+      controls.cropDrawBtn.querySelector('span').textContent = t('applyCrop');
+    } else {
+      controls.cropFrameBtn.querySelector('span').textContent = t('cropFrame');
+      controls.cropDrawBtn.querySelector('span').textContent = t('cropDraw');
+    }
+  }
+
+  function updateCropStatus(idleKey = null) {
+    let key = idleKey;
+    if (!key) {
+      if (cropMode === 'frame') key = 'cropFramePrompt';
+      else if (cropMode === 'draw') key = cropDrawStart ? 'cropDrawDrawing' : 'cropDrawPrompt';
+      else key = artwork.crop ? 'cropApplied' : 'cropIdle';
+    }
+    controls.cropStatus.textContent = t(key);
+  }
+
+  function enterCropFrame() {
+    cropMode = 'frame';
+    cropGesture = null;
+    cropDrawStart = null;
+    const existingCrop = artwork.crop;
+    cropPreview = existingCrop
+      ? { ...existingCrop }
+      : { x: 0, y: 0, width: artwork.unrotatedWidthMm, height: artwork.unrotatedHeightMm };
+    renderer.cropFrame = cropPreview;
+    renderer.drawRect = null;
+    selected = false;
+    updateCropButtons();
+    updateCropStatus();
+    controls.clearCrop.disabled = false;
+    render();
+  }
+
+  function enterCropDraw() {
+    cropMode = 'draw';
+    cropGesture = null;
+    cropDrawStart = null;
+    cropPreview = null;
+    renderer.cropFrame = null;
+    renderer.drawRect = null;
+    selected = false;
+    updateCropButtons();
+    updateCropStatus();
+    controls.clearCrop.disabled = false;
+    svg.style.cursor = 'crosshair';
+    render();
+  }
+
+  function exitCropMode(commit) {
+    if (commit && cropPreview) {
+      artwork.crop = { ...cropPreview };
+      artwork.modified = true;
+    }
+    cropMode = null;
+    cropPreview = null;
+    cropGesture = null;
+    cropDrawStart = null;
+    renderer.cropFrame = null;
+    renderer.drawRect = null;
+    svg.style.cursor = '';
+    updateCropButtons();
+    updateCropStatus();
+    controls.clearCrop.disabled = !artwork.crop;
+    render();
+    if (commit) scheduleSave();
+  }
+
+  function clearCrop() {
+    artwork.crop = null;
+    cropMode = null;
+    cropPreview = null;
+    cropGesture = null;
+    cropDrawStart = null;
+    renderer.cropFrame = null;
+    renderer.drawRect = null;
+    svg.style.cursor = '';
+    updateCropButtons();
+    updateCropStatus();
+    controls.clearCrop.disabled = true;
+    render();
+    scheduleSave();
+  }
 
   controls.choose.addEventListener('click', () => input.click());
   controls.replace.addEventListener('click', () => {
@@ -1690,8 +1956,14 @@ export function createArtworkApp({
       return;
     }
     if (event.key === 'Escape') {
+      if (cropMode) { exitCropMode(false); return; }
       selected = false;
       render();
+      return;
+    }
+    if (event.key === 'Enter' && cropMode) {
+      event.preventDefault();
+      exitCropMode(true);
       return;
     }
     if (event.key === 'Delete' && !layerLocks.artwork) {

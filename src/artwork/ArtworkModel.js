@@ -85,6 +85,7 @@ export class ArtworkModel {
     this.bgOpacity = 0.28;
     this.referencePoint = 'center';
     this.pdfLayerVisibility = null;
+    this.crop = null;
     this.modified = false;
     return this;
   }
@@ -335,6 +336,7 @@ export class ArtworkModel {
       bgOpacity: this.bgOpacity,
       referencePoint: this.referencePoint,
       pdfLayerVisibility: this.pdfLayerVisibility ? { ...this.pdfLayerVisibility } : null,
+      crop: this.crop ? { ...this.crop } : null,
       modified: this.modified,
     };
   }
@@ -364,6 +366,9 @@ export class ArtworkModel {
       this.pdfLayerVisibility = null;
     }
     this.modified = Boolean(state.modified);
+    this.crop = state.crop && state.crop.width > 0 && state.crop.height > 0
+      ? { x: Number(state.crop.x) || 0, y: Number(state.crop.y) || 0, width: Number(state.crop.width), height: Number(state.crop.height) }
+      : null;
     return this;
   }
 }

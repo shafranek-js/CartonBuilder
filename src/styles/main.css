@@ -2413,6 +2413,52 @@ dialog button {
   vector-effect: non-scaling-stroke;
 }
 
+/* Crop frame */
+.crop-frame {
+  fill: rgba(49, 87, 213, 0.08);
+  stroke: #3157d5;
+  stroke-width: 1;
+  stroke-dasharray: 6 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.crop-handle {
+  fill: #ffffff;
+  stroke: #3157d5;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  cursor: nwse-resize;
+}
+
+/* Crop panel */
+.crop-status {
+  font-size: 10px;
+  color: var(--muted-text, #808080);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+.crop-drawing-rect {
+  fill: rgba(200, 200, 200, 0.12);
+  stroke: #a0a0a0;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Crop buttons */
+#cropFrameButton,
+#cropDrawButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+#cropFrameButton.active,
+#cropDrawButton.active {
+  background: var(--accent, #4a9eff);
+  color: #fff;
+}
+
 .dieline-cut {
   fill: none;
   stroke: #181818;
