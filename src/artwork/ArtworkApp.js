@@ -132,6 +132,7 @@ export function createArtworkApp({
   const pageNumber = documentRef.getElementById('pdfPageNumber');
   const pageCount = documentRef.getElementById('pdfPageCount');
   const sublayersContainer = documentRef.getElementById('artworkSublayers');
+  const contextMenu = documentRef.getElementById('layerContextMenu');
 
   const controls = {
     fileName: documentRef.getElementById('artworkFileName'),
@@ -549,11 +550,7 @@ export function createArtworkApp({
       if (selectedArtworkIndices.has(index)) row.classList.add('selected');
       if (entry.locked) row.classList.add('locked');
       row.dataset.artworkIndex = String(index);
-
-      const colorSquare = documentRef.createElement('span');
-      colorSquare.className = 'layer-color-square';
-      colorSquare.style.backgroundColor = entry.color || LAYER_PALETTE[0];
-      row.appendChild(colorSquare);
+      row.draggable = true;
 
       const eye = documentRef.createElement('label');
       eye.className = 'layer-toggle-cell eye-cell';
@@ -564,7 +561,9 @@ export function createArtworkApp({
       checkbox.checked = entry.visible;
       checkbox.addEventListener('change', () => toggleArtworkVisibility(index, checkbox.checked));
       eye.appendChild(checkbox);
-      eye.appendChild(createLayerEyeSvg());
+      const eyeSvg = createLayerEyeSvg();
+      eyeSvg.classList.add('layer-eye-icon');
+      eye.appendChild(eyeSvg);
       row.appendChild(eye);
 
       const lockLabel = documentRef.createElement('label');
@@ -578,6 +577,11 @@ export function createArtworkApp({
       lockLabel.appendChild(lockCb);
       lockLabel.appendChild(createLayerLockSvg());
       row.appendChild(lockLabel);
+
+      const colorSquare = documentRef.createElement('span');
+      colorSquare.className = 'layer-color-square';
+      colorSquare.style.backgroundColor = entry.color || LAYER_PALETTE[0];
+      row.appendChild(colorSquare);
 
       const thumbCached = thumbnailUrlCache.get(index);
       if (thumbCached?.url) {
@@ -603,13 +607,6 @@ export function createArtworkApp({
       });
       row.appendChild(name);
 
-      const handle = documentRef.createElement('span');
-      handle.className = 'layer-drag-handle';
-      handle.title = t('reorderArtworkLayer');
-      handle.appendChild(createDragHandleSvg(documentRef));
-      handle.addEventListener('pointerdown', (event) => startSublayerDrag(event, index));
-      row.appendChild(handle);
-
       const target = documentRef.createElement('span');
       target.className = 'layer-target-circle';
       if (index === activeArtworkIndex) target.classList.add('active');
@@ -623,12 +620,141 @@ export function createArtworkApp({
 
       row.addEventListener('click', (event) => {
         if (event.target.closest('.layer-toggle-cell')) return;
-        if (event.target.closest('.layer-drag-handle')) return;
         if (event.target.closest('.layer-target-circle')) return;
         handleLayerClick(event, index);
       });
+
+      row.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showContextMenu(event, index);
+      });
+
+      row.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        if (event.target.closest('.layer-toggle-cell')) return;
+        if (event.target.closest('.layer-target-circle')) return;
+        selectedArtworkIndices = new Set([index]);
+        sublayerDrag = {
+          index,
+          pointerId: event.pointerId,
+          moved: false,
+          started: false,
+          row: event.currentTarget,
+          startX: event.clientX,
+          startY: event.clientY,
+          before: captureEditorState(),
+        };
+      });
+
       sublayersContainer.appendChild(row);
     }
+  }
+
+  function showContextMenu(event, index) {
+    const entry = artworks[index];
+    if (!entry) return;
+    contextMenu.dataset.artworkIndex = String(index);
+    const lockItem = contextMenu.querySelector('[data-action="lock"]');
+    const lockSpan = lockItem.querySelector('span');
+    lockSpan.textContent = t(entry.locked ? 'unlockLayer' : 'lockLayer');
+    contextMenu.hidden = false;
+    const x = Math.min(event.clientX, windowRef.innerWidth - contextMenu.offsetWidth - 8);
+    const y = Math.min(event.clientY, windowRef.innerHeight - contextMenu.offsetHeight - 8);
+    contextMenu.style.left = `${Math.max(4, x)}px`;
+    contextMenu.style.top = `${Math.max(4, y)}px`;
+  }
+
+  function hideContextMenu() {
+    contextMenu.hidden = true;
+  }
+
+  contextMenu.addEventListener('click', (event) => {
+    const button = event.target.closest('.context-menu-item');
+    if (!button) return;
+    hideContextMenu();
+    const action = button.dataset.action;
+    const index = Number(contextMenu.dataset.artworkIndex);
+    const entry = artworks[index];
+    if (!entry) return;
+    if (action === 'rename') {
+      const nameEl = sublayersContainer.children[index]?.querySelector('.layer-title');
+      if (nameEl) startRenameSublayer(index, nameEl);
+    } else if (action === 'duplicate') {
+      duplicateArtwork(index);
+    } else if (action === 'lock') {
+      toggleArtworkLock(index, !entry.locked);
+    } else if (action === 'delete') {
+      showDeleteConfirmation();
+    }
+  });
+
+  documentRef.addEventListener('click', (event) => {
+    if (!contextMenu.hidden && !contextMenu.contains(event.target)) hideContextMenu();
+  });
+
+  windowRef.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !contextMenu.hidden) {
+      hideContextMenu();
+      event.stopPropagation();
+    }
+  });
+
+  function duplicateArtwork(index) {
+    const entry = artworks[index];
+    if (!entry) return;
+    const before = captureEditorState();
+    const model = new ArtworkModel(entry.model.toJSON());
+    const color = assignLayerColor(artworks.map((e) => e.color));
+    artworks.splice(index, 0, {
+      model,
+      originalBlob: entry.originalBlob ? new Blob([entry.originalBlob], { type: entry.originalBlob.type }) : null,
+      previewBlob: entry.previewBlob ? new Blob([entry.previewBlob], { type: 'image/png' }) : null,
+      visible: entry.visible,
+      locked: false,
+      color,
+    });
+    if (activeArtworkIndex >= index) activeArtworkIndex += 1;
+    renderer.setArtworks(artworks);
+    commitChange('Duplicate artwork', before);
+  }
+
+  function showDeleteConfirmation() {
+    const toRemove = [...selectedArtworkIndices]
+      .filter((i) => i >= 0 && i < artworks.length);
+    if (!toRemove.length) return;
+    const confirmMsg = toRemove.length > 1
+      ? t('removeSelectedConfirm', { count: toRemove.length })
+      : t('removeConfirm');
+    if (!windowRef.confirm(confirmMsg)) return;
+    removeSelectedArtworks(toRemove);
+  }
+
+  function removeSelectedArtworks(toRemove) {
+    const before = captureEditorState();
+    pdfRenderController?.abort();
+    pdfRenderController = null;
+    pdfRenderGeneration += 1;
+    toRemove.sort((a, b) => b - a);
+    for (const index of toRemove) {
+      artworks.splice(index, 1);
+    }
+    selectedArtworkIndices.clear();
+    if (artworks.length === 0) {
+      activeArtworkIndex = -1;
+      artwork = new ArtworkModel();
+      originalBlob = null;
+      previewBlob = null;
+      renderer.artwork = artwork;
+    } else {
+      activeArtworkIndex = Math.min(activeArtworkIndex, artworks.length - 1);
+      setActiveArtwork(activeArtworkIndex);
+    }
+    renderer.setArtworks(artworks);
+    selected = false;
+    renderPdfLayers();
+    render();
+    commitChange('Remove artwork', before);
   }
 
   function handleLayerClick(event, index) {
@@ -680,6 +806,8 @@ export function createArtworkApp({
     renderPdfLayers();
     renderControls();
     renderer.render();
+    const activeRow = sublayersContainer.children[index];
+    if (activeRow) activeRow.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     scheduleSave();
   }
 
@@ -707,26 +835,18 @@ export function createArtworkApp({
   sublayersContainer.addEventListener('pointerup', endSublayerDrag);
   sublayersContainer.addEventListener('pointercancel', endSublayerDrag);
 
-  function startSublayerDrag(event, index) {
-    if (event.button !== 0 || artworks.length < 2) return;
-    event.preventDefault();
-    event.stopPropagation();
-    selectedArtworkIndices = new Set([index]);
-    const row = event.currentTarget.closest('.artwork-sublayer');
-    sublayerDrag = {
-      index,
-      pointerId: event.pointerId,
-      moved: false,
-      before: captureEditorState(),
-    };
-    row.classList.add('dragging');
-    row.setPointerCapture(event.pointerId);
-    selected = false;
-    render();
-  }
-
   function moveSublayerDrag(event) {
     if (!sublayerDrag || event.pointerId !== sublayerDrag.pointerId) return;
+    if (!sublayerDrag.started) {
+      const dx = event.clientX - sublayerDrag.startX;
+      const dy = event.clientY - sublayerDrag.startY;
+      if (Math.abs(dx) + Math.abs(dy) < 5) return;
+      sublayerDrag.started = true;
+      sublayerDrag.row.setPointerCapture(event.pointerId);
+      sublayerDrag.row.classList.add('dragging');
+      selected = false;
+      render();
+    }
     const container = sublayersContainer;
     const rows = [...container.children];
     if (rows.length < 2) return;
@@ -765,6 +885,7 @@ export function createArtworkApp({
     if (!sublayerDrag || event.pointerId !== sublayerDrag.pointerId) return;
     const drag = sublayerDrag;
     sublayerDrag = null;
+    if (!drag.started) return;
     renderSublayers();
     render();
     if (drag.moved) {
@@ -1317,36 +1438,7 @@ export function createArtworkApp({
   });
   controls.remove.addEventListener('click', () => {
     if (layerLocks.artwork) return;
-    const toRemove = [...selectedArtworkIndices].filter((index) => index >= 0 && index < artworks.length);
-    if (!toRemove.length) return;
-    const confirmMsg = toRemove.length > 1
-      ? t('removeSelectedConfirm', { count: toRemove.length })
-      : t('removeConfirm');
-    if (!windowRef.confirm(confirmMsg)) return;
-    const before = captureEditorState();
-    pdfRenderController?.abort();
-    pdfRenderController = null;
-    pdfRenderGeneration += 1;
-    toRemove.sort((a, b) => b - a);
-    for (const index of toRemove) {
-      artworks.splice(index, 1);
-    }
-    selectedArtworkIndices.clear();
-    if (artworks.length === 0) {
-      activeArtworkIndex = -1;
-      artwork = new ArtworkModel();
-      originalBlob = null;
-      previewBlob = null;
-      renderer.artwork = artwork;
-    } else {
-      activeArtworkIndex = Math.min(activeArtworkIndex, artworks.length - 1);
-      setActiveArtwork(activeArtworkIndex);
-    }
-    renderer.setArtworks(artworks);
-    selected = false;
-    renderPdfLayers();
-    render();
-    commitChange('Remove artwork', before);
+    showDeleteConfirmation();
   });
   input.addEventListener('change', () => {
     processFile(input.files?.[0], { replace: pendingReplace });
@@ -1604,6 +1696,23 @@ export function createArtworkApp({
     }
     if (event.key === 'Delete' && !layerLocks.artwork) {
       controls.remove.click();
+      return;
+    }
+    if (event.altKey && event.key === '[') {
+      event.preventDefault();
+      const next = activeArtworkIndex > 0 ? activeArtworkIndex - 1 : artworks.length - 1;
+      if (next >= 0 && !artworks[next]?.locked) selectArtworkRow(next);
+      return;
+    }
+    if (event.altKey && event.key === ']') {
+      event.preventDefault();
+      const next = activeArtworkIndex < artworks.length - 1 ? activeArtworkIndex + 1 : 0;
+      if (next >= 0 && !artworks[next]?.locked) selectArtworkRow(next);
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+      event.preventDefault();
+      if (activeArtworkIndex >= 0) duplicateArtwork(activeArtworkIndex);
       return;
     }
     const deltas = {

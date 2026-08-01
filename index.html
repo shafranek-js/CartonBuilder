@@ -144,9 +144,6 @@
               <div class="adobe-layers-table">
                 <!-- Artwork Layer -->
                 <div class="adobe-layer-row" data-layer-id="artwork">
-                  <button type="button" class="layer-twisty" id="artworkTwisty" aria-expanded="true" aria-label="Collapse Artwork group">
-                    <svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
-                  </button>
                   <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
                     <input id="layerArtwork" type="checkbox" checked class="sr-only">
                     <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -161,6 +158,9 @@
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
                   </label>
+                  <button type="button" class="layer-twisty" id="artworkTwisty" aria-expanded="true" aria-label="Collapse Artwork group">
+                    <svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
+                  </button>
                   <span class="layer-thumbnail">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
                       <rect x="2" y="2" width="12" height="12" rx="1"/>
@@ -171,6 +171,13 @@
                   <span class="layer-title"><span data-i18n="artwork">Artwork</span><span class="layer-count" id="artworkLayerCount" hidden></span></span>
                 </div>
                 <div class="artwork-sublayers" id="artworkSublayers" hidden></div>
+                <div class="layer-context-menu" id="layerContextMenu" role="menu" hidden>
+                  <button type="button" class="context-menu-item" data-action="rename"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 2.293L10.5 2.5 4 9.293V12h2.707l6.086-6.086z" fill="currentColor" fill-rule="evenodd"/></svg><span data-i18n="renameLayer">Rename</span></button>
+                  <button type="button" class="context-menu-item" data-action="duplicate"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M13 0H6a2 2 0 0 0-2 2v1H2a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1h2a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm-2 14H2V5h9v9zm4-3h-2V5a2 2 0 0 0-2-2H6V2h9v9z" fill="currentColor"/></svg><span data-i18n="duplicateLayer">Duplicate</span></button>
+                  <button type="button" class="context-menu-item" data-action="lock"><svg viewBox="0 0 16 16" width="12" height="12"><rect x="4" y="7" width="8" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg><span data-i18n="lockLayer">Lock</span></button>
+                  <hr class="context-menu-sep">
+                  <button type="button" class="context-menu-item danger" data-action="delete"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M5.5 5.5A.5.5 0 0 1 6 5h4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-7zM3 4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1H3V4zm2-1a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1H5z" fill="currentColor"/></svg><span data-i18n="deleteLayer">Delete</span></button>
+                </div>
 
                 <!-- Dieline Layer -->
                 <div class="adobe-layer-row" data-layer-id="dieline">

@@ -1884,19 +1884,7 @@ dialog button {
 }
 
 .artwork-sublayer .layer-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 22px;
-  color: var(--muted-text, #808080);
-  cursor: grab;
-  flex-shrink: 0;
-  margin-left: 2px;
-}
-
-.artwork-sublayer .layer-drag-handle:hover {
-  color: var(--text, #ffffff);
+  display: none;
 }
 
 .layer-target-circle {
@@ -1949,6 +1937,82 @@ dialog button {
   background: var(--accent, #4a9eff);
   pointer-events: none;
   z-index: 1;
+}
+
+/* Context menu */
+.layer-context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--panel-bg, #2b2b2b);
+  border: 1px solid var(--panel-border, #454545);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 150px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: none;
+  color: var(--text, #ffffff);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: var(--accent, #4a9eff);
+}
+
+.context-menu-item.danger:hover {
+  background: #d32f2f;
+}
+
+.context-menu-sep {
+  border: none;
+  border-top: 1px solid var(--panel-border, #454545);
+  margin: 4px 0;
+}
+
+/* Opacity slider in layer row */
+.layer-opacity-slider {
+  width: 44px;
+  height: 3px;
+  appearance: none;
+  background: var(--muted-text, #606060);
+  border-radius: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.layer-opacity-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #4a9eff);
+  border: none;
+}
+
+.layer-opacity-slider::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #4a9eff);
+  border: none;
+}
+
+.artwork-sublayer:hover .layer-opacity-slider,
+.artwork-sublayer.active .layer-opacity-slider {
+  opacity: 1;
 }
 
 .pdf-layer-row {
