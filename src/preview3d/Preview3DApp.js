@@ -390,6 +390,7 @@ export function createPreview3DApp({
   async function activate() {
     if (disposed) return false;
     state.active = true;
+    artworkSignature = '';
     updateModeDom();
     updateControls();
     return syncScene();
