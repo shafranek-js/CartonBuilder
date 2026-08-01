@@ -1805,8 +1805,66 @@ dialog button {
   align-items: center;
   gap: 8px 14px;
   min-height: 44px;
-  padding-block: 5px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--panel-border, #444444);
   color: #fff;
+}
+
+.preview-main-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  min-height: 0;
+}
+
+.scene-sidebar {
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid var(--panel-border, #444);
+  background: var(--surface, #4e4e4e);
+  color: var(--text, #ffffff);
+}
+
+.scene-sidebar .field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #dcdcdc;
+  font-size: 11px;
+}
+
+.scene-sidebar .field:last-child {
+  margin-bottom: 0;
+}
+
+.scene-sidebar .field select {
+  max-width: 150px;
+}
+
+.scene-sidebar .light-control {
+  margin-bottom: 8px;
+}
+
+.scene-sidebar .light-control:last-child {
+  margin-bottom: 0;
+}
+
+.scene-sidebar .light-control input[type="range"] {
+  width: 130px;
+}
+
+.sidebar-button {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.sidebar-status {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted-text, #c8c8c8);
+  font-size: 11px;
+  min-height: 14px;
 }
 
 .preview-mode-tabs {
@@ -1875,8 +1933,111 @@ dialog button {
   gap: 6px;
 }
 
-.fold-control input {
+.fold-control input[type="range"],
+.light-control input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent, #afca42) 0%, var(--accent, #afca42) var(--slider-progress, 100%), var(--panel-border, #4a4a4a) var(--slider-progress, 100%), var(--panel-border, #4a4a4a) 100%);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.fold-control input[type="range"] {
   width: clamp(100px, 13vw, 180px);
+}
+
+.light-control input[type="range"] {
+  width: 90px;
+}
+
+.fold-control input[type="range"]::-webkit-slider-runnable-track,
+.light-control input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.fold-control input[type="range"]::-webkit-slider-thumb,
+.light-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 2px solid var(--panel-bg, #3e3e3e);
+  border-radius: 50%;
+  background: var(--text, #ffffff);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fold-control input[type="range"]:hover::-webkit-slider-thumb,
+.fold-control input[type="range"]:focus-visible::-webkit-slider-thumb,
+.light-control input[type="range"]:hover::-webkit-slider-thumb,
+.light-control input[type="range"]:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.25);
+  background: var(--accent, #afca42);
+  box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.fold-control input[type="range"]::-moz-range-track,
+.light-control input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.fold-control input[type="range"]::-moz-range-thumb,
+.light-control input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--panel-bg, #3e3e3e);
+  border-radius: 50%;
+  background: var(--text, #ffffff);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fold-control input[type="range"]:hover::-moz-range-thumb,
+.fold-control input[type="range"]:focus-visible::-moz-range-thumb,
+.light-control input[type="range"]:hover::-moz-range-thumb,
+.light-control input[type="range"]:focus-visible::-moz-range-thumb {
+  transform: scale(1.25);
+  background: var(--accent, #afca42);
+  box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.light-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 0 16px 8px;
+}
+
+.light-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #dcdcdc;
+  font-size: 11px;
+}
+
+.light-control output {
+  min-width: 30px;
+  color: #e8e8e8;
+  font-variant-numeric: tabular-nums;
 }
 
 .fold-control output {

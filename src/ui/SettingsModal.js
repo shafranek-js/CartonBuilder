@@ -1,4 +1,5 @@
 import { clearCurrentProject } from '../project/ProjectStore.js';
+import { clearSceneSettings } from '../preview3d/sceneSettings.js';
 import { COLOR_THEMES, applyTheme, getSavedTheme } from './ThemeManager.js';
 import { getLocale, t } from '../i18n.js';
 import { createDiagnosticsBlob } from '../diagnostics.js';
@@ -142,6 +143,7 @@ export function createSettingsModal({
 
     try {
       await clearCurrentProject();
+      clearSceneSettings(windowRef.localStorage);
       showToast('Project data cleared. Reloading...');
       windowRef.setTimeout(() => windowRef.location.reload(), 600);
     } catch {

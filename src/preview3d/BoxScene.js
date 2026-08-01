@@ -1,6 +1,7 @@
 import {
   BackSide,
   Box3,
+  BoxGeometry,
   BufferGeometry,
   CanvasTexture,
   ClampToEdgeWrapping,
@@ -26,9 +27,11 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PMREMGenerator,
+  PointLight,
   Raycaster,
   Scene,
   ShadowMaterial,
+  SphereGeometry,
   SRGBColorSpace,
   Vector2,
   Vector3,
@@ -49,8 +52,77 @@ const PERSPECTIVE_FOV = 35;
 const CAMERA_MARGIN = 1.25;
 const OUTLINE_COLOR = 0xb2d235;
 
+const LIGHT_DEFAULT_AZIMUTH = 63;
+const LIGHT_DEFAULT_ELEVATION = 48;
+const LIGHT_ELEVATION_MIN = 5;
+const LIGHT_ELEVATION_MAX = 85;
+
 const SCENE_PRESETS = new Set(['technical', 'studio', 'photorealistic']);
 const CAMERA_PROJECTIONS = new Set(['perspective', 'orthographic']);
+const CAMERA_PRESETS = Object.freeze({
+  isometric: new Vector3(1, 1, 1).normalize(),
+  front: new Vector3(0, 0, 1),
+  top: new Vector3(0, 1, 0),
+  right: new Vector3(1, 0, 0),
+});
+const ENVIRONMENT_PRESETS = new Set(['none', 'studio', 'neutral', 'warm', 'cool', 'bright', 'night']);
+
+const ENVIRONMENT_PALETTES = Object.freeze({
+  neutral: { base: 0xcccccc, key: 0xffffff, keyIntensity: 50, fill: 0x999999 },
+  warm: { base: 0xf5e0c8, key: 0xffd9a8, keyIntensity: 70, fill: 0xffc08a },
+  cool: { base: 0xdce8f5, key: 0xbcd8ff, keyIntensity: 70, fill: 0x8fb8e8 },
+  bright: { base: 0xffffff, key: 0xffffff, keyIntensity: 120, fill: 0xffffff },
+  night: { base: 0x10151f, key: 0x8fa8d8, keyIntensity: 25, fill: 0x3a4a66 },
+});
+
+function createEnvironmentScene(preset) {
+  const palette = ENVIRONMENT_PALETTES[preset];
+  if (!palette) return null;
+  const scene = new Scene();
+  const dome = new Mesh(
+    new SphereGeometry(20, 24, 12),
+    new MeshBasicMaterial({ color: palette.base, side: BackSide }),
+  );
+  scene.add(dome);
+  const keyLight = new Mesh(
+    new BoxGeometry(0.2, 3, 4),
+    new MeshBasicMaterial({ color: palette.key }),
+  );
+  keyLight.position.set(-6, 6, 4);
+  scene.add(keyLight);
+  const fillLight = new Mesh(
+    new BoxGeometry(0.2, 4, 3),
+    new MeshBasicMaterial({ color: palette.fill }),
+  );
+  fillLight.position.set(6, 3, -5);
+  scene.add(fillLight);
+  const topLight = new Mesh(
+    new BoxGeometry(5, 0.2, 5),
+    new MeshBasicMaterial({ color: palette.key }),
+  );
+  topLight.position.set(0, 7, 0);
+  scene.add(topLight);
+  const point = new PointLight(palette.key, palette.keyIntensity, 30, 2);
+  point.position.set(2, 8, 3);
+  scene.add(point);
+  return scene;
+}
+
+function disposeEnvironmentScene(scene) {
+  scene.traverse((object) => {
+    if (!object.isMesh) return;
+    object.geometry?.dispose();
+    object.material?.dispose();
+  });
+}
+
+function normalizeDegrees(value) {
+  return ((Number(value) % 360) + 360) % 360;
+}
+
+function clampDegrees(value) {
+  return Math.min(LIGHT_ELEVATION_MAX, Math.max(LIGHT_ELEVATION_MIN, Number(value)));
+}
 
 function createOutlineGeometry(panel, zOffset) {
   const geometry = new BufferGeometry();
@@ -124,6 +196,18 @@ export class BoxScene {
     cameraProjection = 'perspective',
     scenePreset = 'studio',
     selectedPanelId = null,
+    lightAzimuth = LIGHT_DEFAULT_AZIMUTH,
+    lightElevation = LIGHT_DEFAULT_ELEVATION,
+    shadowBlur = 0,
+    shadowIntensity = 0.25,
+    shadowEnabled = true,
+    shadowMapSize = 1024,
+    hemisphereIntensity = 1.7,
+    environmentPreset = 'studio',
+    environmentIntensity = 0.65,
+    cameraPreset = 'isometric',
+    cameraFov = PERSPECTIVE_FOV,
+    backgroundColor = null,
     windowRef = window,
     onSelection = () => {},
     onContextLost = () => {},
@@ -167,20 +251,48 @@ export class BoxScene {
       ? this.orthographicCamera
       : this.perspectiveCamera;
 
-    this.hemisphereLight = new HemisphereLight(0xffffff, 0x73777a, 1.7);
+    this.hemisphereLight = new HemisphereLight(0xffffff, 0x73777a, hemisphereIntensity);
+    this.hemisphereIntensity = Math.max(0, Math.min(5, Number(hemisphereIntensity) || 0));
     this.directionalLight = new DirectionalLight(0xffffff, 2.6);
     this.directionalLight.position.set(1, 2, 2);
-    this.directionalLight.castShadow = true;
-    this.directionalLight.shadow.mapSize.set(1024, 1024);
+    this.directionalLight.castShadow = shadowEnabled !== false;
+    this.directionalLight.shadow.mapSize.set(
+      [512, 1024, 2048].includes(Number(shadowMapSize)) ? Number(shadowMapSize) : 1024,
+      [512, 1024, 2048].includes(Number(shadowMapSize)) ? Number(shadowMapSize) : 1024,
+    );
     this.directionalLight.shadow.bias = -0.0002;
     this.directionalLight.shadow.normalBias = 0.2;
+    this.directionalLight.shadow.radius = 0;
     this.scene.add(this.hemisphereLight, this.directionalLight);
 
-    this.groundMaterial = new ShadowMaterial({ color: 0x1d2428, opacity: 0.18 });
+    this.shadowEnabled = shadowEnabled !== false;
+    this.shadowMapSize = [512, 1024, 2048].includes(Number(shadowMapSize))
+      ? Number(shadowMapSize)
+      : 1024;
+    this.lightAzimuth = normalizeDegrees(lightAzimuth);
+    this.lightElevation = clampDegrees(lightElevation);
+    this.shadowBlur = Math.max(0, Math.min(8, Number(shadowBlur) || 0));
+    this.directionalLight.shadow.radius = this.shadowBlur;
+    this.applyLightDirection();
+
+    this.environmentPreset = ENVIRONMENT_PRESETS.has(environmentPreset)
+      ? environmentPreset
+      : 'studio';
+    this.environmentIntensity = Math.max(0, Math.min(5, Number(environmentIntensity) || 0));
+    this.cameraPreset = CAMERA_PRESETS[cameraPreset] ? cameraPreset : 'isometric';
+    this.cameraFov = Math.max(10, Math.min(120, Number(cameraFov) || PERSPECTIVE_FOV));
+    this.perspectiveCamera.fov = this.cameraFov;
+    if (backgroundColor) this.scene.background.set(backgroundColor);
+
+    this.groundMaterial = new ShadowMaterial({ color: 0x1d2428, opacity: 0.25 });
     this.ground = new Mesh(new PlaneGeometry(1, 1), this.groundMaterial);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
+
+    this.shadowIntensity = Math.max(0, Math.min(1, Number(shadowIntensity) || 0.25));
+    this.contactShadow = this.createContactShadow();
+    this.applyShadowIntensity();
 
     this.texture = new CanvasTexture(textureCanvas);
     this.texture.colorSpace = SRGBColorSpace;
@@ -355,9 +467,18 @@ export class BoxScene {
     this.ground.scale.set(extent, extent, 1);
     this.ground.position.set(
       center.x,
-      bounds.min.y - Math.max(0.5, maxDimension * 0.01),
+      bounds.min.y - 0.02,
       center.z,
     );
+    if (this.contactShadow) {
+      const contactExtent = maxDimension * 1.6;
+      this.contactShadow.scale.set(contactExtent, contactExtent, 1);
+      this.contactShadow.position.set(
+        center.x,
+        bounds.min.y - 0.01,
+        center.z,
+      );
+    }
     const shadowExtent = extent / 2;
     const shadowCamera = this.directionalLight.shadow.camera;
     shadowCamera.left = -shadowExtent;
@@ -441,11 +562,32 @@ export class BoxScene {
   }
 
   ensureEnvironment() {
-    if (this.environmentTexture) return;
-    this.pmremGenerator = new PMREMGenerator(this.renderer);
-    const room = new RoomEnvironment();
-    this.environmentTexture = this.pmremGenerator.fromScene(room, 0.04).texture;
-    room.dispose();
+    if (this.pmremGenerator == null) this.pmremGenerator = new PMREMGenerator(this.renderer);
+    let environmentScene = null;
+    if (this.environmentPreset === 'studio') {
+      environmentScene = new RoomEnvironment();
+    } else if (this.environmentPreset !== 'none') {
+      environmentScene = createEnvironmentScene(this.environmentPreset);
+    }
+    const previous = this.environmentTexture;
+    if (!environmentScene) {
+      this.environmentTexture = null;
+      this.scene.environment = null;
+    } else {
+      this.environmentTexture = this.pmremGenerator.fromScene(environmentScene, 0.04).texture;
+      if (environmentScene instanceof RoomEnvironment) environmentScene.dispose();
+      else disposeEnvironmentScene(environmentScene);
+    }
+    previous?.dispose();
+  }
+
+  applyEnvironment() {
+    if (this.scenePreset === 'technical') {
+      this.scene.environment = null;
+      return;
+    }
+    this.scene.environment = this.environmentTexture;
+    this.scene.environmentIntensity = this.environmentIntensity;
   }
 
   setScenePreset(preset, { render = true } = {}) {
@@ -458,8 +600,8 @@ export class BoxScene {
       this.hemisphereLight.visible = false;
       this.directionalLight.visible = false;
       this.ground.visible = false;
+      if (this.contactShadow) this.contactShadow.visible = false;
       this.scene.environment = null;
-      this.renderer.shadowMap.enabled = false;
       this.renderer.toneMapping = NoToneMapping;
     } else if (preset === 'photorealistic') {
       this.ensureEnvironment();
@@ -469,27 +611,166 @@ export class BoxScene {
       this.directionalLight.visible = true;
       this.directionalLight.intensity = 1.1;
       this.ground.visible = true;
-      this.groundMaterial.opacity = 0.18;
-      this.scene.environment = this.environmentTexture;
-      this.scene.environmentIntensity = 0.65;
-      this.renderer.shadowMap.enabled = true;
+      if (this.contactShadow) this.contactShadow.visible = true;
+      this.applyEnvironment();
       this.renderer.toneMapping = NeutralToneMapping;
       this.renderer.toneMappingExposure = 0.85;
     } else {
+      this.ensureEnvironment();
       this.scene.background.set(0xe8eaeb);
       this.hemisphereLight.visible = true;
       this.hemisphereLight.intensity = 1.7;
       this.directionalLight.visible = true;
       this.directionalLight.intensity = 2.6;
       this.ground.visible = true;
-      this.groundMaterial.opacity = 0.1;
-      this.scene.environment = null;
-      this.renderer.shadowMap.enabled = true;
+      if (this.contactShadow) this.contactShadow.visible = true;
+      this.applyEnvironment();
       this.renderer.toneMapping = NoToneMapping;
       this.renderer.toneMappingExposure = 1;
     }
+    this.applyShadowIntensity();
+    this.applyShadowSettings();
     this.renderer.shadowMap.needsUpdate = true;
     if (render) this.render();
+  }
+
+  applyShadowSettings() {
+    const enabled = this.shadowEnabled && this.scenePreset !== 'technical';
+    this.renderer.shadowMap.enabled = enabled;
+    this.directionalLight.castShadow = enabled;
+    this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  applyLightDirection() {
+    const elevation = this.lightElevation * Math.PI / 180;
+    const azimuth = this.lightAzimuth * Math.PI / 180;
+    this.directionalLight.position.set(
+      Math.sin(elevation) * Math.cos(azimuth),
+      Math.cos(elevation),
+      Math.sin(elevation) * Math.sin(azimuth),
+    );
+    this.directionalLight.updateMatrixWorld();
+  }
+
+  setLightDirection(azimuth, elevation) {
+    this.lightAzimuth = normalizeDegrees(azimuth);
+    this.lightElevation = clampDegrees(elevation);
+    this.applyLightDirection();
+    this.render();
+  }
+
+  setLightIntensity(intensity) {
+    this.directionalLight.intensity = Math.max(0, Math.min(10, Number(intensity) || 0));
+    this.render();
+  }
+
+  setHemisphereIntensity(intensity) {
+    this.hemisphereIntensity = Math.max(0, Math.min(5, Number(intensity) || 0));
+    this.hemisphereLight.intensity = this.hemisphereIntensity;
+    this.render();
+  }
+
+  setEnvironment(preset) {
+    if (!ENVIRONMENT_PRESETS.has(preset)) return;
+    this.environmentPreset = preset;
+    this.ensureEnvironment();
+    this.applyEnvironment();
+    this.render();
+  }
+
+  setEnvironmentIntensity(intensity) {
+    this.environmentIntensity = Math.max(0, Math.min(5, Number(intensity) || 0));
+    this.applyEnvironment();
+    this.render();
+  }
+
+  setShadowsEnabled(enabled) {
+    this.shadowEnabled = enabled !== false;
+    this.applyShadowSettings();
+    this.render();
+  }
+
+  setShadowMapSize(size) {
+    const next = [512, 1024, 2048].includes(Number(size)) ? Number(size) : 1024;
+    if (next === this.shadowMapSize) return;
+    this.shadowMapSize = next;
+    this.directionalLight.shadow.mapSize.set(next, next);
+    this.directionalLight.shadow.map = null;
+    this.applyShadowSettings();
+    this.render();
+  }
+
+  setFov(fov) {
+    this.cameraFov = Math.max(10, Math.min(120, Number(fov) || PERSPECTIVE_FOV));
+    this.perspectiveCamera.fov = this.cameraFov;
+    this.perspectiveCamera.updateProjectionMatrix();
+    this.render();
+  }
+
+  setCameraPreset(preset) {
+    const direction = CAMERA_PRESETS[preset];
+    if (!direction) return;
+    this.cameraPreset = preset;
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    this.camera.position.copy(this.controls.target).addScaledVector(direction, distance);
+    this.controls.update();
+    this.render();
+  }
+
+  setBackgroundColor(color) {
+    if (!color) return;
+    this.scene.background.set(color);
+    this.render();
+  }
+
+  setShadowBlur(blur) {
+    this.shadowBlur = Math.max(0, Math.min(8, Number(blur) || 0));
+    this.directionalLight.shadow.radius = this.shadowBlur;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.render();
+  }
+
+  createContactShadow() {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(
+      size / 2, size / 2, 0,
+      size / 2, size / 2, size / 2,
+    );
+    gradient.addColorStop(0, 'rgba(15, 20, 24, 1)');
+    gradient.addColorStop(0.35, 'rgba(15, 20, 24, 0.55)');
+    gradient.addColorStop(1, 'rgba(15, 20, 24, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, size, size);
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    const material = new MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      opacity: 1,
+    });
+    const mesh = new Mesh(new PlaneGeometry(1, 1), material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.renderOrder = -1;
+    this.scene.add(mesh);
+    return mesh;
+  }
+
+  setShadowIntensity(intensity) {
+    this.shadowIntensity = Math.max(0, Math.min(1, Number(intensity) || 0));
+    this.applyShadowIntensity();
+    this.render();
+  }
+
+  applyShadowIntensity() {
+    this.groundMaterial.opacity = this.shadowIntensity;
+    if (this.contactShadow) {
+      this.contactShadow.material.opacity = Math.min(1, this.shadowIntensity * 1.4);
+    }
   }
 
   replaceTexture(textureCanvas) {
@@ -573,6 +854,11 @@ export class BoxScene {
     disposeObject3D(this.boxRoot, { disposeTextures: false });
     this.ground.geometry.dispose();
     this.groundMaterial.dispose();
+    if (this.contactShadow) {
+      this.contactShadow.geometry.dispose();
+      this.contactShadow.material.map?.dispose();
+      this.contactShadow.material.dispose();
+    }
     this.exteriorMaterial?.dispose();
     this.interiorMaterial?.dispose();
     this.outlineMaterial?.dispose();

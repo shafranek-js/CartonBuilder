@@ -1,8 +1,5 @@
-import { openDB } from 'idb';
+import { getDatabase, PRESETS_STORE } from './db.js';
 
-const DATABASE_NAME = 'carton-builder';
-const DATABASE_VERSION = 2;
-const PRESETS_STORE_NAME = 'presets';
 const LOCAL_STORAGE_KEY = 'carton_builder_user_presets';
 
 export const BUILT_IN_PRESETS = Object.freeze([
@@ -38,17 +35,8 @@ export const BUILT_IN_PRESETS = Object.freeze([
   },
 ]);
 
-async function getDatabase() {
-  return openDB(DATABASE_NAME, DATABASE_VERSION, {
-    upgrade(database) {
-      if (!database.objectStoreNames.contains('projects')) {
-        database.createObjectStore('projects');
-      }
-      if (!database.objectStoreNames.contains(PRESETS_STORE_NAME)) {
-        database.createObjectStore(PRESETS_STORE_NAME, { keyPath: 'id' });
-      }
-    },
-  });
+async function getPresetDatabase() {
+  return getDatabase();
 }
 
 let memoryPresets = [];
@@ -78,8 +66,8 @@ function saveLocalStoragePresets(presets) {
 
 export async function getUserPresets() {
   try {
-    const database = await getDatabase();
-    const presets = await database.getAll(PRESETS_STORE_NAME);
+    const database = await getPresetDatabase();
+    const presets = await database.getAll(PRESETS_STORE);
     if (presets && presets.length > 0) {
       saveLocalStoragePresets(presets);
       return presets;
@@ -109,8 +97,8 @@ export async function savePreset(presetData) {
   };
 
   try {
-    const database = await getDatabase();
-    await database.put(PRESETS_STORE_NAME, preset);
+    const database = await getPresetDatabase();
+    await database.put(PRESETS_STORE, preset);
   } catch {
     // ignore DB error
   }
@@ -124,8 +112,8 @@ export async function savePreset(presetData) {
 
 export async function deletePreset(presetId) {
   try {
-    const database = await getDatabase();
-    await database.delete(PRESETS_STORE_NAME, presetId);
+    const database = await getPresetDatabase();
+    await database.delete(PRESETS_STORE, presetId);
   } catch {
     // ignore
   }

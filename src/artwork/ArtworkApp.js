@@ -886,6 +886,9 @@ export function createArtworkApp({
   controls.preview.addEventListener('click', () => {
     onPreview(getExportWarnings(boxModel, artwork, t));
   });
+  documentRef.getElementById('export3dHtmlButton')?.addEventListener('click', () => {
+    exportDeliverable('html');
+  });
   documentRef.getElementById('backToArtworkButton').addEventListener('click', () => {
     selected = true;
     render();

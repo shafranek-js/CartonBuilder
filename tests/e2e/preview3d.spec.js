@@ -112,6 +112,41 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
     scenePreset: 'technical',
   });
 
+  await page.locator('#lightAzimuth').fill('180');
+  await page.locator('#lightElevation').fill('60');
+  await page.locator('#lightIntensity').fill('3');
+  await page.locator('#shadowBlur').fill('4');
+  expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState()))
+    .toMatchObject({
+      lightAzimuth: 180,
+      lightElevation: 60,
+      lightIntensity: 3,
+      shadowBlur: 4,
+    });
+  await expect(page.locator('#shadowBlurValue')).toHaveText('4.0');
+
+  await page.locator('#environment').selectOption('warm');
+  await page.locator('#environmentIntensity').fill('1');
+  await page.locator('#hemisphereIntensity').fill('2');
+  await page.locator('#shadowMapSize').selectOption('2048');
+  await page.locator('#cameraPreset').selectOption('top');
+  await page.locator('#cameraFov').fill('60');
+  await page.evaluate(() => {
+    const input = document.getElementById('backgroundColor');
+    input.value = '#ff0000';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState()))
+    .toMatchObject({
+      environment: 'warm',
+      environmentIntensity: 1,
+      hemisphereIntensity: 2,
+      shadowMapSize: 2048,
+      cameraPreset: 'top',
+      cameraFov: 60,
+      backgroundColor: '#ff0000',
+    });
+
   const canvas = page.locator('#preview3dCanvas');
   const canvasBox = await canvas.boundingBox();
   await canvas.click({
@@ -167,9 +202,13 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
   expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState()))
     .toMatchObject({
       active: true,
-      foldProgress: 1,
-      cameraProjection: 'perspective',
-      scenePreset: 'studio',
+      foldProgress: 0.5,
+      cameraProjection: 'orthographic',
+      scenePreset: 'technical',
+      lightAzimuth: 180,
+      environment: 'warm',
+      shadowMapSize: 2048,
+      backgroundColor: '#ff0000',
     });
 });
 
@@ -263,12 +302,9 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
   });
 
-  await page.getByRole('button', { name: 'File', exact: true }).click();
-  await page.locator('#menuExportItem').hover();
-  await page.locator('#menuExportItem > .file-menu-submenu > .file-menu-submenu-anchor').nth(1).hover();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.locator('#menuExport3dHtmlBtn').click(),
+    page.locator('#export3dHtmlButton').click(),
   ]);
   expect(download.suggestedFilename()).toBe('carton-3d.html');
 
@@ -313,4 +349,30 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
   expect(viewerState.bgPicker).toBe(true);
   expect(viewerState.bgValue).toBe('#e8e8e8');
   await viewerPage.close();
+});
+
+test('saves, applies and deletes scene presets', async ({ page }) => {
+  await page.goto('/');
+  await openPreview(page);
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+
+  await page.locator('#lightAzimuth').fill('200');
+  await page.locator('#environment').selectOption('cool');
+
+  page.once('dialog', (dialog) => dialog.accept('Cool demo'));
+  await page.locator('#saveScenePresetBtn').click();
+  await expect(page.locator('#scenePresetSelect option')).toHaveCount(2);
+  const savedId = await page.locator('#scenePresetSelect').inputValue();
+  expect(savedId).toMatch(/^scene-preset-/);
+
+  await page.locator('#lightAzimuth').fill('10');
+  await page.locator('#applyScenePresetBtn').click();
+  expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().lightAzimuth)).toBe(200);
+  expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().environment)).toBe('cool');
+  await expect(page.locator('#scenePresetStatus')).toContainText('applied');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('#deleteScenePresetBtn').click();
+  await expect(page.locator('#scenePresetSelect option')).toHaveCount(1);
+  expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().lightAzimuth)).toBe(200);
 });
