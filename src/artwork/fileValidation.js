@@ -35,7 +35,14 @@ export async function validateArtworkFile(file) {
   if (!detectedType || !SUPPORTED_TYPES[detectedType]) {
     throw new AppError('artworkFileUnsupported');
   }
-  if (file.type && file.type !== detectedType && !(file.type === 'image/jpg' && detectedType === 'image/jpeg')) {
+  const isPdfAlias = detectedType === 'application/pdf'
+    && (file.type === 'application/octet-stream' || file.type === 'application/postscript');
+  if (
+    file.type
+    && file.type !== detectedType
+    && !(file.type === 'image/jpg' && detectedType === 'image/jpeg')
+    && !isPdfAlias
+  ) {
     throw new AppError('artworkFileTypeMismatch');
   }
   return {

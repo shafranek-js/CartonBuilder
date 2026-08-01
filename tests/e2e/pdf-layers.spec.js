@@ -74,6 +74,24 @@ async function waitForPixels(page, predicate) {
   }, { timeout: 15000 }).toBe(true);
 }
 
+test('imports a PDF-based Illustrator file with an .ai extension', async ({ page }) => {
+  await page.goto('http://127.0.0.1:4173');
+  await page.waitForTimeout(1200);
+  await buildReferenceNet(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await page.locator('#artworkFileInput').setInputFiles({
+    name: 'artwork.ai',
+    mimeType: 'application/octet-stream',
+    buffer: buildOcgPdf(),
+  });
+  await expect(page.locator('#artworkFileName')).toHaveText('artwork.ai');
+  await expect(page.locator('#processingOverlay')).toBeHidden();
+  await expect(page.locator('#pdfLayersSection')).toBeVisible();
+  await expect(page.locator('#pdfLayersList')).toContainText('RedLayer');
+  await expect(page.locator('#pdfLayersList')).toContainText('BlueLayer');
+});
+
 test('exposes PDF optional content layers and re-renders the preview when toggled', async ({ page }) => {
   await page.goto('http://127.0.0.1:4173');
   await page.waitForTimeout(1200);

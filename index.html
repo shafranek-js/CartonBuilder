@@ -249,7 +249,7 @@
           <div class="artwork-canvas-wrap" id="artworkCanvasWrap" aria-busy="false">
             <div class="drop-state" id="dropState">
               <strong data-i18n="dropArtwork">Drop artwork here</strong>
-              <span data-i18n="fileHint">PNG, JPG or PDF · maximum 100 MB</span>
+              <span data-i18n="fileHint">PNG, JPG, PDF or AI · maximum 100 MB</span>
               <button class="primary-action" id="chooseArtworkButton" type="button" data-i18n="chooseFile">Choose file</button>
             </div>
             <svg id="artworkWorkspace" role="img" tabindex="0" aria-label="Artwork placement canvas" data-i18n-aria-label="artworkCanvasLabel"></svg>
@@ -468,7 +468,7 @@
         </footer>
       </section>
 
-      <input id="artworkFileInput" type="file" accept="image/png,image/jpeg,application/pdf,.png,.jpg,.jpeg,.pdf" hidden>
+      <input id="artworkFileInput" type="file" accept="image/png,image/jpeg,application/pdf,application/postscript,.png,.jpg,.jpeg,.pdf,.ai" hidden>
       <input id="projectFileInput" type="file" accept=".carton,application/zip" hidden>
 
       <dialog id="pageDialog" aria-labelledby="pageDialogTitle">

@@ -46,4 +46,27 @@ describe('artwork file validation', () => {
       extension: 'png',
     });
   });
+
+  it('accepts PDF-based Illustrator files reported as octet-stream or postscript', async () => {
+    const header = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+    const octet = new Blob([header], { type: 'application/octet-stream' });
+    const postscript = new Blob([header], { type: 'application/postscript' });
+    await expect(validateArtworkFile(octet)).resolves.toEqual({
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+    });
+    await expect(validateArtworkFile(postscript)).resolves.toEqual({
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+    });
+  });
+
+  it('still rejects type mismatches that are not PDF aliases', async () => {
+    const blob = new Blob([
+      Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]),
+    ], { type: 'image/png' });
+    await expect(validateArtworkFile(blob)).rejects.toMatchObject({
+      code: 'artworkFileTypeMismatch',
+    });
+  });
 });
