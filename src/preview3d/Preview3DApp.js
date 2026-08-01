@@ -409,6 +409,13 @@ export function createPreview3DApp({
     cancelAnimation();
     cancelSync();
     setBusy(false);
+    // A step transition can occur in the same task as a range-input event.
+    // Reconcile the DOM value before pausing so Preview never loses the last
+    // technical fold position when Render is opened immediately afterwards.
+    const sliderValue = Number(elements.foldSlider?.value);
+    if (Number.isFinite(sliderValue) && Math.abs(sliderValue - state.foldProgress) > 1e-6) {
+      applyFoldProgress(sliderValue);
+    }
   }
 
   function setCameraProjection(value) {

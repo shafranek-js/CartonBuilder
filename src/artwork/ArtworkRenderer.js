@@ -12,17 +12,49 @@ function svgElement(documentRef, name, attributes = {}) {
   return element;
 }
 
+export function getArtworkOrigin(artwork) {
+  return {
+    x: artwork.centerXmm - artwork.unrotatedWidthMm / 2,
+    y: artwork.centerYmm - artwork.unrotatedHeightMm / 2,
+  };
+}
+
+export function getCropRect(artwork, crop) {
+  const origin = getArtworkOrigin(artwork);
+  return {
+    x: origin.x + (crop.x || 0),
+    y: origin.y + (crop.y || 0),
+    width: crop.width,
+    height: crop.height,
+  };
+}
+
+export function getCropCorners(artwork, crop) {
+  const rect = getCropRect(artwork, crop);
+  return [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+  ];
+}
+
+export function getArtworkRotationTransform(artwork) {
+  return `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`;
+}
+
 function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath, artworkIndex) {
+  const origin = getArtworkOrigin(artwork);
   const imageProps = {
     class: 'artwork-image',
     href: previewUrl,
-    x: artwork.centerXmm - artwork.unrotatedWidthMm / 2,
-    y: artwork.centerYmm - artwork.unrotatedHeightMm / 2,
+    x: origin.x,
+    y: origin.y,
     width: artwork.unrotatedWidthMm,
     height: artwork.unrotatedHeightMm,
     opacity,
     preserveAspectRatio: 'none',
-    transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
+    transform: getArtworkRotationTransform(artwork),
   };
   if (artworkIndex != null) imageProps['data-artwork-index'] = String(artworkIndex);
 
@@ -40,18 +72,16 @@ function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath
 }
 
 function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, outerClip, crop, artworkIndex) {
-  const cx = artwork.centerXmm;
-  const cy = artwork.centerYmm;
-  const halfW = artwork.unrotatedWidthMm / 2;
-  const halfH = artwork.unrotatedHeightMm / 2;
+  const origin = getArtworkOrigin(artwork);
+  const cropRect = getCropRect(artwork, crop);
   const rotateGroup = svgElement(documentRef, 'g', {
-    transform: `rotate(${artwork.rotation} ${cx} ${cy})`,
+    transform: getArtworkRotationTransform(artwork),
   });
   const clipRect = svgElement(documentRef, 'rect', {
-    x: -halfW + (crop.x || 0),
-    y: -halfH + (crop.y || 0),
-    width: crop.width,
-    height: crop.height,
+    x: cropRect.x,
+    y: cropRect.y,
+    width: cropRect.width,
+    height: cropRect.height,
   });
   const cropId = `crop-${Math.random().toString(36).slice(2)}`;
   const clipDef = svgElement(documentRef, 'clipPath', { id: cropId });
@@ -62,8 +92,8 @@ function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, o
   const imageAttrs = {
     class: 'artwork-image',
     href: previewUrl,
-    x: -halfW,
-    y: -halfH,
+    x: origin.x,
+    y: origin.y,
     width: artwork.unrotatedWidthMm,
     height: artwork.unrotatedHeightMm,
     opacity,
@@ -84,31 +114,25 @@ function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, o
 }
 
 function appendCropFrame(documentRef, parent, artwork, crop) {
-  const halfW = artwork.unrotatedWidthMm / 2;
-  const halfH = artwork.unrotatedHeightMm / 2;
+  const cropRect = getCropRect(artwork, crop);
   const group = svgElement(documentRef, 'g', {
-    transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
+    transform: getArtworkRotationTransform(artwork),
   });
   group.appendChild(svgElement(documentRef, 'rect', {
     class: 'crop-frame',
-    x: -halfW + (crop.x || 0),
-    y: -halfH + (crop.y || 0),
-    width: crop.width,
-    height: crop.height,
+    x: cropRect.x,
+    y: cropRect.y,
+    width: cropRect.width,
+    height: cropRect.height,
   }));
   const handleSize = 5;
   const halfHandle = handleSize / 2;
-  const corners = [
-    { x: crop.x || 0, y: crop.y || 0 },
-    { x: (crop.x || 0) + crop.width, y: crop.y || 0 },
-    { x: (crop.x || 0) + crop.width, y: (crop.y || 0) + crop.height },
-    { x: crop.x || 0, y: (crop.y || 0) + crop.height },
-  ];
+  const corners = getCropCorners(artwork, crop);
   for (let i = 0; i < corners.length; i++) {
     group.appendChild(svgElement(documentRef, 'rect', {
       class: 'crop-handle',
-      x: -halfW + corners[i].x - halfHandle,
-      y: -halfH + corners[i].y - halfHandle,
+      x: corners[i].x - halfHandle,
+      y: corners[i].y - halfHandle,
       width: handleSize,
       height: handleSize,
       'data-crop-corner': i,
@@ -379,17 +403,16 @@ export class ArtworkRenderer {
 
     if (!preview) {
       if (this.drawRect && showArtwork) {
-        const halfW = this.artwork.unrotatedWidthMm / 2;
-        const halfH = this.artwork.unrotatedHeightMm / 2;
+        const drawRect = getCropRect(this.artwork, this.drawRect);
         const drGroup = svgElement(documentRef, 'g', {
-          transform: `rotate(${this.artwork.rotation} ${this.artwork.centerXmm} ${this.artwork.centerYmm})`,
+          transform: getArtworkRotationTransform(this.artwork),
         });
         drGroup.appendChild(svgElement(documentRef, 'rect', {
           class: 'crop-drawing-rect',
-          x: -halfW + (this.drawRect.x || 0),
-          y: -halfH + (this.drawRect.y || 0),
-          width: this.drawRect.width || 0,
-          height: this.drawRect.height || 0,
+          x: drawRect.x,
+          y: drawRect.y,
+          width: drawRect.width || 0,
+          height: drawRect.height || 0,
         }));
         target.appendChild(drGroup);
       }

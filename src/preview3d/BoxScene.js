@@ -23,7 +23,7 @@ import {
   NoToneMapping,
   Object3D,
   OrthographicCamera,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   PMREMGenerator,
@@ -47,6 +47,8 @@ import {
   getPanelOutlinePoints,
 } from './panelGeometry.js';
 import { disposeObject3D } from './disposeScene.js';
+import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
+import { createPanelSolidGeometry } from '../render/panelSolidGeometry.js';
 
 const CAMERA_DIRECTION = new Vector3(1, 1, 1).normalize();
 const PERSPECTIVE_FOV = 35;
@@ -163,7 +165,7 @@ function makeExteriorMaterial(preset, texture) {
   });
 }
 
-function makeInteriorMaterial(preset) {
+function makeInteriorMaterial(preset, color = '#f4f2ec') {
   if (preset === 'technical') {
     return new MeshBasicMaterial({
       color: 0xffffff,
@@ -175,7 +177,7 @@ function makeInteriorMaterial(preset) {
     ? MeshPhysicalMaterial
     : MeshStandardMaterial;
   return new Material({
-    color: 0xf4f2ec,
+    color,
     side: BackSide,
     roughness: preset === 'gloss' ? 0.72 : 0.95,
     metalness: 0,
@@ -215,6 +217,8 @@ export class BoxScene {
     backgroundMode = 'solid',
     alpha = false,
     materialProfile = null,
+    geometryMode = 'flat',
+    boardAppearance = null,
     windowRef = window,
     onSelection = () => {},
     onCameraChange = () => {},
@@ -229,6 +233,7 @@ export class BoxScene {
     this.onCameraChange = onCameraChange;
     this.onContextLost = onContextLost;
     this.onContextRestored = onContextRestored;
+    this.renderCallback = null;
     this.disposed = false;
     this.foldProgress = foldProgress;
     this.cameraProjection = CAMERA_PROJECTIONS.has(cameraProjection)
@@ -236,6 +241,8 @@ export class BoxScene {
       : 'perspective';
     this.scenePreset = SCENE_PRESETS.has(scenePreset) ? scenePreset : 'studio';
     this.materialProfile = materialProfile || this.scenePreset;
+    this.geometryMode = geometryMode === 'solid' ? 'solid' : 'flat';
+    this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
     this.backgroundMode = backgroundMode === 'transparent' ? 'transparent' : 'solid';
     this.backgroundColor = backgroundColor || '#e8eaeb';
     this.selectedPanelId = selectedPanelId;
@@ -254,7 +261,7 @@ export class BoxScene {
     });
     this.renderer.setPixelRatio(Math.min(windowRef.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.shadowMap.type = PCFShadowMap;
 
     this.scene = new Scene();
     this.scene.background = this.backgroundMode === 'transparent'
@@ -403,17 +410,23 @@ export class BoxScene {
   createPanelFrame(node) {
     const frame = new Object3D();
     frame.name = `${node.id}-frame`;
-    const geometry = createPanelGeometry(node.panel, this.boxModel.getBounds());
-    const exterior = new Mesh(geometry, this.exteriorMaterial);
+    const geometry = this.geometryMode === 'solid'
+      ? createPanelSolidGeometry(node.panel, this.boxModel.getBounds(), this.boardAppearance)
+      : createPanelGeometry(node.panel, this.boxModel.getBounds());
+    const exterior = this.geometryMode === 'solid'
+      ? new Mesh(geometry, [this.exteriorMaterial, this.interiorMaterial, this.edgeMaterial])
+      : new Mesh(geometry, this.exteriorMaterial);
     exterior.name = `${node.id}-exterior`;
     exterior.userData.panelId = node.id;
     exterior.castShadow = true;
     exterior.receiveShadow = true;
-    const interior = new Mesh(geometry, this.interiorMaterial);
-    interior.name = `${node.id}-interior`;
-    interior.userData.panelId = node.id;
-    interior.castShadow = false;
-    interior.receiveShadow = true;
+    const interior = this.geometryMode === 'solid' ? null : new Mesh(geometry, this.interiorMaterial);
+    if (interior) {
+      interior.name = `${node.id}-interior`;
+      interior.userData.panelId = node.id;
+      interior.castShadow = false;
+      interior.receiveShadow = true;
+    }
 
     const frontOutline = new LineLoop(
       createOutlineGeometry(node.panel, 0.12),
@@ -425,8 +438,8 @@ export class BoxScene {
     );
     frontOutline.visible = false;
     backOutline.visible = false;
-    frame.add(exterior, interior, frontOutline, backOutline);
-    this.pickMeshes.push(exterior, interior);
+    frame.add(exterior, ...(interior ? [interior] : []), frontOutline, backOutline);
+    this.pickMeshes.push(exterior, ...(interior ? [interior] : []));
     this.panelObjects.set(node.id, {
       frame,
       exterior,
@@ -442,15 +455,24 @@ export class BoxScene {
   applyMaterials(preset) {
     const previousExterior = this.exteriorMaterial;
     const previousInterior = this.interiorMaterial;
+    const previousEdge = this.edgeMaterial;
     this.materialProfile = preset;
     this.exteriorMaterial = makeExteriorMaterial(preset, this.texture);
-    this.interiorMaterial = makeInteriorMaterial(preset);
+    this.interiorMaterial = makeInteriorMaterial(preset, this.boardAppearance.interiorColor);
+    this.edgeMaterial = new MeshStandardMaterial({
+      color: this.boardAppearance.edgeColor,
+      roughness: preset === 'gloss' ? 0.72 : 0.92,
+      metalness: 0,
+    });
     for (const entry of this.panelObjects.values()) {
-      entry.exterior.material = this.exteriorMaterial;
-      entry.interior.material = this.interiorMaterial;
+      entry.exterior.material = this.geometryMode === 'solid'
+        ? [this.exteriorMaterial, this.interiorMaterial, this.edgeMaterial]
+        : this.exteriorMaterial;
+      if (entry.interior) entry.interior.material = this.interiorMaterial;
     }
     previousExterior?.dispose();
     previousInterior?.dispose();
+    previousEdge?.dispose();
   }
 
   createControls() {
@@ -783,6 +805,21 @@ export class BoxScene {
     this.render();
   }
 
+  setBoardAppearance(boardAppearance) {
+    const next = sanitizeBoardAppearance(boardAppearance);
+    if (JSON.stringify(next) === JSON.stringify(this.boardAppearance)) return;
+    this.boardAppearance = next;
+    if (this.geometryMode === 'solid') {
+      const selectedPanelId = this.selectedPanelId;
+      this.buildBox();
+      this.applyFold(this.foldProgress, { render: false });
+      this.setSelectedPanel(selectedPanelId, { notify: false, render: false });
+    } else {
+      this.applyMaterials(this.scenePreset);
+    }
+    this.render();
+  }
+
   setExposure(exposure) {
     this.renderer.toneMappingExposure = Math.max(0.1, Math.min(3, Number(exposure) || 1));
     this.render();
@@ -826,7 +863,7 @@ export class BoxScene {
     }
   }
 
-  async renderToPixels({ width, height, backgroundMode = this.backgroundMode, backgroundColor = this.backgroundColor, includeShadow = true, signal }) {
+  async renderToPixels({ width, height, backgroundMode = this.backgroundMode, backgroundColor = this.backgroundColor, includeShadow = true, signal, renderOverride = null }) {
     if (signal?.aborted) throw new DOMException('Render export aborted.', 'AbortError');
     const outputWidth = Math.max(1, Math.floor(width));
     const outputHeight = Math.max(1, Math.floor(height));
@@ -844,6 +881,8 @@ export class BoxScene {
     const previousOrthographicHeight = this.orthographicHeight;
     const previousGroundVisible = this.ground.visible;
     const previousContactShadowVisible = this.contactShadow?.visible;
+    let overrideResult = null;
+    let overrideRestored = false;
     try {
       this.setBackgroundMode(backgroundMode, backgroundColor, { render: false });
       if (!includeShadow) {
@@ -858,16 +897,23 @@ export class BoxScene {
       }
       this.renderer.setRenderTarget(target);
       this.renderer.clear(true, true, true);
-      this.renderer.render(this.scene, this.camera);
+      overrideResult = typeof renderOverride === 'function'
+        ? await renderOverride({ target, width: outputWidth, height: outputHeight })
+        : null;
+      if (!overrideResult) this.renderer.render(this.scene, this.camera);
+      const pixelsTarget = overrideResult?.target || overrideResult || target;
       const pixels = new Uint8Array(outputWidth * outputHeight * 4);
       if (typeof this.renderer.readRenderTargetPixelsAsync === 'function') {
-        await this.renderer.readRenderTargetPixelsAsync(target, 0, 0, outputWidth, outputHeight, pixels);
+        await this.renderer.readRenderTargetPixelsAsync(pixelsTarget, 0, 0, outputWidth, outputHeight, pixels);
       } else {
-        this.renderer.readRenderTargetPixels(target, 0, 0, outputWidth, outputHeight, pixels);
+        this.renderer.readRenderTargetPixels(pixelsTarget, 0, 0, outputWidth, outputHeight, pixels);
       }
+      overrideResult?.restore?.();
+      overrideRestored = true;
       if (signal?.aborted) throw new DOMException('Render export aborted.', 'AbortError');
       return { pixels, width: outputWidth, height: outputHeight };
     } finally {
+      if (!overrideRestored) overrideResult?.restore?.();
       this.renderer.setRenderTarget(previousTarget);
       this.renderer.setSize(previousSize.x, previousSize.y, false);
       this.perspectiveCamera.aspect = previousPerspectiveAspect;
@@ -991,7 +1037,12 @@ export class BoxScene {
 
   render() {
     if (this.disposed) return;
-    this.renderer.render(this.scene, this.camera);
+    if (this.renderCallback) this.renderCallback();
+    else this.renderer.render(this.scene, this.camera);
+  }
+
+  setRenderCallback(callback = null) {
+    this.renderCallback = typeof callback === 'function' ? callback : null;
   }
 
   getResourceInfo() {
@@ -1010,6 +1061,8 @@ export class BoxScene {
       drawingBufferHeight: this.renderer.domElement.height,
       shadowMapSize: this.shadowMapSize,
       foldProgress: this.foldProgress,
+      geometryMode: this.geometryMode,
+      thicknessMm: this.boardAppearance.thicknessMm,
     };
   }
 
@@ -1034,6 +1087,7 @@ export class BoxScene {
     }
     this.exteriorMaterial?.dispose();
     this.interiorMaterial?.dispose();
+    this.edgeMaterial?.dispose();
     this.outlineMaterial?.dispose();
     this.texture?.dispose();
     this.environmentTexture?.dispose();

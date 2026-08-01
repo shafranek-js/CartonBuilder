@@ -147,7 +147,12 @@ Custom cameras; Uncoated, Matte, and Gloss board profiles; 1:1, 4:3, 16:9, and
 and PNG/JPG still export at 2048 or 4096 pixels on the long edge. Export uses a
 fixed offscreen render target and does not depend on `preserveDrawingBuffer`.
 
-Render settings are part of project schema version 3 and are restored by
+Render effects are enabled with `VITE_ENABLE_RENDER_EFFECTS=true` (the default).
+The optional path-tracing experiment is only exposed with
+`VITE_ENABLE_RENDER_PATH_TRACING=true`; it is not part of the production raster
+pipeline and requires a separately installed compatible addon.
+
+Render settings are part of project schema version 4 and are restored by
 IndexedDB autosave and `.carton` archives. GPU resources, progress, and renderer
 diagnostics remain transient. WebGL 2 is required for the presentation scene;
 when unavailable, the 2D editor, technical exports, and project files remain
@@ -195,7 +200,7 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-schema v3 project snapshot.
+schema v4 project snapshot.
 
 The existing events are unchanged:
 
@@ -210,9 +215,12 @@ The existing events are unchanged:
 - There are no flaps, bleed, safe area, material thickness, trapping, crop
   marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
   production validation, collision simulation, or free-angle rotation.
-- Presentation Render does not yet provide material thickness/edge solids,
-  collision simulation, GTAO/TAA, WebGPU, WebP, or path tracing. Technical PDF
-  and SVG exports remain separate from presentation rendering.
+- Presentation Render now provides Render-only solid board geometry with
+  thickness/bevel, interior and edge materials, settled GTAO/TAA, optional DOF,
+  adaptive quality diagnostics, and named presets. Preview remains flat and
+  technical. WebGPU, WebP, CMYK/ICC print proof, collision simulation, and
+  production path tracing remain out of scope; the path-tracing button is a
+  disabled-by-default gated experiment.
 - One artwork asset is supported; replacement is not part of undo history.
 - Touch workflows are out of scope. The target is desktop Chrome at
   approximately 1024×720 or larger, including 4K displays. WebGL 1 and
