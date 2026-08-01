@@ -1783,10 +1783,17 @@ dialog button {
   height: 22px;
   padding: 0;
   border: none;
+  outline: none;
+  appearance: none;
   background: transparent;
   color: var(--muted-text, #808080);
   cursor: pointer;
   flex-shrink: 0;
+}
+.layer-twisty:focus-visible {
+  outline: 2px solid var(--accent, #4a9eff);
+  outline-offset: -2px;
+  border-radius: 2px;
 }
 .layer-twisty:hover {
   color: var(--text, #ffffff);
