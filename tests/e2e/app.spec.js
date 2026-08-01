@@ -412,7 +412,7 @@ test('localizes persistent errors and rejects a corrupt autosave without mutatin
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    record.originalBlob = null;
+    record.artworkBlobs = [{ originalBlob: null, previewBlob: null }];
     await new Promise((resolve, reject) => {
       const transaction = database.transaction('projects', 'readwrite');
       const request = transaction.objectStore('projects').put(record, 'current');
@@ -480,8 +480,8 @@ test('cancels worker processing and revokes superseded preview URLs', async ({ p
 
   const audit = await page.evaluate(() => window.__objectUrlAudit);
   const activeUrls = audit.created.filter((url) => !audit.revoked.includes(url));
-  expect(activeUrls).toHaveLength(1);
-  expect(new Set(audit.revoked).size).toBe(audit.created.length - 1);
+  expect(activeUrls).toHaveLength(40);
+  expect(new Set(audit.revoked).size).toBe(audit.created.length - 40);
 });
 
 test('allows opening a .carton project directly from Step 1 (Create Box)', async ({ page }) => {
@@ -716,6 +716,64 @@ test('reference point selector swaps X/Y without moving artwork and anchors tran
   expect(anchorAfterRotate.x).toBeCloseTo(anchorAfterScale.x, 4);
   expect(anchorAfterRotate.y).toBeCloseTo(anchorAfterScale.y, 4);
 });
+
+test('adds multiple artworks with named sublayers, reorders and renames them', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page, 'first.png');
+  await loadGeneratedPng(page, 'second.png');
+
+  const sublayers = page.locator('#artworkSublayers .artwork-sublayer');
+  await expect(sublayers).toHaveCount(2);
+  await expect(sublayers.nth(0)).toHaveText('second.png');
+  await expect(sublayers.nth(1)).toHaveText('first.png');
+
+  await expect(page.locator('#artworkFileName')).toHaveText('second.png');
+  const state = await page.evaluate(() => window.cartonBuilderApp.artwork.createSnapshot());
+  expect(state.artworks.map((entry) => entry.artwork.source.fileName)).toEqual(['second.png', 'first.png']);
+  expect(state.activeArtworkIndex).toBe(0);
+
+  await sublayers.nth(1).click();
+  await expect(page.locator('#artworkFileName')).toHaveText('first.png');
+  await expect(sublayers.nth(1)).toHaveClass(/active/);
+
+  await sublayers.nth(1).locator('.layer-title').dblclick();
+  const renameInput = sublayers.nth(1).locator('.layer-rename-input');
+  await renameInput.fill('renamed.png');
+  await renameInput.press('Enter');
+  await expect(sublayers.nth(1)).toHaveText('renamed.png');
+  await expect(page.locator('#artworkFileName')).toHaveText('renamed.png');
+
+  await sublayers.nth(1).locator('.layer-drag-handle').hover();
+  await page.mouse.down();
+  await page.mouse.move(0, 10, { steps: 5 });
+  await sublayers.nth(0).hover();
+  await page.mouse.move(
+    (await sublayers.nth(0).boundingBox()).x + 40,
+    (await sublayers.nth(0).boundingBox()).y + 10,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  const orderAfter = await page.evaluate(() => window.cartonBuilderApp.artwork.createSnapshot());
+  expect(orderAfter.artworks.map((entry) => entry.artwork.source.fileName)).toEqual(['renamed.png', 'second.png']);
+
+  await page.keyboard.press('Control+z');
+  const orderAfterUndo = await page.evaluate(() => window.cartonBuilderApp.artwork.createSnapshot());
+  expect(orderAfterUndo.artworks.map((entry) => entry.artwork.source.fileName)).toEqual(['second.png', 'renamed.png']);
+
+  const secondRow = page.locator('#artworkSublayers .artwork-sublayer').nth(0);
+  await secondRow.locator('.eye-cell').click();
+  await expect(page.locator('#artworkSublayers .artwork-sublayer').nth(0)).toHaveText('second.png');
+  const visibility = await page.evaluate(() => window.cartonBuilderApp.artwork.createSnapshot());
+  expect(visibility.artworks[0].visible).toBe(false);
+
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await page.reload();
+  await page.locator('#artworkStep').waitFor({ state: 'visible' });
+  await expect(page.locator('#artworkSublayers .artwork-sublayer')).toHaveCount(2);
+  await expect(page.locator('#artworkSublayers .artwork-sublayer').nth(0)).toHaveText('second.png');
+  await expect(page.locator('#artworkSublayers .artwork-sublayer').nth(1)).toHaveText('renamed.png');
+});
+
 
 
 

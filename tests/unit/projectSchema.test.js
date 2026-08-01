@@ -16,39 +16,42 @@ async function createBundle() {
   ], { type: 'image/jpeg' });
   const sourceHash = await sha256(originalBlob);
 
+  const artwork = {
+    source: {
+      id: 'asset',
+      fileName: 'asset.png',
+      mimeType: 'image/png',
+      byteLength: originalBlob.size,
+      widthPx: 200,
+      heightPx: 100,
+      previewWidthPx: 200,
+      previewHeightPx: 100,
+      pageIndex: null,
+      pageCount: null,
+      vector: false,
+      pdfPageRotation: 0,
+      mediaBox: null,
+      sha256: sourceHash,
+    },
+    centerXmm: 75,
+    centerYmm: 45,
+    initialWidthMm: 150,
+    initialHeightMm: 75,
+    scale: 1,
+    rotation: 0,
+    opacity: 1,
+    modified: false,
+  };
+
   return {
     originalBlob,
     previewBlob,
+    artwork,
     snapshot: {
       schemaVersion: 1,
       workflowStep: 'preview',
       box: new BoxNetModel().toJSON(),
-      artwork: {
-        source: {
-          id: 'asset',
-          fileName: 'asset.png',
-          mimeType: 'image/png',
-          byteLength: originalBlob.size,
-          widthPx: 200,
-          heightPx: 100,
-          previewWidthPx: 200,
-          previewHeightPx: 100,
-          pageIndex: null,
-          pageCount: null,
-          vector: false,
-          pdfPageRotation: 0,
-          mediaBox: null,
-          sha256: sourceHash,
-        },
-        centerXmm: 75,
-        centerYmm: 45,
-        initialWidthMm: 150,
-        initialHeightMm: 75,
-        scale: 1,
-        rotation: 0,
-        opacity: 1,
-        modified: false,
-      },
+      artwork,
       view: {},
       history: { undo: [], redo: [] },
     },
@@ -56,13 +59,15 @@ async function createBundle() {
 }
 
 describe('project schema', () => {
-  it('normalizes version 1 into an independent snapshot', async () => {
-    const { snapshot } = await createBundle();
+  it('migrates version 1 into an independent v2 snapshot with artworks', async () => {
+    const { snapshot, artwork } = await createBundle();
     const migrated = migrateProjectSnapshot(snapshot);
 
-    expect(migrated).toEqual(snapshot);
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.artworks).toEqual([{ artwork, visible: true }]);
+    expect(migrated.activeArtworkIndex).toBe(0);
     expect(migrated).not.toBe(snapshot);
-    migrated.artwork.centerXmm = 1;
+    migrated.artworks[0].artwork.centerXmm = 1;
     expect(snapshot.artwork.centerXmm).toBe(75);
   });
 
@@ -70,7 +75,7 @@ describe('project schema', () => {
     const { snapshot } = await createBundle();
     expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'unknown' }).workflowStep).toBe('box');
     expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'box' }).workflowStep).toBe('box');
-    expect(() => migrateProjectSnapshot({ ...snapshot, schemaVersion: 2 })).toThrowError(
+    expect(() => migrateProjectSnapshot({ ...snapshot, schemaVersion: 3 })).toThrowError(
       expect.objectContaining({ code: 'projectVersionUnsupported' }),
     );
   });
@@ -79,8 +84,10 @@ describe('project schema', () => {
     const bundle = await createBundle();
     const valid = await validateProjectBundle(bundle);
     expect(valid.snapshot.workflowStep).toBe('preview');
-    expect(valid.originalBlob.type).toBe('image/png');
-    expect(valid.previewBlob.type).toBe('image/jpeg');
+    expect(valid.snapshot.artworks).toHaveLength(1);
+    expect(valid.artworkBlobs).toHaveLength(1);
+    expect(valid.artworkBlobs[0].originalBlob.type).toBe('image/png');
+    expect(valid.artworkBlobs[0].previewBlob.type).toBe('image/jpeg');
 
     await expect(validateProjectBundle({
       ...bundle,
@@ -110,6 +117,30 @@ describe('project schema', () => {
     })).rejects.toMatchObject({ code: 'projectArtworkChecksumMismatch' });
   });
 
+  it('validates multiple artworks with aligned blobs', async () => {
+    const first = await createBundle();
+    const second = await createBundle();
+    const snapshot = migrateProjectSnapshot(first.snapshot);
+    snapshot.artworks.push({
+      artwork: { ...second.artwork, source: { ...second.artwork.source, id: 'asset-2' } },
+      visible: true,
+    });
+    const valid = await validateProjectBundle({
+      snapshot,
+      artworkBlobs: [
+        { originalBlob: first.originalBlob, previewBlob: first.previewBlob },
+        { originalBlob: second.originalBlob, previewBlob: second.previewBlob },
+      ],
+    });
+    expect(valid.snapshot.artworks).toHaveLength(2);
+    expect(valid.artworkBlobs).toHaveLength(2);
+
+    await expect(validateProjectBundle({
+      snapshot,
+      artworkBlobs: [{ originalBlob: first.originalBlob, previewBlob: first.previewBlob }],
+    })).rejects.toMatchObject({ code: 'projectArtworkMissing' });
+  });
+
   it('supports artwork-free box net snapshots', async () => {
     const snapshot = {
       schemaVersion: 1,
@@ -122,8 +153,8 @@ describe('project schema', () => {
 
     const valid = await validateProjectBundle({ snapshot, originalBlob: null, previewBlob: null });
     expect(valid.snapshot.box.dimensions).toEqual({ width: 220, height: 110, depth: 55 });
-    expect(valid.originalBlob).toBeNull();
-    expect(valid.previewBlob).toBeNull();
+    expect(valid.snapshot.artworks).toEqual([]);
+    expect(valid.snapshot.activeArtworkIndex).toBe(-1);
+    expect(valid.artworkBlobs).toEqual([]);
   });
 });
-

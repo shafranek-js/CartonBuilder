@@ -2,12 +2,11 @@ import { getDatabase, PROJECTS_STORE } from './db.js';
 
 const CURRENT_PROJECT_ID = 'current';
 
-export async function saveCurrentProject({ snapshot, originalBlob, previewBlob }) {
+export async function saveCurrentProject({ snapshot, artworkBlobs }) {
   const database = await getDatabase();
   await database.put(PROJECTS_STORE, {
     snapshot,
-    originalBlob: originalBlob || null,
-    previewBlob: previewBlob || null,
+    artworkBlobs: artworkBlobs || [],
   }, CURRENT_PROJECT_ID);
 }
 

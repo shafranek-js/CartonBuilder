@@ -62,17 +62,22 @@ function fixture() {
       }),
       getPanels: () => [panel],
     },
-    artwork: {
-      hasArtwork: true,
-      source: { previewWidthPx: 1200, previewHeightPx: 720 },
-      centerXmm: 75,
-      centerYmm: 45,
-      unrotatedWidthMm: 150,
-      unrotatedHeightMm: 90,
-      rotation: 90,
-      opacity: 0.75,
-    },
-    previewBlob: new Blob(['preview'], { type: 'image/png' }),
+    artworks: [
+      {
+        model: {
+          hasArtwork: true,
+          source: { previewWidthPx: 1200, previewHeightPx: 720 },
+          centerXmm: 75,
+          centerYmm: 45,
+          unrotatedWidthMm: 150,
+          unrotatedHeightMm: 90,
+          rotation: 90,
+          opacity: 0.75,
+        },
+        visible: true,
+        previewBlob: new Blob(['preview'], { type: 'image/png' }),
+      },
+    ],
   };
 }
 
@@ -85,11 +90,15 @@ describe('3D texture composition', () => {
   it('keeps the texture within the edge and pixel budget', () => {
     const size = getTextureSize(
       { width: 100_000, height: 80_000 },
-      {
-        source: { previewWidthPx: 20_000, previewHeightPx: 16_000 },
-        unrotatedWidthMm: 100_000,
-        unrotatedHeightMm: 80_000,
-      },
+      [
+        {
+          model: {
+            source: { previewWidthPx: 20_000, previewHeightPx: 16_000 },
+            unrotatedWidthMm: 100_000,
+            unrotatedHeightMm: 80_000,
+          },
+        },
+      ],
     );
     expect(size.width).toBeLessThanOrEqual(PREVIEW_TEXTURE_LIMITS.maxEdge);
     expect(size.height).toBeLessThanOrEqual(PREVIEW_TEXTURE_LIMITS.maxEdge);

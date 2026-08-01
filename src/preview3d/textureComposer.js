@@ -9,16 +9,25 @@ function finitePositive(value, fallback = 1) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-export function getTextureSize(bounds, artwork, limits = PREVIEW_TEXTURE_LIMITS) {
+export function getTextureSize(bounds, artworks, limits = PREVIEW_TEXTURE_LIMITS) {
   const widthMm = finitePositive(bounds.width);
   const heightMm = finitePositive(bounds.height);
   const edgeScale = Math.min(limits.maxEdge / widthMm, limits.maxEdge / heightMm);
   const areaScale = Math.sqrt(limits.maxPixels / (widthMm * heightMm));
-  const previewWidth = finitePositive(artwork?.source?.previewWidthPx);
-  const previewHeight = finitePositive(artwork?.source?.previewHeightPx);
-  const artworkWidth = finitePositive(artwork?.unrotatedWidthMm);
-  const artworkHeight = finitePositive(artwork?.unrotatedHeightMm);
-  const sourceScale = Math.min(previewWidth / artworkWidth, previewHeight / artworkHeight);
+  let sourceScale = Infinity;
+  for (const entry of artworks || []) {
+    const artwork = entry?.model || entry;
+    if (!artwork?.hasArtwork) continue;
+    const previewWidth = finitePositive(artwork?.source?.previewWidthPx);
+    const previewHeight = finitePositive(artwork?.source?.previewHeightPx);
+    const artworkWidth = finitePositive(artwork?.unrotatedWidthMm);
+    const artworkHeight = finitePositive(artwork?.unrotatedHeightMm);
+    sourceScale = Math.min(
+      sourceScale,
+      Math.min(previewWidth / artworkWidth, previewHeight / artworkHeight),
+    );
+  }
+  if (!Number.isFinite(sourceScale)) sourceScale = Infinity;
   const pixelsPerMm = Math.max(0.01, Math.min(edgeScale, areaScale, sourceScale));
   const width = Math.max(1, Math.floor(widthMm * pixelsPerMm));
   const height = Math.max(1, Math.floor(heightMm * pixelsPerMm));
@@ -64,30 +73,50 @@ function drawPanelBleed(source, target, panels, bounds, pixelsPerMm, bleedPixels
   }
 }
 
+function drawArtwork(context, entry, bitmap) {
+  const artwork = entry.model;
+  context.save();
+  context.globalAlpha = artwork.opacity;
+  context.translate(artwork.centerXmm, artwork.centerYmm);
+  context.rotate(artwork.rotation * Math.PI / 180);
+  context.drawImage(
+    bitmap,
+    -artwork.unrotatedWidthMm / 2,
+    -artwork.unrotatedHeightMm / 2,
+    artwork.unrotatedWidthMm,
+    artwork.unrotatedHeightMm,
+  );
+  context.restore();
+}
+
 export async function composeArtworkTexture({
   boxModel,
-  artwork,
-  previewBlob,
+  artworks,
   documentRef = globalThis.document,
   createImageBitmapFn = globalThis.createImageBitmap,
   signal,
 }) {
-  if (!artwork?.hasArtwork || !previewBlob) {
-    throw new Error('Artwork preview is required for the 3D texture.');
+  const entries = (artworks || [])
+    .filter((entry) => entry?.model?.hasArtwork && entry.visible !== false && entry.previewBlob);
+  if (!entries.length) {
+    throw new Error('At least one artwork with a preview is required for the 3D texture.');
   }
   throwIfAborted(signal);
 
   const bounds = boxModel.getBounds();
   const panels = boxModel.getPanels();
-  const { width, height, pixelsPerMm } = getTextureSize(bounds, artwork);
+  const { width, height, pixelsPerMm } = getTextureSize(bounds, entries);
   const rawCanvas = createCanvas(width, height, documentRef);
   const rawContext = rawCanvas.getContext('2d', { alpha: true });
   const outputCanvas = createCanvas(width, height, documentRef);
   const outputContext = outputCanvas.getContext('2d', { alpha: true });
-  let bitmap;
+  const bitmaps = [];
 
   try {
-    bitmap = await createImageBitmapFn(previewBlob, { imageOrientation: 'from-image' });
+    for (const entry of entries) {
+      const bitmap = await createImageBitmapFn(entry.previewBlob, { imageOrientation: 'from-image' });
+      bitmaps.push(bitmap);
+    }
     throwIfAborted(signal);
 
     rawContext.save();
@@ -97,16 +126,9 @@ export async function composeArtworkTexture({
     rawContext.clip();
     rawContext.fillStyle = '#ffffff';
     rawContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
-    rawContext.globalAlpha = artwork.opacity;
-    rawContext.translate(artwork.centerXmm, artwork.centerYmm);
-    rawContext.rotate(artwork.rotation * Math.PI / 180);
-    rawContext.drawImage(
-      bitmap,
-      -artwork.unrotatedWidthMm / 2,
-      -artwork.unrotatedHeightMm / 2,
-      artwork.unrotatedWidthMm,
-      artwork.unrotatedHeightMm,
-    );
+    for (let index = 0; index < entries.length; index += 1) {
+      drawArtwork(rawContext, entries[index], bitmaps[index]);
+    }
     rawContext.restore();
     throwIfAborted(signal);
 
@@ -126,6 +148,6 @@ export async function composeArtworkTexture({
       pixelsPerMm,
     };
   } finally {
-    bitmap?.close?.();
+    for (const bitmap of bitmaps) bitmap?.close?.();
   }
 }

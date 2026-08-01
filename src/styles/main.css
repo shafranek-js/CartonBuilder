@@ -1775,6 +1775,182 @@ dialog button {
   display: none;
 }
 
+.layer-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted-text, #808080);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.layer-twisty:hover {
+  color: var(--text, #ffffff);
+}
+.layer-twisty[aria-expanded="false"] svg {
+  transform: rotate(90deg);
+}
+.layer-twisty svg {
+  transition: transform 0.15s ease;
+}
+
+.layer-count {
+  font-size: 10px;
+  color: var(--muted-text, #808080);
+  margin-left: 2px;
+}
+
+.artwork-sublayers {
+  border-bottom: 1px solid var(--panel-border, #3a3a3a);
+}
+
+.artwork-sublayer {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  padding-left: 30px;
+  border-bottom: 1px solid var(--panel-border, #3a3a3a);
+  background: transparent;
+  color: var(--text, #ffffff);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.1s ease;
+  position: relative;
+}
+
+.artwork-sublayer:last-child {
+  border-bottom: none;
+}
+
+.artwork-sublayer:hover {
+  background: var(--surface, #383838);
+}
+
+.artwork-sublayer.active {
+  background: var(--surface, #454545);
+}
+
+.artwork-sublayer.selected {
+  background: color-mix(in srgb, var(--accent, #4a9eff) 15%, var(--surface, #383838));
+}
+
+.artwork-sublayer.selected.active {
+  background: color-mix(in srgb, var(--accent, #4a9eff) 25%, var(--surface, #454545));
+}
+
+.artwork-sublayer.dragging {
+  opacity: 0.4;
+}
+
+.layer-color-square {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.artwork-sublayer-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid var(--panel-border, #555);
+  object-fit: contain;
+  background: var(--surface, #3a3a3a);
+  margin: 0 6px 0 2px;
+  flex-shrink: 0;
+}
+
+.artwork-sublayer-thumb.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface, #3a3a3a);
+}
+
+.artwork-sublayer .layer-thumbnail {
+  width: 18px;
+  height: 18px;
+  margin: 0 6px 0 2px;
+  flex-shrink: 0;
+}
+
+.artwork-sublayer .layer-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  color: var(--muted-text, #808080);
+  cursor: grab;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.artwork-sublayer .layer-drag-handle:hover {
+  color: var(--text, #ffffff);
+}
+
+.layer-target-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
+  color: var(--muted-text, #606060);
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.layer-target-circle:hover {
+  color: var(--text, #ffffff);
+}
+
+.layer-target-circle.active {
+  color: var(--accent, #4a9eff);
+}
+
+.layer-target-circle svg circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.layer-target-circle.active svg circle {
+  fill: currentColor;
+}
+
+.layer-rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 1px 4px;
+  border: 1px solid var(--accent, #4a9eff);
+  border-radius: 2px;
+  background: var(--panel-bg, #2b2b2b);
+  color: var(--text, #ffffff);
+  font-size: 11px;
+  outline: none;
+}
+
+.drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent, #4a9eff);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .pdf-layer-row {
   padding-inline: 6px;
 }

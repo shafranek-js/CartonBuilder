@@ -16,6 +16,10 @@ function buildCompleteBox() {
 const fakeArtwork = { hasArtwork: true };
 const fakePreview = new Blob(['preview'], { type: 'image/png' });
 
+function fakeEntries() {
+  return [{ model: fakeArtwork, visible: true, previewBlob: fakePreview }];
+}
+
 function stubTextureComposer() {
   return async () => ({
     canvas: {
@@ -28,8 +32,7 @@ describe('createInteractive3dHtml', () => {
   it('embeds the fold graph, artwork texture and inline three.js in one file', async () => {
     const blob = await createInteractive3dHtml({
       boxModel: buildCompleteBox(),
-      artwork: fakeArtwork,
-      previewBlob: fakePreview,
+      artworks: fakeEntries(),
       composeTexture: stubTextureComposer(),
     });
     const html = await blob.text();
@@ -49,8 +52,7 @@ describe('createInteractive3dHtml', () => {
   it('escapes script closing sequences inside the inlined bundle', async () => {
     const blob = await createInteractive3dHtml({
       boxModel: buildCompleteBox(),
-      artwork: fakeArtwork,
-      previewBlob: fakePreview,
+      artworks: fakeEntries(),
       composeTexture: stubTextureComposer(),
     });
     const html = await blob.text();
@@ -62,8 +64,7 @@ describe('createInteractive3dHtml', () => {
   it('rejects when no artwork preview is available', async () => {
     await expect(createInteractive3dHtml({
       boxModel: buildCompleteBox(),
-      artwork: { hasArtwork: false },
-      previewBlob: null,
+      artworks: [],
       composeTexture: stubTextureComposer(),
     })).rejects.toThrow(/preview is required/i);
   });

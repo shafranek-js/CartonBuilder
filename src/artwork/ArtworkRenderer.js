@@ -69,19 +69,15 @@ function getScreenCursor(key, rotation) {
   return (screenCorner === 'nw' || screenCorner === 'se') ? 'nwse-resize' : 'nesw-resize';
 }
 
-function appendSelection(documentRef, parent, artwork, onPointerStart, handleSize) {
+function appendSelection(documentRef, parent, artwork, onPointerStart, handleSize, color) {
   const group = svgElement(documentRef, 'g', {
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
   });
   const x = artwork.centerXmm - artwork.unrotatedWidthMm / 2;
   const y = artwork.centerYmm - artwork.unrotatedHeightMm / 2;
-  group.appendChild(svgElement(documentRef, 'rect', {
-    class: 'selection-frame',
-    x,
-    y,
-    width: artwork.unrotatedWidthMm,
-    height: artwork.unrotatedHeightMm,
-  }));
+  const frameAttrs = { class: 'selection-frame', x, y, width: artwork.unrotatedWidthMm, height: artwork.unrotatedHeightMm };
+  if (color) frameAttrs.style = `stroke:${color};`;
+  group.appendChild(svgElement(documentRef, 'rect', frameAttrs));
 
   const half = handleSize / 2;
   const handles = [
@@ -99,7 +95,7 @@ function appendSelection(documentRef, parent, artwork, onPointerStart, handleSiz
       width: handleSize,
       height: handleSize,
       'data-handle': handle.key,
-      style: `cursor: ${cursorStyle};`,
+      style: `cursor: ${cursorStyle};${color ? ` stroke-width:2;stroke:${color};` : ''}`,
     });
     node.addEventListener('pointerdown', (event) => onPointerStart(event, {
       type: 'resize',
@@ -126,28 +122,63 @@ export class ArtworkRenderer {
     this.viewport = viewport;
     this.layers = layers;
     this.onPointerStart = onPointerStart;
-    this.previewUrl = '';
+    this.entries = [];
+    this.legacyPreviewUrl = '';
+    this.selectionColor = null;
     this.selected = false;
   }
 
   setPreviewBlob(blob) {
-    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
-    this.previewUrl = blob ? URL.createObjectURL(blob) : '';
+    if (this.legacyPreviewUrl) URL.revokeObjectURL(this.legacyPreviewUrl);
+    this.legacyPreviewUrl = blob ? URL.createObjectURL(blob) : '';
+  }
+
+  get previewUrl() {
+    if (this.legacyPreviewUrl) return this.legacyPreviewUrl;
+    return this.entries[0]?.previewUrl || '';
+  }
+
+  setArtworks(entries) {
+    for (const entry of this.entries) {
+      if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+    }
+    this.entries = (entries || []).map((entry) => ({
+      model: entry.model,
+      visible: entry.visible !== false,
+      previewUrl: entry.previewBlob ? URL.createObjectURL(entry.previewBlob) : '',
+    }));
+  }
+
+  syncArtworkVisibility(entries) {
+    for (let index = 0; index < this.entries.length; index += 1) {
+      this.entries[index].visible = entries[index]?.visible !== false;
+    }
   }
 
   dispose() {
-    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
-    this.previewUrl = '';
+    if (this.legacyPreviewUrl) URL.revokeObjectURL(this.legacyPreviewUrl);
+    this.legacyPreviewUrl = '';
+    for (const entry of this.entries) {
+      if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+    }
+    this.entries = [];
   }
 
   getSceneBounds() {
     const box = this.model.getBounds();
-    if (!this.artwork.hasArtwork) return box;
-    const art = this.artwork.bounds;
-    const minX = Math.min(box.minX, art.minX);
-    const minY = Math.min(box.minY, art.minY);
-    const maxX = Math.max(box.maxX, art.maxX);
-    const maxY = Math.max(box.maxY, art.maxY);
+    const artworks = this.entries.length ? this.entries.map((entry) => entry.model) : [this.artwork];
+    let minX = box.minX;
+    let minY = box.minY;
+    let maxX = box.maxX;
+    let maxY = box.maxY;
+    for (const art of artworks) {
+      if (!art.hasArtwork) continue;
+      const bounds = art.bounds;
+      minX = Math.min(minX, bounds.minX);
+      minY = Math.min(minY, bounds.minY);
+      maxX = Math.max(maxX, bounds.maxX);
+      maxY = Math.max(maxY, bounds.maxY);
+    }
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
   }
 
@@ -193,18 +224,34 @@ export class ArtworkRenderer {
     defs.appendChild(clip);
     target.appendChild(defs);
 
-    if (showArtwork && this.artwork.hasArtwork && this.previewUrl) {
-      if (!preview && this.artwork.bgOpacity > 0) {
-        appendImage(documentRef, target, this.artwork, this.previewUrl, this.artwork.opacity * this.artwork.bgOpacity, null);
+    if (showArtwork) {
+      const entries = this.entries.length
+        ? this.entries
+        : this.artwork.hasArtwork && this.previewUrl
+          ? [{ model: this.artwork, visible: true, previewUrl: this.previewUrl }]
+          : [];
+      for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index];
+        if (!entry.visible || !entry.model.hasArtwork || !entry.previewUrl) continue;
+        if (!preview && entry.model.bgOpacity > 0) {
+          appendImage(
+            documentRef,
+            target,
+            entry.model,
+            entry.previewUrl,
+            entry.model.opacity * entry.model.bgOpacity,
+            null,
+          );
+        }
+        appendImage(
+          documentRef,
+          target,
+          entry.model,
+          entry.previewUrl,
+          entry.model.opacity,
+          `url(#${target.id}-panel-mask)`,
+        );
       }
-      appendImage(
-        documentRef,
-        target,
-        this.artwork,
-        this.previewUrl,
-        this.artwork.opacity,
-        `url(#${target.id}-panel-mask)`,
-      );
     }
 
     if (showHighlights) {
@@ -243,6 +290,7 @@ export class ArtworkRenderer {
         this.artwork,
         this.onPointerStart,
         HANDLE_SCREEN_PX / this.viewport.zoom,
+        this.selectionColor,
       );
     }
 

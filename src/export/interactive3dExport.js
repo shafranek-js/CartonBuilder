@@ -437,12 +437,13 @@ async function canvasToDataUrl(canvas) {
 
 export async function createInteractive3dHtml({
   boxModel,
-  artwork,
-  previewBlob,
+  artworks,
   documentRef = globalThis.document,
   composeTexture = composeArtworkTexture,
 } = {}) {
-  if (!artwork?.hasArtwork || !previewBlob) {
+  const entries = (artworks || [])
+    .filter((entry) => entry?.model?.hasArtwork && entry.visible !== false && entry.previewBlob);
+  if (!entries.length) {
     throw new Error('Artwork preview is required for the 3D export.');
   }
   const graph = buildFoldGraph(boxModel);
@@ -465,7 +466,7 @@ export async function createInteractive3dHtml({
     });
   }
 
-  const composed = await composeTexture({ boxModel, artwork, previewBlob, documentRef });
+  const composed = await composeTexture({ boxModel, artworks: entries, documentRef });
   const textureUrl = await canvasToDataUrl(composed.canvas);
 
   const data = {

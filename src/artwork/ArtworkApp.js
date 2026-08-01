@@ -49,6 +49,43 @@ function round(value, digits = 2) {
   return Number(value.toFixed(digits));
 }
 
+function createDragHandleSvg(documentRef) {
+  const svg = documentRef.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '10');
+  svg.setAttribute('height', '10');
+  svg.setAttribute('fill', 'currentColor');
+  svg.innerHTML = '<circle cx="4" cy="4" r="1.4"/><circle cx="12" cy="4" r="1.4"/><circle cx="4" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="4" cy="8" r="1.4"/><circle cx="12" cy="8" r="1.4"/>';
+  return svg;
+}
+
+const LAYER_PALETTE = ['#4a9eff', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#20c997', '#f06595', '#74c0fc', '#ff8787'];
+
+function createTargetCircleSvg(documentRef, filled) {
+  const svg = documentRef.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '12');
+  svg.setAttribute('height', '12');
+  if (filled) svg.innerHTML = '<circle cx="8" cy="8" r="6" fill="currentColor"/>';
+  else svg.innerHTML = '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>';
+  return svg;
+}
+
+function assignLayerColor(existingColors) {
+  const used = new Set(existingColors || []);
+  for (const color of LAYER_PALETTE) {
+    if (!used.has(color)) return color;
+  }
+  return LAYER_PALETTE[0];
+}
+
+function range(start, end) {
+  const result = [];
+  const step = start <= end ? 1 : -1;
+  for (let index = start; index !== end + step; index += step) result.push(index);
+  return result;
+}
+
 export function createArtworkApp({
   boxModel,
   boxApp,
@@ -60,7 +97,7 @@ export function createArtworkApp({
   onProjectLoaded,
   getWorkflowStep = () => 'artwork',
 }) {
-  const artwork = new ArtworkModel();
+  let artwork = new ArtworkModel();
   const viewport = new ViewportModel();
   const layers = {
     artwork: true,
@@ -74,6 +111,10 @@ export function createArtworkApp({
     names: true,
     highlights: true,
   };
+  const artworks = [];
+  let activeArtworkIndex = -1;
+  let originalBlob = null;
+  let previewBlob = null;
   const svg = documentRef.getElementById('artworkWorkspace');
   const canvasWrap = documentRef.getElementById('artworkCanvasWrap');
   const dropState = documentRef.getElementById('dropState');
@@ -90,6 +131,7 @@ export function createArtworkApp({
   const pageDialog = documentRef.getElementById('pageDialog');
   const pageNumber = documentRef.getElementById('pdfPageNumber');
   const pageCount = documentRef.getElementById('pdfPageCount');
+  const sublayersContainer = documentRef.getElementById('artworkSublayers');
 
   const controls = {
     fileName: documentRef.getElementById('artworkFileName'),
@@ -133,8 +175,6 @@ export function createArtworkApp({
     highlights: documentRef.getElementById('lockHighlights'),
   };
 
-  let originalBlob = null;
-  let previewBlob = null;
   let selected = false;
   let gesture = null;
   let spacePressed = false;
@@ -152,6 +192,13 @@ export function createArtworkApp({
   let currentErrorFallback = 'unexpectedError';
   let saveQueue = Promise.resolve();
   let disposed = false;
+  let sublayerDrag = null;
+  let renamingSublayerIndex = -1;
+  let cancelRename = false;
+  let pendingReplace = false;
+  let artworkGroupCollapsed = false;
+  let selectedArtworkIndices = new Set();
+  const thumbnailUrlCache = new Map();
 
   function showToast(message) {
     windowRef.clearTimeout(toastTimer);
@@ -199,21 +246,95 @@ export function createArtworkApp({
 
   function captureEditorState() {
     return {
-      artwork: artwork.toJSON(),
+      artworks: artworks.map((entry) => ({
+        artwork: entry.model.toJSON(),
+        visible: entry.visible,
+        locked: entry.locked,
+        color: entry.color,
+        originalBlob: entry.originalBlob,
+        previewBlob: entry.previewBlob,
+      })),
+      activeArtworkIndex,
       layers: { ...layers },
       layerLocks: { ...layerLocks },
+      collapseArtworkGroup: artworkGroupCollapsed,
     };
   }
 
   function applyEditorState(state) {
-    artwork.restore(state.artwork);
+    artworks.length = 0;
+    for (const entry of state.artworks || []) {
+      artworks.push({
+        model: new ArtworkModel(entry.artwork),
+        visible: entry.visible !== false,
+        locked: Boolean(entry.locked),
+        color: entry.color || assignLayerColor(artworks.map((e) => e.color)),
+        originalBlob: entry.originalBlob || null,
+        previewBlob: entry.previewBlob || null,
+      });
+    }
     Object.assign(layers, state.layers);
     Object.assign(layerLocks, state.layerLocks);
+    artworkGroupCollapsed = Boolean(state.collapseArtworkGroup);
+    updateTwistyDom();
+    selectArtworkRow(
+      Number.isInteger(state.activeArtworkIndex) && state.activeArtworkIndex >= 0
+        ? Math.min(state.activeArtworkIndex, artworks.length - 1)
+        : -1,
+    );
     render();
     scheduleSave();
   }
 
   const history = new HistoryManager({ apply: applyEditorState, limit: 100 });
+
+  function updateTwistyDom() {
+    const twisty = documentRef.getElementById('artworkTwisty');
+    if (!twisty) return;
+    twisty.setAttribute('aria-expanded', String(!artworkGroupCollapsed));
+    twisty.setAttribute('aria-label', t(artworkGroupCollapsed ? 'expandArtworkGroup' : 'collapseArtworkGroup'));
+  }
+
+  function syncThumbnailUrls() {
+    const limit = artworks.length;
+    const kept = new Set();
+    for (let index = 0; index < limit; index += 1) {
+      const blob = artworks[index].previewBlob;
+      if (!blob) continue;
+      const blobKey = blob.size;
+      const cached = thumbnailUrlCache.get(index);
+      if (cached && cached.blobKey === blobKey) {
+        kept.add(index);
+        continue;
+      }
+      if (cached?.url) URL.revokeObjectURL(cached.url);
+      const url = URL.createObjectURL(blob);
+      thumbnailUrlCache.set(index, { blobKey, url });
+      kept.add(index);
+    }
+    for (const [key, cached] of thumbnailUrlCache) {
+      if (!kept.has(key)) {
+        if (cached.url) URL.revokeObjectURL(cached.url);
+        thumbnailUrlCache.delete(key);
+      }
+    }
+  }
+
+  function syncArtworkVisibility() {
+    renderer.syncArtworkVisibility(artworks);
+  }
+
+  function createLayerLockSvg() {
+    return createSvgElement('svg', {
+      class: 'layer-lock-icon',
+      viewBox: '0 0 24 24',
+      width: 12,
+      height: 12,
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.8,
+    }, '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>');
+  }
 
   const renderer = new ArtworkRenderer({
     svg,
@@ -224,6 +345,60 @@ export function createArtworkApp({
     onPointerStart: startArtworkGesture,
   });
 
+  function artworkEntryName(entry) {
+    return entry?.model?.source?.fileName || 'artwork';
+  }
+
+  function getActiveEntry() {
+    return artworks[activeArtworkIndex] || null;
+  }
+
+  function setActiveArtwork(index) {
+    if (index < 0 || index >= artworks.length) return;
+    activeArtworkIndex = index;
+    const entry = artworks[index];
+    artwork = entry.model;
+    originalBlob = entry.originalBlob;
+    previewBlob = entry.previewBlob;
+    renderer.artwork = artwork;
+  }
+
+  function activateArtwork(index, { fit = false } = {}) {
+    if (index < 0 || index >= artworks.length) {
+      activeArtworkIndex = -1;
+      artwork = new ArtworkModel();
+      originalBlob = null;
+      previewBlob = null;
+      renderer.artwork = artwork;
+    } else {
+      setActiveArtwork(index);
+    }
+    renderer.setArtworks(artworks);
+    renderPdfLayers();
+    render();
+    if (fit) windowRef.requestAnimationFrame(() => renderer.fitToScreen());
+    scheduleSave();
+  }
+
+  function getArtworks() {
+    return artworks.map((entry) => ({
+      model: entry.model,
+      originalBlob: entry.originalBlob,
+      previewBlob: entry.previewBlob,
+      visible: entry.visible,
+    }));
+  }
+
+  function getArtworksJson() {
+    return JSON.stringify({
+      artworks: artworks.map((entry) => ({
+        artwork: entry.model.toJSON(),
+        visible: entry.visible,
+      })),
+      activeArtworkIndex,
+    });
+  }
+
   function persistedWorkflowStep(value = getWorkflowStep()) {
     if (value === 'preview') return 'preview';
     if (value === 'artwork') return 'artwork';
@@ -231,33 +406,45 @@ export function createArtworkApp({
   }
 
   function createSnapshot(workflowStep = persistedWorkflowStep()) {
+    const topmost = artworks[0];
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       meta: {
         id: 'current',
-        name: artwork.source?.fileName || 'Untitled carton',
+        name: artworkEntryName(topmost) || 'Untitled carton',
         createdAt: projectCreatedAt,
         updatedAt: new Date().toISOString(),
         locale: documentRef.documentElement.lang || 'en',
       },
       workflowStep,
       box: boxModel.toJSON(),
-      artwork: artwork.hasArtwork ? artwork.toJSON() : null,
+      artworks: artworks.map((entry) => ({
+        artwork: entry.model.toJSON(),
+        visible: entry.visible,
+      })),
+      activeArtworkIndex,
       view: {
         ...viewport.toJSON(),
         layers: { ...layers },
         layerLocks: { ...layerLocks },
+        collapseArtworkGroup: artworkGroupCollapsed,
       },
       history: history.toJSON(),
     };
   }
 
   function enqueueSave(workflowStep = persistedWorkflowStep()) {
-    const hasCompleteArtwork = artwork.hasArtwork && originalBlob && previewBlob;
+    const hasCompleteArtwork = artworks.length > 0 && artworks.every(
+      (entry) => entry.model.hasArtwork && entry.originalBlob && entry.previewBlob,
+    );
     const payload = {
       snapshot: createSnapshot(persistedWorkflowStep(workflowStep)),
-      originalBlob: hasCompleteArtwork ? originalBlob : null,
-      previewBlob: hasCompleteArtwork ? previewBlob : null,
+      artworkBlobs: hasCompleteArtwork
+        ? artworks.map((entry) => ({
+          originalBlob: entry.originalBlob,
+          previewBlob: entry.previewBlob,
+        }))
+        : [],
     };
     saveQueue = saveQueue
       .catch(() => {})
@@ -297,7 +484,7 @@ export function createArtworkApp({
 
   function renderControls() {
     const enabled = artwork.hasArtwork;
-    const transformEnabled = enabled && !layerLocks.artwork;
+    const transformEnabled = enabled && !layerLocks.artwork && !(artworks[activeArtworkIndex]?.locked);
     controls.fileName.textContent = artwork.source?.fileName || t('noFile');
     const reference = enabled ? artwork.getReferencePosition() : null;
     controls.x.value = enabled ? round(reference.x) : '';
@@ -334,21 +521,300 @@ export function createArtworkApp({
     }
     controls.bgOpacity.disabled = !transformEnabled;
     controls.replace.disabled = !enabled;
-    controls.preview.disabled = !enabled;
+    controls.preview.disabled = artworks.length === 0;
     controls.undo.disabled = history.undoStack.length === 0;
     controls.redo.disabled = history.redoStack.length === 0;
-    dropState.hidden = enabled;
+    dropState.hidden = artworks.length > 0;
+    const countElement = documentRef.getElementById('artworkLayerCount');
+    if (countElement) {
+      countElement.hidden = artworks.length <= 1;
+      countElement.textContent = artworks.length ? `(${artworks.length})` : '';
+    }
     renderer.selected = selected && enabled;
     const isArtworkSelected = selected && enabled;
-    documentRef.querySelectorAll('.adobe-layer-row').forEach((row) => {
-      if (row.dataset.layerId === 'artwork') {
-        row.classList.toggle('active', isArtworkSelected);
+    documentRef.querySelectorAll('.adobe-layer-row[data-layer-id="artwork"]').forEach((row) => {
+      row.classList.toggle('active', isArtworkSelected);
+    });
+  }
+
+  function renderSublayers() {
+    syncThumbnailUrls();
+    sublayersContainer.hidden = artworks.length === 0 || artworkGroupCollapsed;
+    sublayersContainer.replaceChildren();
+    for (let index = 0; index < artworks.length; index += 1) {
+      const entry = artworks[index];
+      const row = documentRef.createElement('div');
+      row.className = 'adobe-layer-row artwork-sublayer';
+      if (index === activeArtworkIndex) row.classList.add('active');
+      if (selectedArtworkIndices.has(index)) row.classList.add('selected');
+      if (entry.locked) row.classList.add('locked');
+      row.dataset.artworkIndex = String(index);
+
+      const colorSquare = documentRef.createElement('span');
+      colorSquare.className = 'layer-color-square';
+      colorSquare.style.backgroundColor = entry.color || LAYER_PALETTE[0];
+      row.appendChild(colorSquare);
+
+      const eye = documentRef.createElement('label');
+      eye.className = 'layer-toggle-cell eye-cell';
+      eye.title = 'Toggle Visibility';
+      const checkbox = documentRef.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'sr-only';
+      checkbox.checked = entry.visible;
+      checkbox.addEventListener('change', () => toggleArtworkVisibility(index, checkbox.checked));
+      eye.appendChild(checkbox);
+      eye.appendChild(createLayerEyeSvg());
+      row.appendChild(eye);
+
+      const lockLabel = documentRef.createElement('label');
+      lockLabel.className = 'layer-toggle-cell lock-cell';
+      lockLabel.title = t('lockArtworkLayer');
+      const lockCb = documentRef.createElement('input');
+      lockCb.type = 'checkbox';
+      lockCb.className = 'sr-only';
+      lockCb.checked = entry.locked;
+      lockCb.addEventListener('change', () => toggleArtworkLock(index, lockCb.checked));
+      lockLabel.appendChild(lockCb);
+      lockLabel.appendChild(createLayerLockSvg());
+      row.appendChild(lockLabel);
+
+      const thumbCached = thumbnailUrlCache.get(index);
+      if (thumbCached?.url) {
+        const thumbImg = documentRef.createElement('img');
+        thumbImg.className = 'artwork-sublayer-thumb';
+        thumbImg.src = thumbCached.url;
+        thumbImg.alt = entry.model.source?.fileName || '';
+        row.appendChild(thumbImg);
+      } else {
+        const thumbnail = documentRef.createElement('span');
+        thumbnail.className = 'layer-thumbnail artwork-sublayer-thumb placeholder';
+        thumbnail.appendChild(createLayerThumbSvg());
+        row.appendChild(thumbnail);
+      }
+
+      const name = documentRef.createElement('span');
+      name.className = 'layer-title';
+      name.textContent = entry.model.source?.fileName || 'artwork';
+      name.title = entry.model.source?.fileName || 'artwork';
+      name.addEventListener('dblclick', (event) => {
+        event.stopPropagation();
+        startRenameSublayer(index, name);
+      });
+      row.appendChild(name);
+
+      const handle = documentRef.createElement('span');
+      handle.className = 'layer-drag-handle';
+      handle.title = t('reorderArtworkLayer');
+      handle.appendChild(createDragHandleSvg(documentRef));
+      handle.addEventListener('pointerdown', (event) => startSublayerDrag(event, index));
+      row.appendChild(handle);
+
+      const target = documentRef.createElement('span');
+      target.className = 'layer-target-circle';
+      if (index === activeArtworkIndex) target.classList.add('active');
+      target.title = t('selectArtworkLayer');
+      target.appendChild(createTargetCircleSvg(documentRef, index === activeArtworkIndex));
+      target.addEventListener('click', (event) => {
+        event.stopPropagation();
+        handleLayerClick(event, index);
+      });
+      row.appendChild(target);
+
+      row.addEventListener('click', (event) => {
+        if (event.target.closest('.layer-toggle-cell')) return;
+        if (event.target.closest('.layer-drag-handle')) return;
+        if (event.target.closest('.layer-target-circle')) return;
+        handleLayerClick(event, index);
+      });
+      sublayersContainer.appendChild(row);
+    }
+  }
+
+  function handleLayerClick(event, index) {
+    if (event.ctrlKey || event.metaKey) {
+      if (selectedArtworkIndices.has(index)) {
+        selectedArtworkIndices.delete(index);
+      } else {
+        selectedArtworkIndices.add(index);
+      }
+      [...sublayersContainer.children].forEach((row, ri) => {
+        row.classList.toggle('selected', selectedArtworkIndices.has(ri));
+      });
+      renderControls();
+      renderer.render();
+      return;
+    }
+    if (event.shiftKey && activeArtworkIndex >= 0 && activeArtworkIndex !== index) {
+      selectedArtworkIndices = new Set(range(activeArtworkIndex, index));
+      [...sublayersContainer.children].forEach((row, ri) => {
+        row.classList.toggle('selected', selectedArtworkIndices.has(ri));
+      });
+      renderControls();
+      renderer.render();
+      return;
+    }
+    selectArtworkRow(index);
+  }
+
+  function selectArtworkRow(index) {
+    if (artworks[index]?.locked) {
+      selectedArtworkIndices = new Set([index]);
+      [...sublayersContainer.children].forEach((row, ri) => {
+        row.classList.toggle('selected', selectedArtworkIndices.has(ri));
+        row.classList.toggle('active', ri === activeArtworkIndex);
+      });
+      return;
+    }
+    setActiveArtwork(index);
+    selected = true;
+    selectedArtworkIndices = new Set([index]);
+    renderer.selectionColor = artworks[index]?.color || null;
+    [...sublayersContainer.children].forEach((row, rowIndex) => {
+      row.classList.toggle('active', rowIndex === index);
+      row.classList.toggle('selected', rowIndex === index);
+    });
+    documentRef.querySelectorAll('.adobe-layer-row[data-layer-id="artwork"]').forEach((row) => {
+      row.classList.toggle('active', artworks[index]?.hasArtwork);
+    });
+    renderPdfLayers();
+    renderControls();
+    renderer.render();
+    scheduleSave();
+  }
+
+  function toggleArtworkVisibility(index, visible) {
+    const entry = artworks[index];
+    if (!entry || entry.visible === visible) return;
+    const before = captureEditorState();
+    entry.visible = visible;
+    commitChange('Toggle artwork visibility', before);
+  }
+
+  function toggleArtworkLock(index, locked) {
+    const entry = artworks[index];
+    if (!entry || entry.locked === locked) return;
+    const before = captureEditorState();
+    entry.locked = locked;
+    if (locked && activeArtworkIndex === index && selectedArtworkIndices.size <= 1) {
+      selectedArtworkIndices.clear();
+      selected = false;
+    }
+    commitChange('Toggle artwork lock', before);
+  }
+
+  sublayersContainer.addEventListener('pointermove', moveSublayerDrag);
+  sublayersContainer.addEventListener('pointerup', endSublayerDrag);
+  sublayersContainer.addEventListener('pointercancel', endSublayerDrag);
+
+  function startSublayerDrag(event, index) {
+    if (event.button !== 0 || artworks.length < 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectedArtworkIndices = new Set([index]);
+    const row = event.currentTarget.closest('.artwork-sublayer');
+    sublayerDrag = {
+      index,
+      pointerId: event.pointerId,
+      moved: false,
+      before: captureEditorState(),
+    };
+    row.classList.add('dragging');
+    row.setPointerCapture(event.pointerId);
+    selected = false;
+    render();
+  }
+
+  function moveSublayerDrag(event) {
+    if (!sublayerDrag || event.pointerId !== sublayerDrag.pointerId) return;
+    const container = sublayersContainer;
+    const rows = [...container.children];
+    if (rows.length < 2) return;
+    const current = sublayerDrag.index;
+    let targetIndex = current;
+    for (let index = 0; index < rows.length; index += 1) {
+      const rectangle = rows[index].getBoundingClientRect();
+      if (event.clientY >= rectangle.top && event.clientY < rectangle.top + rectangle.height / 2) {
+        targetIndex = index;
+        break;
+      }
+      if (event.clientY >= rectangle.top + rectangle.height / 2 && event.clientY < rectangle.bottom) {
+        targetIndex = index;
+        break;
+      }
+      if (index === rows.length - 1 && event.clientY >= rectangle.bottom) {
+        targetIndex = rows.length - 1;
+      }
+    }
+    if (targetIndex !== current) {
+      const [moved] = artworks.splice(current, 1);
+      artworks.splice(targetIndex, 0, moved);
+      if (activeArtworkIndex === current) activeArtworkIndex = targetIndex;
+      else if (activeArtworkIndex > current && activeArtworkIndex <= targetIndex) activeArtworkIndex -= 1;
+      else if (activeArtworkIndex >= targetIndex && activeArtworkIndex < current) activeArtworkIndex += 1;
+      selectedArtworkIndices = new Set([targetIndex]);
+      sublayerDrag.index = targetIndex;
+      sublayerDrag.moved = true;
+      renderer.setArtworks(artworks);
+      renderSublayers();
+      render();
+    }
+  }
+
+  function endSublayerDrag(event) {
+    if (!sublayerDrag || event.pointerId !== sublayerDrag.pointerId) return;
+    const drag = sublayerDrag;
+    sublayerDrag = null;
+    renderSublayers();
+    render();
+    if (drag.moved) {
+      commitChange('Reorder artwork', drag.before);
+    }
+  }
+
+  function startRenameSublayer(index, nameElement) {
+    if (renamingSublayerIndex >= 0) return;
+    renamingSublayerIndex = index;
+    cancelRename = false;
+    const entry = artworks[index];
+    const inputElement = documentRef.createElement('input');
+    inputElement.className = 'layer-rename-input';
+    inputElement.value = entry.model.source?.fileName || '';
+    inputElement.setAttribute('aria-label', t('renameArtworkLayer'));
+    inputElement.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        inputElement.blur();
+      } else if (event.key === 'Escape') {
+        cancelRename = true;
+        inputElement.blur();
       }
     });
+    inputElement.addEventListener('blur', () => {
+      if (renamingSublayerIndex !== index) return;
+      renamingSublayerIndex = -1;
+      const newName = inputElement.value.trim();
+      const current = artworks[index];
+      if (!cancelRename && current && newName && newName !== current.model.source?.fileName) {
+        const before = captureEditorState();
+        current.model.source.fileName = newName;
+        commitChange('Rename artwork', before);
+      } else {
+        renderSublayers();
+        render();
+      }
+      cancelRename = false;
+    });
+    nameElement.replaceChildren(inputElement);
+    inputElement.focus();
+    inputElement.select();
   }
 
   function render() {
     renderControls();
+    renderSublayers();
+    syncArtworkVisibility();
     renderer.render();
   }
 
@@ -424,7 +890,8 @@ export function createArtworkApp({
 
   async function togglePdfLayer(id, visible) {
     const layers = artwork.source?.pdfLayers;
-    if (!layers || !artwork.hasArtwork || !originalBlob) return;
+    const entry = getActiveEntry();
+    if (!layers || !artwork.hasArtwork || !entry?.originalBlob) return;
     const next = {};
     for (const layer of layers) {
       next[layer.id] = layer.id === id ? visible : artwork.pdfLayerVisibility?.[layer.id] !== false;
@@ -438,14 +905,15 @@ export function createArtworkApp({
     pdfRenderController = controller;
     const generation = ++pdfRenderGeneration;
     try {
-      const rendered = await renderPdfWithLayers(originalBlob, {
+      const rendered = await renderPdfWithLayers(entry.originalBlob, {
         pageIndex: artwork.source.pageIndex || 0,
         visibility: next,
         signal: controller.signal,
       });
       if (generation !== pdfRenderGeneration || disposed) return;
-      previewBlob = rendered.previewBlob;
-      renderer.setPreviewBlob(previewBlob);
+      entry.previewBlob = rendered.previewBlob;
+      previewBlob = entry.previewBlob;
+      renderer.setArtworks(artworks);
       render();
     } catch (error) {
       if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return;
@@ -464,7 +932,7 @@ export function createArtworkApp({
   }
 
   function command(label, callback, { fitViewport = false } = {}) {
-    if (!artwork.hasArtwork || layerLocks.artwork) return;
+    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
     const before = captureEditorState();
     try {
       clearError();
@@ -493,9 +961,8 @@ export function createArtworkApp({
     });
   }
 
-  async function processFile(file, replacing = false) {
+  async function processFile(file, { replace = false } = {}) {
     if (!file) return;
-    if (artwork.hasArtwork && !replacing) return;
     const generation = ++processingGeneration;
     processingController?.abort();
     processingController = new AbortController();
@@ -507,6 +974,7 @@ export function createArtworkApp({
     canvasWrap.setAttribute('aria-busy', 'true');
     processingText.textContent = t('processing');
     announce(t('processingStarted'));
+    const before = captureEditorState();
 
     try {
       const loaded = await loadArtworkFile(file, {
@@ -514,16 +982,34 @@ export function createArtworkApp({
         signal: processingController.signal,
       });
       if (generation !== processingGeneration) return;
-      originalBlob = loaded.originalBlob;
-      previewBlob = loaded.previewBlob;
-      artwork.load(loaded.source, boxModel.getBounds());
+      const model = new ArtworkModel();
+      model.load(loaded.source, boxModel.getBounds());
+      if (replace && activeArtworkIndex >= 0) {
+        const entry = artworks[activeArtworkIndex];
+        entry.model = model;
+        entry.originalBlob = loaded.originalBlob;
+        entry.previewBlob = loaded.previewBlob;
+        entry.locked = false;
+      } else {
+        const existingColors = artworks.map((e) => e.color);
+        artworks.unshift({
+          model,
+          originalBlob: loaded.originalBlob,
+          previewBlob: loaded.previewBlob,
+          visible: true,
+          locked: false,
+          color: assignLayerColor(existingColors),
+        });
+        activeArtworkIndex = 0;
+      }
+      setActiveArtwork(activeArtworkIndex);
+      renderer.setArtworks(artworks);
       history.clear();
       selected = true;
-      renderer.setPreviewBlob(previewBlob);
       renderPdfLayers();
       render();
       windowRef.requestAnimationFrame(() => renderer.fitToScreen());
-      scheduleSave();
+      commitChange(replace ? 'Replace artwork' : 'Add artwork', before);
       announce(t('processingComplete'));
       windowRef.dispatchEvent(new CustomEvent('artwork-loaded', {
         detail: artwork.toJSON(),
@@ -560,7 +1046,7 @@ export function createArtworkApp({
   }
 
   function startArtworkGesture(event, detail) {
-    if (!artwork.hasArtwork || layerLocks.artwork || event.button !== 0) return;
+    if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     selected = true;
@@ -678,7 +1164,7 @@ export function createArtworkApp({
   svg.addEventListener('wheel', (event) => {
     event.preventDefault();
     const rectangle = svg.getBoundingClientRect();
-    if (event.ctrlKey && artwork.hasArtwork) {
+    if (event.ctrlKey && artwork.hasArtwork && !getActiveEntry()?.locked) {
       if (!wheelBefore) wheelBefore = captureEditorState();
       artwork.setScale(artwork.scale * Math.exp(-event.deltaY * 0.001));
       render();
@@ -708,14 +1194,14 @@ export function createArtworkApp({
       control.style.setProperty('--slider-progress', `${pct}%`);
     };
     control.addEventListener('input', () => {
-      if (!artwork.hasArtwork || layerLocks.artwork) return;
+      if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
       if (!before) before = captureEditorState();
       updateProgress();
       apply(Number(control.value));
       render();
     });
     control.addEventListener('change', () => {
-      if (!artwork.hasArtwork || layerLocks.artwork) return;
+      if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
       updateProgress();
       apply(Number(control.value));
       render();
@@ -742,7 +1228,7 @@ export function createArtworkApp({
     if (bTag) {
       bTag.style.cursor = 'pointer';
       bTag.addEventListener('click', () => {
-        if (!artwork.hasArtwork || layerLocks.artwork) return;
+        if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
         if (artwork.opacity > 0) {
           lastNonZeroArtworkOpacity = artwork.opacity;
           artwork.setOpacity(0);
@@ -762,7 +1248,7 @@ export function createArtworkApp({
     if (bTag) {
       bTag.style.cursor = 'pointer';
       bTag.addEventListener('click', () => {
-        if (!artwork.hasArtwork || layerLocks.artwork) return;
+        if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked) return;
         if (artwork.bgOpacity > 0) {
           lastNonZeroBleed = artwork.bgOpacity;
           artwork.setBgOpacity(0);
@@ -825,29 +1311,50 @@ export function createArtworkApp({
 
   controls.choose.addEventListener('click', () => input.click());
   controls.replace.addEventListener('click', () => {
-    if (windowRef.confirm(t('replaceConfirm'))) input.click();
+    if (!windowRef.confirm(t('replaceConfirm'))) return;
+    pendingReplace = true;
+    input.click();
   });
   controls.remove.addEventListener('click', () => {
     if (layerLocks.artwork) return;
-    if (!windowRef.confirm(t('removeConfirm'))) return;
+    const toRemove = [...selectedArtworkIndices].filter((index) => index >= 0 && index < artworks.length);
+    if (!toRemove.length) return;
+    const confirmMsg = toRemove.length > 1
+      ? t('removeSelectedConfirm', { count: toRemove.length })
+      : t('removeConfirm');
+    if (!windowRef.confirm(confirmMsg)) return;
+    const before = captureEditorState();
     pdfRenderController?.abort();
     pdfRenderController = null;
     pdfRenderGeneration += 1;
-    artwork.clear();
-    history.clear();
-    originalBlob = null;
-    previewBlob = null;
-    renderer.setPreviewBlob(null);
+    toRemove.sort((a, b) => b - a);
+    for (const index of toRemove) {
+      artworks.splice(index, 1);
+    }
+    selectedArtworkIndices.clear();
+    if (artworks.length === 0) {
+      activeArtworkIndex = -1;
+      artwork = new ArtworkModel();
+      originalBlob = null;
+      previewBlob = null;
+      renderer.artwork = artwork;
+    } else {
+      activeArtworkIndex = Math.min(activeArtworkIndex, artworks.length - 1);
+      setActiveArtwork(activeArtworkIndex);
+    }
+    renderer.setArtworks(artworks);
     selected = false;
     renderPdfLayers();
     render();
-    scheduleSave();
+    commitChange('Remove artwork', before);
   });
-  input.addEventListener('change', () => processFile(input.files?.[0], artwork.hasArtwork));
+  input.addEventListener('change', () => {
+    processFile(input.files?.[0], { replace: pendingReplace });
+    pendingReplace = false;
+  });
 
   function dragStatus(event) {
     event.preventDefault();
-    if (artwork.hasArtwork) return;
     const files = [...(event.dataTransfer?.items || [])].filter((item) => item.kind === 'file');
     dropState.classList.toggle('drag-valid', files.length === 1);
     dropState.classList.toggle('drag-invalid', files.length !== 1);
@@ -861,7 +1368,6 @@ export function createArtworkApp({
   canvasWrap.addEventListener('drop', (event) => {
     event.preventDefault();
     dropState.classList.remove('drag-valid', 'drag-invalid');
-    if (artwork.hasArtwork) return;
     const files = [...(event.dataTransfer?.files || [])];
     if (files.length !== 1) {
       showError(new AppError('dropOneFile'), 'artworkLoadFailed', {
@@ -869,7 +1375,7 @@ export function createArtworkApp({
       });
       return;
     }
-    processFile(files[0], false);
+    processFile(files[0]);
   });
 
   documentRef.getElementById('cancelProcessingButton').addEventListener('click', () => {
@@ -880,6 +1386,13 @@ export function createArtworkApp({
     processingController = null;
     announce(t('processingCancelled'));
     showToast(t('artworkProcessingCancelled'));
+  });
+
+  documentRef.getElementById('artworkTwisty').addEventListener('click', () => {
+    artworkGroupCollapsed = !artworkGroupCollapsed;
+    updateTwistyDom();
+    renderSublayers();
+    scheduleSave();
   });
 
   documentRef.getElementById('backToBoxButton').addEventListener('click', onBack);
@@ -894,7 +1407,7 @@ export function createArtworkApp({
     render();
     onBackToEditor();
   });
-  documentRef.querySelectorAll('.adobe-layer-row').forEach((row) => {
+  documentRef.querySelectorAll('.adobe-layer-row:not(.artwork-sublayer)').forEach((row) => {
     row.addEventListener('click', (e) => {
       if (e.target.closest('.layer-toggle-cell')) return;
 
@@ -915,7 +1428,7 @@ export function createArtworkApp({
   });
 
   async function saveProjectArchive() {
-    if (!artwork.hasArtwork) {
+    if (artworks.length === 0) {
       showToast(t('loadBeforeSave'));
       return;
     }
@@ -923,8 +1436,10 @@ export function createArtworkApp({
       clearError();
       const blob = await createProjectArchive({
         snapshot: createSnapshot(),
-        originalBlob,
-        previewBlob,
+        artworkBlobs: artworks.map((entry) => ({
+          originalBlob: entry.originalBlob,
+          previewBlob: entry.previewBlob,
+        })),
       });
       await saveOrDownloadFile({
         blob,
@@ -966,6 +1481,7 @@ export function createArtworkApp({
       let suggestedName;
       let types;
       let fallback = 'unexpectedError';
+      const exportArtworks = getArtworks().filter((entry) => entry.visible);
 
       if (type === 'svg') {
         blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
@@ -979,9 +1495,7 @@ export function createArtworkApp({
         const { createPreviewBlob } = await import('../export/artworkExport.js');
         blob = await createPreviewBlob({
           boxModel,
-          artwork,
-          originalBlob,
-          previewBlob,
+          artworks: exportArtworks,
           type: mimeType,
         });
         suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
@@ -991,7 +1505,7 @@ export function createArtworkApp({
         fallback = type === 'png' ? 'exportPngFailed' : 'exportJpgFailed';
       } else if (type === 'pdf') {
         const { createPdfExport } = await import('../export/artworkExport.js');
-        blob = await createPdfExport({ boxModel, artwork, originalBlob, previewBlob });
+        blob = await createPdfExport({ boxModel, artworks: exportArtworks });
         suggestedName = 'carton-artwork.pdf';
         types = [{
           description: 'PDF Document (*.pdf)',
@@ -1000,7 +1514,7 @@ export function createArtworkApp({
         fallback = 'exportPdfFailed';
       } else if (type === 'html') {
         const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
-        blob = await createInteractive3dHtml({ boxModel, artwork, previewBlob, documentRef });
+        blob = await createInteractive3dHtml({ boxModel, artworks: exportArtworks, documentRef });
         suggestedName = 'carton-3d.html';
         types = [{
           description: 'Interactive 3D HTML (*.html)',
@@ -1020,13 +1534,21 @@ export function createArtworkApp({
     }
   }
 
-  function restoreProject({ snapshot, originalBlob: sourceBlob, previewBlob: storedPreview }) {
+  function restoreProject({ snapshot, artworkBlobs = [] }) {
     boxApp.loadState(snapshot.box);
     projectCreatedAt = snapshot.meta?.createdAt || new Date().toISOString();
-    if (snapshot.artwork) {
-      artwork.restore(snapshot.artwork);
-    } else {
-      artwork.clear();
+    artworks.length = 0;
+    for (let index = 0; index < (snapshot.artworks || []).length; index += 1) {
+      const entry = snapshot.artworks[index];
+      const blobs = artworkBlobs[index] || {};
+      artworks.push({
+        model: new ArtworkModel(entry.artwork),
+        visible: entry.visible !== false,
+        locked: Boolean(entry.locked),
+        color: entry.color || assignLayerColor(artworks.map((e) => e.color)),
+        originalBlob: blobs.originalBlob || null,
+        previewBlob: blobs.previewBlob || null,
+      });
     }
     Object.assign(layers, snapshot.view?.layers || {});
     Object.assign(layerLocks, snapshot.view?.layerLocks || {});
@@ -1036,10 +1558,12 @@ export function createArtworkApp({
       panY: snapshot.view?.panY || 0,
     });
     history.restore(snapshot.history);
-    originalBlob = sourceBlob || null;
-    previewBlob = storedPreview || null;
-    renderer.setPreviewBlob(previewBlob);
+    artworkGroupCollapsed = Boolean(snapshot.view?.collapseArtworkGroup);
+    updateTwistyDom();
+    setActiveArtwork(Math.min(snapshot.activeArtworkIndex || 0, artworks.length - 1));
+    renderer.setArtworks(artworks);
     selected = Boolean(artwork.hasArtwork);
+    selectedArtworkIndices = new Set([activeArtworkIndex]);
     for (const [key, control] of Object.entries(layerControls)) control.checked = layers[key];
     for (const [key, control] of Object.entries(layerLockControls)) control.checked = layerLocks[key];
     renderPdfLayers();
@@ -1049,7 +1573,7 @@ export function createArtworkApp({
 
   windowRef.addEventListener('keydown', (event) => {
     if (event.key === ' ') spacePressed = true;
-    if (!artwork.hasArtwork || documentRef.getElementById('artworkStep').hidden) return;
+    if (artworks.length === 0 || documentRef.getElementById('artworkStep').hidden) return;
     const active = documentRef.activeElement;
     if (active?.matches('input, textarea, select')) return;
 
@@ -1114,6 +1638,10 @@ export function createArtworkApp({
     processingController = null;
     pdfRenderController?.abort();
     pdfRenderController = null;
+    for (const [, cached] of thumbnailUrlCache) {
+      if (cached.url) URL.revokeObjectURL(cached.url);
+    }
+    thumbnailUrlCache.clear();
     renderer.dispose();
   }
 
@@ -1140,7 +1668,7 @@ export function createArtworkApp({
   render();
 
   return {
-    artwork,
+    get artwork() { return artwork; },
     renderer,
     history,
     layers,
@@ -1156,10 +1684,13 @@ export function createArtworkApp({
     restoreAutosave,
     get originalBlob() { return originalBlob; },
     get previewBlob() { return previewBlob; },
+    getArtworks,
+    getArtworksJson,
     hasModifiedArtwork: () => artwork.hasArtwork && artwork.modified,
     exportDeliverable,
     resetPlacementForNewDimensions() {
-      if (!artwork.hasArtwork) return;
+      const entry = getActiveEntry();
+      if (!entry) return;
       artwork.fitDieline(boxModel.getBounds(), { setInitial: true });
       history.clear();
       renderer.fitToScreen();

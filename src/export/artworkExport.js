@@ -45,14 +45,14 @@ async function canvasToBlob(canvas, type, quality) {
 
 export async function createPreviewBlob({
   boxModel,
-  artwork,
-  originalBlob,
-  previewBlob,
+  artworks,
   type = 'image/png',
   dpi = EXPORT_DPI,
   showDieline = true,
 }) {
-  if (!artwork.hasArtwork || !previewBlob) throw new AppError('artworkRequired');
+  const entries = (artworks || [])
+    .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && entry.previewBlob);
+  if (!entries.length) throw new AppError('artworkRequired');
   const bounds = boxModel.getBounds();
   const pixelsPerMm = dpi / 25.4;
   const width = Math.max(1, Math.round(bounds.width * pixelsPerMm));
@@ -81,21 +81,30 @@ export async function createPreviewBlob({
   }
   context.clip();
 
-  const renderBlob = artwork.source.mimeType === 'application/pdf'
-    ? previewBlob
-    : originalBlob || previewBlob;
-  const bitmap = await createImageBitmap(renderBlob, { imageOrientation: 'from-image' });
-  context.globalAlpha = artwork.opacity;
-  context.translate(artwork.centerXmm, artwork.centerYmm);
-  context.rotate(artwork.rotation * Math.PI / 180);
-  context.drawImage(
-    bitmap,
-    -artwork.unrotatedWidthMm / 2,
-    -artwork.unrotatedHeightMm / 2,
-    artwork.unrotatedWidthMm,
-    artwork.unrotatedHeightMm,
-  );
-  bitmap.close();
+  const bitmaps = [];
+  try {
+    for (const entry of entries) {
+      const renderBlob = entry.model.source.mimeType === 'application/pdf'
+        ? entry.previewBlob
+        : entry.originalBlob || entry.previewBlob;
+      const bitmap = await createImageBitmap(renderBlob, { imageOrientation: 'from-image' });
+      bitmaps.push(bitmap);
+      context.save();
+      context.globalAlpha = entry.model.opacity;
+      context.translate(entry.model.centerXmm, entry.model.centerYmm);
+      context.rotate(entry.model.rotation * Math.PI / 180);
+      context.drawImage(
+        bitmap,
+        -entry.model.unrotatedWidthMm / 2,
+        -entry.model.unrotatedHeightMm / 2,
+        entry.model.unrotatedWidthMm,
+        entry.model.unrotatedHeightMm,
+      );
+      context.restore();
+    }
+  } finally {
+    for (const bitmap of bitmaps) bitmap?.close?.();
+  }
   context.restore();
 
   if (showDieline) {
@@ -235,11 +244,11 @@ function addDielineLayer(pdfDocument, page, boxModel, bounds) {
 
 export async function createPdfExport({
   boxModel,
-  artwork,
-  originalBlob,
-  previewBlob,
+  artworks,
 }) {
-  if (!artwork.hasArtwork || !originalBlob) throw new AppError('artworkRequired');
+  const entries = (artworks || [])
+    .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && entry.originalBlob);
+  if (!entries.length) throw new AppError('artworkRequired');
   const pdfDocument = await PDFDocument.create();
   const bounds = boxModel.getBounds();
   const pageWidth = bounds.width * POINTS_PER_MM;
@@ -247,38 +256,41 @@ export async function createPdfExport({
   const page = pdfDocument.addPage([pageWidth, pageHeight]);
 
   addPanelClip(page, boxModel, bounds);
-  const centerX = (artwork.centerXmm - bounds.minX) * POINTS_PER_MM;
-  const centerY = (bounds.maxY - artwork.centerYmm) * POINTS_PER_MM;
-  const width = artwork.unrotatedWidthMm * POINTS_PER_MM;
-  const height = artwork.unrotatedHeightMm * POINTS_PER_MM;
-  const pdfRotation = -artwork.rotation;
-  const origin = rotatedOrigin(centerX, centerY, width, height, pdfRotation);
+  for (const entry of entries) {
+    const artwork = entry.model;
+    const centerX = (artwork.centerXmm - bounds.minX) * POINTS_PER_MM;
+    const centerY = (bounds.maxY - artwork.centerYmm) * POINTS_PER_MM;
+    const width = artwork.unrotatedWidthMm * POINTS_PER_MM;
+    const height = artwork.unrotatedHeightMm * POINTS_PER_MM;
+    const pdfRotation = -artwork.rotation;
+    const origin = rotatedOrigin(centerX, centerY, width, height, pdfRotation);
 
-  if (artwork.source.mimeType === 'application/pdf') {
-    const [embeddedPage] = await pdfDocument.embedPdf(
-      await originalBlob.arrayBuffer(),
-      [artwork.source.pageIndex || 0],
-    );
-    page.drawPage(embeddedPage, {
-      x: origin.x,
-      y: origin.y,
-      width,
-      height,
-      rotate: degrees(pdfRotation),
-      opacity: artwork.opacity,
-    });
-  } else {
-    const embeddedImage = artwork.source.mimeType === 'image/png'
-      ? await pdfDocument.embedPng(await originalBlob.arrayBuffer())
-      : await pdfDocument.embedJpg(await originalBlob.arrayBuffer());
-    page.drawImage(embeddedImage, {
-      x: origin.x,
-      y: origin.y,
-      width,
-      height,
-      rotate: degrees(pdfRotation),
-      opacity: artwork.opacity,
-    });
+    if (artwork.source.mimeType === 'application/pdf') {
+      const [embeddedPage] = await pdfDocument.embedPdf(
+        await entry.originalBlob.arrayBuffer(),
+        [artwork.source.pageIndex || 0],
+      );
+      page.drawPage(embeddedPage, {
+        x: origin.x,
+        y: origin.y,
+        width,
+        height,
+        rotate: degrees(pdfRotation),
+        opacity: artwork.opacity,
+      });
+    } else {
+      const embeddedImage = artwork.source.mimeType === 'image/png'
+        ? await pdfDocument.embedPng(await entry.originalBlob.arrayBuffer())
+        : await pdfDocument.embedJpg(await entry.originalBlob.arrayBuffer());
+      page.drawImage(embeddedImage, {
+        x: origin.x,
+        y: origin.y,
+        width,
+        height,
+        rotate: degrees(pdfRotation),
+        opacity: artwork.opacity,
+      });
+    }
   }
   page.pushOperators(popGraphicsState());
   addDielineLayer(pdfDocument, page, boxModel, bounds);

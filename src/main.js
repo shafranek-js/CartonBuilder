@@ -306,15 +306,15 @@ artworkApp = createArtworkApp({
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot) => {
     preview3dFacade?.resetForProject();
-    
+    const hasArtwork = Boolean(snapshot.artworks?.length);
     let targetStep = 'box';
-    if (snapshot.workflowStep === 'preview' && snapshot.artwork) {
+    if (snapshot.workflowStep === 'preview' && hasArtwork) {
       targetStep = 'preview';
-    } else if (snapshot.workflowStep === 'artwork' && (model.isComplete || snapshot.artwork)) {
+    } else if (snapshot.workflowStep === 'artwork' && (model.isComplete || hasArtwork)) {
       targetStep = 'artwork';
     } else if (snapshot.workflowStep === 'box') {
       targetStep = 'box';
-    } else if (snapshot.artwork) {
+    } else if (hasArtwork) {
       targetStep = 'artwork';
     }
     updateStepNavigationStates();
@@ -327,7 +327,8 @@ preview3dFacade = createLazyPreview3DFacade({
   getOptions: () => ({
     boxModel: model,
     artwork: artworkApp.artwork,
-    getPreviewBlob: () => artworkApp.previewBlob,
+    getArtworks: () => artworkApp.getArtworks(),
+    getArtworksJson: () => artworkApp.getArtworksJson(),
   }),
 });
 

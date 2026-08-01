@@ -3,10 +3,21 @@ import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 1;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 2;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
+
+MIGRATIONS.set(1, (snapshot) => {
+  const migrated = { ...snapshot };
+  delete migrated.artwork;
+  migrated.artworks = snapshot.artwork
+    ? [{ artwork: snapshot.artwork, visible: true }]
+    : [];
+  migrated.activeArtworkIndex = snapshot.artwork ? 0 : -1;
+  migrated.schemaVersion = 2;
+  return migrated;
+});
 
 function clone(value) {
   return structuredClone(value);
@@ -45,11 +56,27 @@ export function migrateProjectSnapshot(input) {
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
 
+  if (!Array.isArray(snapshot.artworks)) {
+    throw new AppError('projectIncomplete');
+  }
+  for (const entry of snapshot.artworks) {
+    if (!entry || typeof entry !== 'object' || !entry.artwork) {
+      throw new AppError('projectIncomplete');
+    }
+  }
+  if (
+    !Number.isInteger(snapshot.activeArtworkIndex)
+    || snapshot.activeArtworkIndex < -1
+    || snapshot.activeArtworkIndex >= snapshot.artworks.length
+  ) {
+    snapshot.activeArtworkIndex = snapshot.artworks.length > 0 ? 0 : -1;
+  }
+
   // Validate domain state before any live model is mutated.
   try {
     BoxNetModel.fromJSON(snapshot.box);
-    if (snapshot.artwork) {
-      new ArtworkModel(snapshot.artwork);
+    for (const entry of snapshot.artworks) {
+      new ArtworkModel(entry.artwork);
     }
   } catch (error) {
     throw new AppError('projectIncomplete', {}, { cause: error });
@@ -64,52 +91,66 @@ async function detectBlobType(blob) {
 
 export async function validateProjectBundle({
   snapshot: inputSnapshot,
+  artworkBlobs,
   originalBlob,
   previewBlob,
 }) {
   const snapshot = migrateProjectSnapshot(inputSnapshot);
-  if (!snapshot.artwork || !snapshot.artwork.source) {
-    return {
-      snapshot,
-      originalBlob: null,
-      previewBlob: null,
-    };
+  if (!snapshot.artworks.length) {
+    return { snapshot, artworkBlobs: [] };
   }
 
-  const source = snapshot.artwork.source;
-
-  if (!(originalBlob instanceof Blob) || originalBlob.size === 0) {
+  let blobs;
+  if (Array.isArray(artworkBlobs) && artworkBlobs.length === snapshot.artworks.length) {
+    blobs = artworkBlobs;
+  } else if (
+    originalBlob instanceof Blob
+    && previewBlob instanceof Blob
+    && snapshot.artworks.length === 1
+  ) {
+    blobs = [{ originalBlob, previewBlob }];
+  } else {
     throw new AppError('projectArtworkMissing');
   }
-  if (!(previewBlob instanceof Blob) || previewBlob.size === 0) {
-    throw new AppError('projectPreviewMissing');
-  }
-  if (previewBlob.size > MAX_PREVIEW_BYTES) {
-    throw new AppError('projectPreviewTooLarge');
-  }
-  if (Number(source.byteLength) !== originalBlob.size) {
-    throw new AppError('projectArtworkSizeMismatch');
+
+  const validated = [];
+  for (let index = 0; index < snapshot.artworks.length; index += 1) {
+    const source = snapshot.artworks[index].artwork?.source;
+    const entry = blobs[index];
+    if (!source || !(entry?.originalBlob instanceof Blob) || entry.originalBlob.size === 0) {
+      throw new AppError('projectArtworkMissing');
+    }
+    if (!(entry.previewBlob instanceof Blob) || entry.previewBlob.size === 0) {
+      throw new AppError('projectPreviewMissing');
+    }
+    if (entry.previewBlob.size > MAX_PREVIEW_BYTES) {
+      throw new AppError('projectPreviewTooLarge');
+    }
+    if (Number(source.byteLength) !== entry.originalBlob.size) {
+      throw new AppError('projectArtworkSizeMismatch');
+    }
+
+    const detectedOriginalType = await detectBlobType(entry.originalBlob);
+    if (!detectedOriginalType || detectedOriginalType !== source.mimeType) {
+      throw new AppError('projectArtworkTypeMismatch');
+    }
+
+    const detectedPreviewType = await detectBlobType(entry.previewBlob);
+    if (!['image/png', 'image/jpeg'].includes(detectedPreviewType)) {
+      throw new AppError('projectPreviewInvalid');
+    }
+
+    if (!source.sha256 || await sha256(entry.originalBlob) !== source.sha256) {
+      throw new AppError('projectArtworkChecksumMismatch');
+    }
+
+    validated.push({
+      originalBlob: new Blob([entry.originalBlob], { type: detectedOriginalType }),
+      previewBlob: new Blob([entry.previewBlob], { type: detectedPreviewType }),
+    });
   }
 
-  const detectedOriginalType = await detectBlobType(originalBlob);
-  if (!detectedOriginalType || detectedOriginalType !== source.mimeType) {
-    throw new AppError('projectArtworkTypeMismatch');
-  }
-
-  const detectedPreviewType = await detectBlobType(previewBlob);
-  if (!['image/png', 'image/jpeg'].includes(detectedPreviewType)) {
-    throw new AppError('projectPreviewInvalid');
-  }
-
-  if (!source.sha256 || await sha256(originalBlob) !== source.sha256) {
-    throw new AppError('projectArtworkChecksumMismatch');
-  }
-
-  return {
-    snapshot,
-    originalBlob: new Blob([originalBlob], { type: detectedOriginalType }),
-    previewBlob: new Blob([previewBlob], { type: detectedPreviewType }),
-  };
+  return { snapshot, artworkBlobs: validated };
 }
 
 export const PROJECT_PREVIEW_LIMITS = Object.freeze({

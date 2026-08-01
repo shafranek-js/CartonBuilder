@@ -65,7 +65,8 @@ function roundDimension(value) {
 export function createPreview3DApp({
   boxModel,
   artwork,
-  getPreviewBlob,
+  getArtworks,
+  getArtworksJson,
   documentRef = document,
   windowRef = window,
   onModeChange = () => {},
@@ -121,7 +122,6 @@ export function createPreview3DApp({
   let disposed = false;
   let structureSignature = '';
   let artworkSignature = '';
-  let currentPreviewBlob = null;
   let syncController = null;
   let syncGeneration = 0;
   let animationFrame = null;
@@ -245,8 +245,7 @@ export function createPreview3DApp({
   function getSignatures() {
     return {
       structure: JSON.stringify(boxModel.toJSON()),
-      artwork: JSON.stringify(artwork.toJSON()),
-      previewBlob: getPreviewBlob(),
+      artwork: getArtworksJson ? getArtworksJson() : JSON.stringify(artwork.toJSON()),
     };
   }
 
@@ -262,8 +261,7 @@ export function createPreview3DApp({
     const structureChanged = force || !scene || signatures.structure !== structureSignature;
     const artworkChanged = force
       || !scene
-      || signatures.artwork !== artworkSignature
-      || signatures.previewBlob !== currentPreviewBlob;
+      || signatures.artwork !== artworkSignature;
     if (!structureChanged && !artworkChanged) {
       scene.render();
       return true;
@@ -279,8 +277,7 @@ export function createPreview3DApp({
     try {
       const composed = await composeArtworkTexture({
         boxModel,
-        artwork,
-        previewBlob: signatures.previewBlob,
+        artworks: getArtworks ? getArtworks() : [],
         documentRef,
         signal: controller.signal,
       });
@@ -325,7 +322,6 @@ export function createPreview3DApp({
       }
       structureSignature = signatures.structure;
       artworkSignature = signatures.artwork;
-      currentPreviewBlob = signatures.previewBlob;
       hideRecovery();
       setBusy(false);
       updateControls();
@@ -526,7 +522,6 @@ export function createPreview3DApp({
     state = cloneState(readSceneSettings(DEFAULT_STATE, windowRef.localStorage));
     structureSignature = '';
     artworkSignature = '';
-    currentPreviewBlob = null;
     hideRecovery();
     setBusy(false);
     updateModeDom();

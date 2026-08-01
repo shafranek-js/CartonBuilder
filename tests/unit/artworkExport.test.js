@@ -68,8 +68,7 @@ describe('artwork export', () => {
 
     const exported = await createPdfExport({
       boxModel: box,
-      artwork,
-      originalBlob: sourceBlob,
+      artworks: [{ model: artwork, visible: true, originalBlob: sourceBlob }],
     });
     const bytes = new Uint8Array(await exported.arrayBuffer());
     const document = await PDFDocument.load(bytes);

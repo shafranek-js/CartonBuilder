@@ -143,7 +143,10 @@
               <h2 data-i18n="layers">Layers</h2>
               <div class="adobe-layers-table">
                 <!-- Artwork Layer -->
-                <div class="adobe-layer-row active" data-layer-id="artwork">
+                <div class="adobe-layer-row" data-layer-id="artwork">
+                  <button type="button" class="layer-twisty" id="artworkTwisty" aria-expanded="true" aria-label="Collapse Artwork group">
+                    <svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
+                  </button>
                   <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
                     <input id="layerArtwork" type="checkbox" checked class="sr-only">
                     <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -165,8 +168,9 @@
                       <path d="M14 11l-3-3-5 5"/>
                     </svg>
                   </span>
-                  <span class="layer-title" data-i18n="artwork">Artwork</span>
+                  <span class="layer-title"><span data-i18n="artwork">Artwork</span><span class="layer-count" id="artworkLayerCount" hidden></span></span>
                 </div>
+                <div class="artwork-sublayers" id="artworkSublayers" hidden></div>
 
                 <!-- Dieline Layer -->
                 <div class="adobe-layer-row" data-layer-id="dieline">
