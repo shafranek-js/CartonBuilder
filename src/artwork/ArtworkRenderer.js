@@ -12,7 +12,7 @@ function svgElement(documentRef, name, attributes = {}) {
   return element;
 }
 
-function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath) {
+function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath, artworkIndex) {
   const imageProps = {
     class: 'artwork-image',
     href: previewUrl,
@@ -24,6 +24,7 @@ function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath
     preserveAspectRatio: 'none',
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
   };
+  if (artworkIndex != null) imageProps['data-artwork-index'] = String(artworkIndex);
 
   if (clipPath) {
     const clipGroup = svgElement(documentRef, 'g', { 'clip-path': clipPath });
@@ -38,7 +39,7 @@ function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath
   return image;
 }
 
-function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, outerClip, crop) {
+function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, outerClip, crop, artworkIndex) {
   const cx = artwork.centerXmm;
   const cy = artwork.centerYmm;
   const halfW = artwork.unrotatedWidthMm / 2;
@@ -58,7 +59,7 @@ function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, o
   const defs = parent.closest('svg')?.querySelector('defs');
   if (defs) defs.appendChild(clipDef);
   const clipGroup = svgElement(documentRef, 'g', { 'clip-path': `url(#${cropId})` });
-  const image = svgElement(documentRef, 'image', {
+  const imageAttrs = {
     class: 'artwork-image',
     href: previewUrl,
     x: -halfW,
@@ -67,7 +68,9 @@ function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, o
     height: artwork.unrotatedHeightMm,
     opacity,
     preserveAspectRatio: 'none',
-  });
+  };
+  if (artworkIndex != null) imageAttrs['data-artwork-index'] = String(artworkIndex);
+  const image = svgElement(documentRef, 'image', imageAttrs);
   clipGroup.appendChild(image);
   rotateGroup.appendChild(clipGroup);
   if (outerClip) {
@@ -225,10 +228,11 @@ export class ArtworkRenderer {
     for (const entry of this.entries) {
       if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
     }
-    this.entries = (entries || []).map((entry) => ({
+    this.entries = (entries || []).map((entry, i) => ({
       model: entry.model,
       visible: entry.visible !== false,
       previewUrl: entry.previewBlob ? URL.createObjectURL(entry.previewBlob) : '',
+      artworkIndex: i,
     }));
   }
 
@@ -316,18 +320,19 @@ export class ArtworkRenderer {
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
         if (!entry.visible || !entry.model.hasArtwork || !entry.previewUrl) continue;
+        const ai = entry.artworkIndex;
         const crop = entry.model.crop;
         if (!preview && entry.model.bgOpacity > 0) {
           if (crop) {
-            appendCroppedImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity * entry.model.bgOpacity, `url(#${target.id}-panel-mask)`, crop);
+            appendCroppedImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity * entry.model.bgOpacity, `url(#${target.id}-panel-mask)`, crop, ai);
           } else {
-            appendImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity * entry.model.bgOpacity, null);
+            appendImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity * entry.model.bgOpacity, null, ai);
           }
         }
         if (crop) {
-          appendCroppedImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity, `url(#${target.id}-panel-mask)`, crop);
+          appendCroppedImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity, `url(#${target.id}-panel-mask)`, crop, ai);
         } else {
-          appendImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity, `url(#${target.id}-panel-mask)`);
+          appendImage(documentRef, target, entry.model, entry.previewUrl, entry.model.opacity, `url(#${target.id}-panel-mask)`, ai);
         }
       }
     }

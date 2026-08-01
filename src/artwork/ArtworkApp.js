@@ -1182,6 +1182,13 @@ export function createArtworkApp({
     if (!artwork.hasArtwork || layerLocks.artwork || getActiveEntry()?.locked || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+
+    const imageEl = event.target.closest('.artwork-image');
+    const clickedIndex = imageEl ? Number(imageEl.dataset.artworkIndex) : -1;
+    if (clickedIndex >= 0 && clickedIndex !== activeArtworkIndex && !artworks[clickedIndex]?.locked) {
+      selectArtworkRow(clickedIndex);
+    }
+
     selected = true;
     const point = renderer.clientToModel(event.clientX, event.clientY);
     const anchorPos = artwork.getReferencePosition();
