@@ -9,7 +9,7 @@ import {
   saveCurrentProject,
 } from '../project/ProjectStore.js';
 import { createProjectArchive, readProjectArchive } from '../project/projectArchive.js';
-import { validateProjectBundle } from '../project/projectSchema.js';
+import { CURRENT_PROJECT_SCHEMA_VERSION, validateProjectBundle } from '../project/projectSchema.js';
 import { ArtworkModel, getReferenceFraction } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
@@ -166,6 +166,7 @@ export function createArtworkApp({
     pdfLayersSection: documentRef.getElementById('pdfLayersSection'),
     pdfLayersList: documentRef.getElementById('pdfLayersList'),
     cropSection: documentRef.getElementById('cropSection'),
+    opacitySection: documentRef.getElementById('opacitySection'),
     cropFrameBtn: documentRef.getElementById('cropFrameButton'),
     cropDrawBtn: documentRef.getElementById('cropDrawButton'),
     clearCrop: documentRef.getElementById('clearCropButton'),
@@ -428,7 +429,7 @@ export function createArtworkApp({
   function createSnapshot(workflowStep = persistedWorkflowStep()) {
     const topmost = artworks[0];
     return {
-      schemaVersion: 3,
+      schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
       meta: {
         id: 'current',
         name: artworkEntryName(topmost) || 'Untitled carton',
@@ -560,6 +561,7 @@ export function createArtworkApp({
     controls.undo.disabled = history.undoStack.length === 0;
     controls.redo.disabled = history.redoStack.length === 0;
     controls.cropSection.hidden = !enabled;
+    controls.opacitySection.hidden = !enabled;
     controls.clearCrop.disabled = !artwork.crop && !cropMode;
     updateCropButtons();
     dropState.hidden = artworks.length > 0;

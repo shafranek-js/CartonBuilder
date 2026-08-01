@@ -348,8 +348,6 @@
                   <label><b data-i18n="scaleX">Scale X</b> <span><input id="artworkScaleX" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
                   <label><b data-i18n="scaleY">Scale Y</b> <span><input id="artworkScaleY" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
                 </span>
-                <label><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
-                <label><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>
               </div>
               <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
               <div class="button-grid icon-button-grid">
@@ -394,6 +392,12 @@
                   </svg>
                 </button>
               </div>
+            </section>
+
+            <section class="tool-section" id="opacitySection" hidden>
+              <h2 data-i18n="opacityPanel">Opacity</h2>
+              <label class="opacity-row"><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
+              <label class="opacity-row"><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>
             </section>
 
             <section class="tool-section" id="cropSection" hidden>
@@ -688,6 +692,19 @@
             </section>
 
             <section class="tool-section">
+              <h2 data-i18n="renderBoardAppearance">Board appearance</h2>
+              <div class="light-control"><span data-i18n="renderThickness">Thickness</span><input id="renderBoardThickness" type="range" min="0.05" max="2" step="0.01" value="0.35"><output id="renderBoardThicknessValue">0.35 mm</output></div>
+              <div class="light-control"><span data-i18n="renderBevel">Bevel</span><input id="renderBoardBevel" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="renderBoardBevelValue">0.12 mm</output></div>
+              <label class="field"><span data-i18n="renderInteriorColor">Interior</span><input id="renderBoardInteriorColor" type="color" value="#f4f2ec"></label>
+              <label class="field"><span data-i18n="renderEdgeColor">Edges</span><input id="renderBoardEdgeColor" type="color" value="#c8c1b5"></label>
+              <div class="field preset-store-row">
+                <select id="renderNamedPreset" aria-label="Named Render preset" data-i18n-aria-label="renderNamedPresetLabel"><option value="" data-i18n="renderNamedPresetPlaceholder">Named preset…</option></select>
+                <button id="saveRenderPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                <button id="deleteRenderPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+              </div>
+            </section>
+
+            <section class="tool-section">
               <h2 data-i18n="renderLighting">Lighting</h2>
               <div class="light-control"><span data-i18n="lightAzimuth3d">Horizontal</span><input id="renderLightAzimuth" type="range" min="0" max="360" step="1" value="63"><output id="renderLightAzimuthValue">63°</output></div>
               <div class="light-control"><span data-i18n="lightElevation3d">Vertical</span><input id="renderLightElevation" type="range" min="5" max="85" step="1" value="48"><output id="renderLightElevationValue">48°</output></div>
@@ -722,6 +739,25 @@
               <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="1.5"><output id="renderShadowBlurValue">1.5</output></div>
               <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
             </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderEffects">Effects</h2>
+              <label class="field"><span data-i18n="renderGtao">GTAO</span><input id="renderEffectsGtao" type="checkbox" checked></label>
+              <div class="light-control"><span data-i18n="renderGtaoIntensity">AO intensity</span><input id="renderGtaoIntensity" type="range" min="0" max="1" step="0.01" value="0.45"><output id="renderGtaoIntensityValue">0.45</output></div>
+              <div class="light-control"><span data-i18n="renderGtaoRadius">AO radius</span><input id="renderGtaoRadius" type="range" min="0.01" max="2" step="0.01" value="0.22"><output id="renderGtaoRadiusValue">0.22</output></div>
+              <label class="field"><span data-i18n="renderGtaoResolution">AO resolution</span><select id="renderGtaoResolution"><option value="half">Half</option><option value="full">Full</option></select></label>
+              <label class="field"><span data-i18n="renderDof">Depth of field</span><input id="renderEffectsDof" type="checkbox"></label>
+              <label class="field"><span data-i18n="renderDofFocusMode">Focus</span><select id="renderDofFocusMode"><option value="carton-center">Carton center</option><option value="custom">Custom</option></select></label>
+              <div class="light-control"><span data-i18n="renderDofFocusDistance">Focus distance</span><input id="renderDofFocusDistance" type="range" min="0.01" max="10" step="0.01" value="1"><output id="renderDofFocusDistanceValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="renderDofAperture">Aperture</span><input id="renderDofAperture" type="range" min="0" max="0.2" step="0.001" value="0.025"><output id="renderDofApertureValue">0.025</output></div>
+              <div class="light-control"><span data-i18n="renderDofMaxBlur">Max blur</span><input id="renderDofMaxBlur" type="range" min="0" max="1" step="0.01" value="0.01"><output id="renderDofMaxBlurValue">0.010</output></div>
+              <button id="experimentalPathTracingButton" type="button" data-i18n="renderPathTracing" hidden>High Quality Experimental</button>
+            </section>
+
+            <details class="tool-section" id="renderDiagnosticsDrawer">
+              <summary data-i18n="renderDiagnostics">Diagnostics</summary>
+              <pre id="renderDiagnosticsOutput" class="diagnostics-output" aria-live="polite"></pre>
+            </details>
           </aside>
         </div>
         <footer class="app-footer preview-footer">
