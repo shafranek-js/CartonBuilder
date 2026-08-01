@@ -22,15 +22,17 @@ describe('ArtworkModel', () => {
     expect(model.centerYmm).toBe(0);
     expect(model.initialWidthMm).toBe(230);
     expect(model.initialHeightMm).toBeCloseTo(153.333);
-    expect(model.scale).toBe(1);
+    expect(model.scaleX).toBe(1);
+    expect(model.scaleY).toBe(1);
     expect(model.modified).toBe(false);
   });
 
   it('keeps proportions and swaps displayed dimensions after rotation', () => {
     const model = new ArtworkModel().load(source, bounds);
-    model.setDisplayedWidth(115);
+    model.setScale(0.5);
 
-    expect(model.scale).toBe(0.5);
+    expect(model.scaleX).toBe(0.5);
+    expect(model.scaleY).toBe(0.5);
     expect(model.displayedHeightMm).toBeCloseTo(76.667);
 
     model.rotateQuarterTurns(1);
@@ -99,7 +101,8 @@ describe('ArtworkModel', () => {
 
     expect(model.getReferencePosition().x).toBeCloseTo(before.x, 5);
     expect(model.getReferencePosition().y).toBeCloseTo(before.y, 5);
-    expect(model.scale).toBe(2);
+    expect(model.scaleX).toBe(2);
+    expect(model.scaleY).toBe(2);
   });
 
   it('moves the selected reference point to the entered coordinates', () => {

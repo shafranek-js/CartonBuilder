@@ -17,6 +17,7 @@ import { ViewportModel } from './ViewportModel.js';
 import { loadArtworkFile, renderPdfWithLayers } from './fileLoader.js';
 import { getSnapOffset, buildSnapTargets, getResizeSnapScale, getDisplayedReferenceFraction } from './snap.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
+import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 
 const SNAP_SCREEN_PX = 6;
 
@@ -96,6 +97,9 @@ export function createArtworkApp({
   onBackToEditor,
   onProjectLoaded,
   getWorkflowStep = () => 'artwork',
+  getRenderState = () => DEFAULT_RENDER_SETTINGS,
+  onRenderStateChanged = () => {},
+  onStateChanged = () => {},
 }) {
   let artwork = new ArtworkModel();
   const viewport = new ViewportModel();
@@ -166,6 +170,10 @@ export function createArtworkApp({
     cropDrawBtn: documentRef.getElementById('cropDrawButton'),
     clearCrop: documentRef.getElementById('clearCropButton'),
     cropStatus: documentRef.getElementById('cropStatus'),
+    scaleX: documentRef.getElementById('artworkScaleX'),
+    scaleY: documentRef.getElementById('artworkScaleY'),
+    scaleXYGroup: documentRef.getElementById('scaleXYGroup'),
+    constrainBtn: documentRef.getElementById('constrainProportionsBtn'),
   };
 
   const layerControls = {
@@ -206,6 +214,7 @@ export function createArtworkApp({
   let cropPreview = null;
   let cropGesture = null;
   let cropDrawStart = null;
+  let constrainProportions = true;
   let artworkGroupCollapsed = false;
   let selectedArtworkIndices = new Set();
   const thumbnailUrlCache = new Map();
@@ -411,6 +420,7 @@ export function createArtworkApp({
 
   function persistedWorkflowStep(value = getWorkflowStep()) {
     if (value === 'preview') return 'preview';
+    if (value === 'render') return 'render';
     if (value === 'artwork') return 'artwork';
     return 'box';
   }
@@ -418,7 +428,7 @@ export function createArtworkApp({
   function createSnapshot(workflowStep = persistedWorkflowStep()) {
     const topmost = artworks[0];
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       meta: {
         id: 'current',
         name: artworkEntryName(topmost) || 'Untitled carton',
@@ -433,6 +443,7 @@ export function createArtworkApp({
         visible: entry.visible,
       })),
       activeArtworkIndex,
+      render: sanitizeRenderSettings(getRenderState()),
       view: {
         ...viewport.toJSON(),
         layers: { ...layers },
@@ -476,6 +487,7 @@ export function createArtworkApp({
     saveTimer = windowRef.setTimeout(() => {
       enqueueSave().catch(() => {});
     }, 500);
+    onStateChanged();
   }
 
   function persistWorkflowStep(workflowStep = persistedWorkflowStep()) {
@@ -501,7 +513,19 @@ export function createArtworkApp({
     controls.y.value = enabled ? round(reference.y) : '';
     controls.width.value = enabled ? round(artwork.displayedWidthMm) : '';
     controls.height.value = enabled ? round(artwork.displayedHeightMm) : '';
-    controls.scale.value = enabled ? round(artwork.scale * 100) : '';
+    controls.scale.value = enabled ? round(artwork.scaleX * 100) : '';
+    controls.scale.parentElement.parentElement.hidden = !constrainProportions;
+    controls.scaleXYGroup.hidden = constrainProportions;
+    if (enabled) {
+      controls.scaleX.value = round(artwork.scaleX * 100);
+      controls.scaleY.value = round(artwork.scaleY * 100);
+      controls.scaleX.disabled = !transformEnabled;
+      controls.scaleY.disabled = !transformEnabled;
+    } else {
+      controls.scaleX.value = '';
+      controls.scaleY.value = '';
+    }
+    controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
     controls.opacity.value = enabled ? Math.round(artwork.opacity * 100) : 100;
     controls.opacityValue.value = `${controls.opacity.value}%`;
     controls.bgOpacity.value = enabled ? Math.round(artwork.bgOpacity * 100) : 28;
@@ -1201,7 +1225,7 @@ export function createArtworkApp({
       before: captureEditorState(),
       startPoint: point,
       startCenter: { x: artwork.centerXmm, y: artwork.centerYmm },
-      startScale: artwork.scale,
+      startScale: artwork.scaleX,
       rotation: artwork.rotation,
       anchorPos,
       startDistFromAnchor: Math.max(0.001, startDistFromAnchor),
@@ -1455,7 +1479,8 @@ export function createArtworkApp({
     const rectangle = svg.getBoundingClientRect();
     if (event.ctrlKey && artwork.hasArtwork && !getActiveEntry()?.locked) {
       if (!wheelBefore) wheelBefore = captureEditorState();
-      artwork.setScale(artwork.scale * Math.exp(-event.deltaY * 0.001));
+      artwork.setScaleX(artwork.scaleX * Math.exp(-event.deltaY * 0.001));
+      artwork.setScaleY(artwork.scaleY * Math.exp(-event.deltaY * 0.001));
       render();
       windowRef.clearTimeout(wheelTimer);
       wheelTimer = windowRef.setTimeout(() => {
@@ -1504,9 +1529,26 @@ export function createArtworkApp({
   }
   bindNumberControl(controls.x, 'Set artwork X', (value) => artwork.setReferencePosition(value, artwork.getReferencePosition().y));
   bindNumberControl(controls.y, 'Set artwork Y', (value) => artwork.setReferencePosition(artwork.getReferencePosition().x, value));
-  bindNumberControl(controls.width, 'Set artwork width', (value) => artwork.setDisplayedWidth(value));
-  bindNumberControl(controls.height, 'Set artwork height', (value) => artwork.setDisplayedHeight(value));
-  bindNumberControl(controls.scale, 'Set artwork scale', (value) => artwork.setScale(value / 100));
+  bindNumberControl(controls.width, 'Set artwork width', (value) => {
+    artwork.setDisplayedWidth(value);
+    if (constrainProportions) artwork.setScaleY(artwork.scaleX);
+  });
+  bindNumberControl(controls.height, 'Set artwork height', (value) => {
+    artwork.setDisplayedHeight(value);
+    if (constrainProportions) artwork.setScaleX(artwork.scaleY);
+  });
+  bindNumberControl(controls.scale, 'Set artwork scale', (value) => {
+    artwork.setScaleX(value / 100);
+    if (constrainProportions) artwork.setScaleY(value / 100);
+  });
+  bindNumberControl(controls.scaleX, 'Set artwork scale X', (value) => {
+    artwork.setScaleX(value / 100);
+    if (constrainProportions) artwork.setScaleY(artwork.scaleX);
+  });
+  bindNumberControl(controls.scaleY, 'Set artwork scale Y', (value) => {
+    artwork.setScaleY(value / 100);
+    if (constrainProportions) artwork.setScaleX(artwork.scaleY);
+  });
   bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
 
@@ -1611,6 +1653,15 @@ export function createArtworkApp({
     enterCropDraw();
   });
   controls.clearCrop.addEventListener('click', clearCrop);
+  controls.constrainBtn.addEventListener('click', () => {
+    constrainProportions = !constrainProportions;
+    controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
+    renderControls();
+    if (!constrainProportions && artwork.hasArtwork) {
+      controls.scaleX.value = round(artwork.scaleX * 100);
+      controls.scaleY.value = round(artwork.scaleY * 100);
+    }
+  });
 
   function updateCropButtons() {
     const isFrame = cropMode === 'frame';
@@ -2067,6 +2118,7 @@ export function createArtworkApp({
     saveProjectArchive,
     persistWorkflowStep,
     scheduleSave,
+    notifyRenderStateChanged: () => onRenderStateChanged(),
     flushPendingSave,
     dispose,
     restoreAutosave,

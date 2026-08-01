@@ -17,6 +17,8 @@ import { createFileMenu } from './ui/FileMenu.js';
 import { createEditMenu } from './ui/EditMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
+import { createRenderApp } from './render/RenderApp.js';
+import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
 
 initializeI18n();
 applyTheme(getSavedTheme());
@@ -25,6 +27,7 @@ const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
 const boxStep = document.getElementById('boxStep');
 const artworkStep = document.getElementById('artworkStep');
 const previewStep = document.getElementById('previewStep');
+const renderStep = document.getElementById('renderStep');
 const stepButtons = [...document.querySelectorAll('.step')];
 const previewWarning = document.getElementById('previewWarning');
 
@@ -201,6 +204,7 @@ const panelDock = createPanelDock({
 let currentStep = 'box';
 let artworkApp;
 let preview3dFacade;
+let renderApp;
 let resetArtworkAfterBoxCompletion = false;
 
 function updateStepNavigationStates() {
@@ -210,10 +214,12 @@ function updateStepNavigationStates() {
   const boxBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'box');
   const artworkBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'artwork');
   const previewBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'preview');
+  const renderBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'render');
 
   if (boxBtn) boxBtn.disabled = false;
   if (artworkBtn) artworkBtn.disabled = !isBoxComplete;
   if (previewBtn) previewBtn.disabled = !isBoxComplete || !hasArtwork;
+  if (renderBtn) renderBtn.disabled = !isBoxComplete || !hasArtwork;
 }
 
 function showStep(step) {
@@ -221,10 +227,11 @@ function showStep(step) {
   boxStep.hidden = step !== 'box';
   artworkStep.hidden = step !== 'artwork';
   previewStep.hidden = step !== 'preview';
+  renderStep.hidden = step !== 'render';
 
   updateStepNavigationStates();
 
-  const stepOrder = ['box', 'artwork', 'preview'];
+  const stepOrder = ['box', 'artwork', 'preview', 'render'];
   const currentIndex = stepOrder.indexOf(step);
 
   for (const button of stepButtons) {
@@ -236,7 +243,9 @@ function showStep(step) {
         ? model.isComplete
         : target === 'artwork'
           ? Boolean(artworkApp?.artwork?.hasArtwork)
-          : false
+          : target === 'preview' || target === 'render'
+            ? model.isComplete && Boolean(artworkApp?.artwork?.hasArtwork)
+            : false
     );
 
     button.classList.toggle('active', isActive);
@@ -255,13 +264,21 @@ function showStep(step) {
       artworkApp?.fitToScreen();
     }
     preview3dFacade?.suspend();
+    renderApp?.deactivate();
     requestAnimationFrame(() => artworkApp?.render());
   } else if (step === 'preview') {
+    renderApp?.deactivate();
     requestAnimationFrame(() => {
       preview3dFacade?.activate();
     });
+  } else if (step === 'render') {
+    preview3dFacade?.suspend();
+    requestAnimationFrame(() => {
+      renderApp?.activate();
+    });
   } else {
     preview3dFacade?.suspend();
+    renderApp?.deactivate();
   }
 
   if (artworkApp) {
@@ -306,9 +323,12 @@ artworkApp = createArtworkApp({
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot) => {
     preview3dFacade?.resetForProject();
+    renderApp?.restoreState(snapshot.render);
     const hasArtwork = Boolean(snapshot.artworks?.length);
     let targetStep = 'box';
-    if (snapshot.workflowStep === 'preview' && hasArtwork) {
+    if (snapshot.workflowStep === 'render' && hasArtwork && model.isComplete) {
+      targetStep = 'render';
+    } else if (snapshot.workflowStep === 'preview' && hasArtwork) {
       targetStep = 'preview';
     } else if (snapshot.workflowStep === 'artwork' && (model.isComplete || hasArtwork)) {
       targetStep = 'artwork';
@@ -321,6 +341,9 @@ artworkApp = createArtworkApp({
     showStep(targetStep);
   },
   getWorkflowStep: () => currentStep,
+  getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
+  onRenderStateChanged: () => artworkApp?.scheduleSave(),
+  onStateChanged: () => updateStepNavigationStates(),
 });
 
 preview3dFacade = createLazyPreview3DFacade({
@@ -330,6 +353,15 @@ preview3dFacade = createLazyPreview3DFacade({
     getArtworks: () => artworkApp.getArtworks(),
     getArtworksJson: () => artworkApp.getArtworksJson(),
   }),
+});
+
+renderApp = createRenderApp({
+  boxModel: model,
+  getArtworks: () => artworkApp.getArtworks(),
+  getArtworksJson: () => artworkApp.getArtworksJson(),
+  initialState: DEFAULT_RENDER_SETTINGS,
+  onStateChange: () => artworkApp?.notifyRenderStateChanged?.(),
+  onBackToPreview: () => showStep('preview'),
 });
 
 window.BoxNet = {
@@ -352,6 +384,7 @@ window.cartonBuilderApp = {
   showStep,
   artwork: artworkApp,
   preview3d: preview3dFacade,
+  render: renderApp,
 };
 
 for (const button of stepButtons) {
@@ -360,7 +393,12 @@ for (const button of stepButtons) {
   });
 }
 
+document.getElementById('openRenderButton')?.addEventListener('click', () => showStep('render'));
+
 artworkApp.restoreAutosave();
-window.addEventListener('beforeunload', () => preview3dFacade.dispose());
+window.addEventListener('beforeunload', () => {
+  preview3dFacade.dispose();
+  renderApp.dispose();
+});
 
 export { model };

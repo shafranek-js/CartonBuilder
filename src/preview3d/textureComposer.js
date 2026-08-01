@@ -79,6 +79,16 @@ function drawArtwork(context, entry, bitmap) {
   context.globalAlpha = artwork.opacity;
   context.translate(artwork.centerXmm, artwork.centerYmm);
   context.rotate(artwork.rotation * Math.PI / 180);
+  if (artwork.crop && artwork.crop.width > 0 && artwork.crop.height > 0) {
+    context.beginPath();
+    context.rect(
+      -artwork.unrotatedWidthMm / 2 + (artwork.crop.x || 0),
+      -artwork.unrotatedHeightMm / 2 + (artwork.crop.y || 0),
+      artwork.crop.width,
+      artwork.crop.height,
+    );
+    context.clip();
+  }
   context.drawImage(
     bitmap,
     -artwork.unrotatedWidthMm / 2,

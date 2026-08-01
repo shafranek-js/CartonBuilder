@@ -2,8 +2,9 @@ import { ArtworkModel } from '../artwork/ArtworkModel.js';
 import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
+import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 2;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 3;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -19,12 +20,31 @@ MIGRATIONS.set(1, (snapshot) => {
   return migrated;
 });
 
+MIGRATIONS.set(2, (snapshot) => {
+  const migrated = { ...snapshot };
+  migrated.schemaVersion = 3;
+  migrated.render = sanitizeRenderSettings(DEFAULT_RENDER_SETTINGS);
+  if (Array.isArray(migrated.artworks)) {
+    migrated.artworks = migrated.artworks.map((entry) => {
+      const artwork = { ...entry.artwork };
+      if (artwork.scale != null) {
+        artwork.scaleX = artwork.scale;
+        artwork.scaleY = artwork.scale;
+        delete artwork.scale;
+      }
+      return { ...entry, artwork };
+    });
+  }
+  return migrated;
+});
+
 function clone(value) {
   return structuredClone(value);
 }
 
 function normalizeWorkflowStep(value) {
   if (value === 'preview') return 'preview';
+  if (value === 'render') return 'render';
   if (value === 'artwork') return 'artwork';
   return 'box';
 }
@@ -55,6 +75,7 @@ export function migrateProjectSnapshot(input) {
   }
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
+  snapshot.render = sanitizeRenderSettings(snapshot.render);
 
   if (!Array.isArray(snapshot.artworks)) {
     throw new AppError('projectIncomplete');

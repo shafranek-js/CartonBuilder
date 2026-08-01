@@ -705,7 +705,7 @@ test('reference point selector swaps X/Y without moving artwork and anchors tran
   await page.locator('#artworkScale').fill('150');
   await page.locator('#artworkScale').dispatchEvent('change');
   await expect.poll(() => page.evaluate(() => (
-    Math.round(window.cartonBuilderApp.artwork.artwork.scale * 100) === 150
+    Math.round(window.cartonBuilderApp.artwork.artwork.scaleX * 100) === 150
   ))).toBe(true);
   const anchorAfterScale = await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.getReferencePosition());
   expect(anchorAfterScale.x).toBeCloseTo(anchor.x, 4);

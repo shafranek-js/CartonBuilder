@@ -31,6 +31,7 @@
           <button class="step active" type="button" data-step-target="box" aria-current="step"><span>1</span><b data-i18n="createBox">Create Box</b></button>
           <button class="step" type="button" data-step-target="artwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
           <button class="step" type="button" data-step-target="preview" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
+          <button class="step" type="button" data-step-target="render" disabled title="Complete earlier steps to render"><span>4</span><b data-i18n="renderStep">Render</b></button>
         </div>
         <div class="header-right-tools">
           <div class="preset-picker-wrap">
@@ -340,8 +341,19 @@
                   <label><b>H:</b> <span><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled> mm</span></label>
                 </div>
               </div>
+              <button type="button" id="constrainProportionsBtn" class="chain-toggle" title="Constrain proportions" data-i18n-title="constrainProportions" aria-pressed="true">
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
+                  <rect x="3" y="5" width="4" height="6" rx="1"/>
+                  <rect x="9" y="2" width="4" height="6" rx="1"/>
+                  <line x1="7" y1="8" x2="9" y2="5.2"/>
+                </svg>
+              </button>
               <div class="control-grid">
                 <label><b data-i18n="scale">Scale</b> <span><input id="artworkScale" aria-label="Artwork scale" data-i18n-aria-label="artworkScaleLabel" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
+                <span id="scaleXYGroup" hidden>
+                  <label><b data-i18n="scaleX">Scale X</b> <span><input id="artworkScaleX" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
+                  <label><b data-i18n="scaleY">Scale Y</b> <span><input id="artworkScaleY" type="number" min="1" max="2000" step="0.1" disabled> %</span></label>
+                </span>
                 <label><b data-i18n="opacity">Opacity</b> <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span></label>
                 <label><b data-i18n="bgOpacity">Background opacity</b> <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span></label>
               </div>
@@ -429,6 +441,7 @@
       <section class="workflow-step preview-step" id="previewStep" hidden>
         <div class="preview-toolbar">
           <span class="preview-warning" id="previewWarning" role="status" aria-live="polite"></span>
+          <button id="openRenderButton" type="button" data-i18n="openRender">Render</button>
           <button id="export3dHtmlButton" type="button" data-i18n="export3dHtml">Export HTML</button>
         </div>
         <div class="preview-main-row">
@@ -597,6 +610,128 @@
         <p class="technical-proof-notice" data-i18n="technicalProofNotice">Technical proof: the PDF is 1:1 with a CutContour dieline, but it is not PDF/X certified. Verify it with your printer before production.</p>
         <footer class="app-footer preview-footer">
           <button class="footer-button" id="backToArtworkButton" type="button" data-i18n="backToEdit">Back to edit</button>
+          <div class="footer-spacer"></div>
+        </footer>
+      </section>
+
+      <section class="workflow-step render-step" id="renderStep" hidden>
+        <div class="render-toolbar">
+          <span class="render-status" id="renderStatus" role="status" aria-live="polite"></span>
+          <div class="render-toolbar-actions">
+            <button id="renderPngButton" type="button" data-i18n="renderPng">Render PNG</button>
+            <button id="renderJpgButton" type="button" data-i18n="renderJpg">Render JPG</button>
+          </div>
+        </div>
+        <div class="render-main-row">
+          <div class="render-canvas-wrap" id="renderPanel" aria-busy="false">
+            <canvas id="renderCanvas" role="img" tabindex="0" aria-label="Presentation carton render" data-i18n-aria-label="renderCanvasLabel"></canvas>
+            <div class="render-busy" id="renderBusy" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span data-i18n="rendering">Rendering…</span>
+            </div>
+            <div class="render-recovery" id="renderRecovery" role="alert" hidden>
+              <strong id="renderRecoveryMessage" data-i18n="renderUnavailable">Presentation render is unavailable.</strong>
+              <button id="retryRenderButton" type="button" data-i18n="retryRender">Retry Render</button>
+            </div>
+          </div>
+
+          <aside class="render-sidebar" aria-label="Render settings" data-i18n-aria-label="renderSettingsLabel">
+            <section class="tool-section">
+              <h2 data-i18n="renderPresets">Presets</h2>
+              <div class="render-preset-grid">
+                <button type="button" class="render-preset-button" data-render-preset="clean-studio" data-i18n="renderPresetCleanStudio">Clean Studio</button>
+                <button type="button" class="render-preset-button" data-render-preset="catalogue" data-i18n="renderPresetCatalogue">Catalogue</button>
+                <button type="button" class="render-preset-button" data-render-preset="soft-grey" data-i18n="renderPresetSoftGrey">Soft Grey</button>
+                <button type="button" class="render-preset-button" data-render-preset="transparent" data-i18n="renderPresetTransparent">Transparent</button>
+              </div>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderCamera">Camera</h2>
+              <label class="field"><span data-i18n="renderCameraPreset">View</span>
+                <select id="renderCameraPreset">
+                  <option value="front" data-i18n="renderCameraFront">Front</option>
+                  <option value="front-right" data-i18n="renderCameraFrontRight">Front-right</option>
+                  <option value="front-left" data-i18n="renderCameraFrontLeft">Front-left</option>
+                  <option value="top-front" data-i18n="renderCameraTopFront">Top-front</option>
+                  <option value="isometric" data-i18n="renderCameraIsometric">Isometric</option>
+                  <option value="custom" data-i18n="renderCameraCustom">Custom</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="renderProjection">Projection</span>
+                <select id="renderProjection">
+                  <option value="perspective" data-i18n="perspectiveCamera3d">Perspective</option>
+                  <option value="orthographic" data-i18n="orthographicCamera3d">Orthographic</option>
+                </select>
+              </label>
+              <div class="light-control"><span data-i18n="cameraFov3d">FOV</span><input id="renderFov" type="range" min="10" max="120" step="1" value="35"><output id="renderFovValue">35°</output></div>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderFrame">Frame</h2>
+              <label class="field"><span data-i18n="renderAspect">Aspect</span>
+                <select id="renderAspect">
+                  <option value="square">1:1</option>
+                  <option value="landscape">4:3</option>
+                  <option value="wide">16:9</option>
+                  <option value="portrait">3:4</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="renderLongEdge">Long edge</span>
+                <select id="renderLongEdge"><option value="2048">2048 px</option><option value="4096">4096 px</option></select>
+              </label>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderMaterial">Material</h2>
+              <label class="field"><span data-i18n="renderMaterialProfile">Board finish</span>
+                <select id="renderMaterialProfile">
+                  <option value="uncoated" data-i18n="renderMaterialUncoated">Uncoated</option>
+                  <option value="matte" data-i18n="renderMaterialMatte">Matte</option>
+                  <option value="gloss" data-i18n="renderMaterialGloss">Gloss</option>
+                </select>
+              </label>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderLighting">Lighting</h2>
+              <div class="light-control"><span data-i18n="lightAzimuth3d">Horizontal</span><input id="renderLightAzimuth" type="range" min="0" max="360" step="1" value="63"><output id="renderLightAzimuthValue">63°</output></div>
+              <div class="light-control"><span data-i18n="lightElevation3d">Vertical</span><input id="renderLightElevation" type="range" min="5" max="85" step="1" value="48"><output id="renderLightElevationValue">48°</output></div>
+              <div class="light-control"><span data-i18n="lightIntensity3d">Brightness</span><input id="renderLightIntensity" type="range" min="0" max="10" step="0.1" value="2.6"><output id="renderLightIntensityValue">2.6</output></div>
+              <label class="field"><span data-i18n="renderEnvironment">Environment</span>
+                <select id="renderEnvironment">
+                  <option value="none" data-i18n="renderEnvironmentNone">None</option>
+                  <option value="studio" data-i18n="renderEnvironmentStudio">Studio</option>
+                  <option value="neutral" data-i18n="renderEnvironmentNeutral">Neutral</option>
+                  <option value="warm" data-i18n="renderEnvironmentWarm">Warm</option>
+                  <option value="cool" data-i18n="renderEnvironmentCool">Cool</option>
+                  <option value="bright" data-i18n="renderEnvironmentBright">Bright</option>
+                  <option value="night" data-i18n="renderEnvironmentNight">Night</option>
+                </select>
+              </label>
+              <div class="light-control"><span data-i18n="environmentIntensity3d">Ambient</span><input id="renderEnvironmentIntensity" type="range" min="0" max="5" step="0.05" value="0.65"><output id="renderEnvironmentIntensityValue">0.65</output></div>
+              <div class="light-control"><span data-i18n="renderExposure">Exposure</span><input id="renderExposure" type="range" min="0.1" max="3" step="0.05" value="1"><output id="renderExposureValue">1.00</output></div>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderBackground">Background</h2>
+              <label class="field"><span data-i18n="renderBackgroundMode">Mode</span>
+                <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
+              </label>
+              <label class="field"><span data-i18n="backgroundColor3d">Color</span><input id="renderBackgroundColor" type="color" value="#e8eaeb"></label>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="shadows3d">Shadows</h2>
+              <label class="field"><span data-i18n="shadowsEnabled3d">Enabled</span><input id="renderShadowEnabled" type="checkbox" checked></label>
+              <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.25"><output id="renderShadowIntensityValue">0.25</output></div>
+              <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="1.5"><output id="renderShadowBlurValue">1.5</output></div>
+              <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
+            </section>
+          </aside>
+        </div>
+        <footer class="app-footer preview-footer">
+          <button class="footer-button" id="backToPreviewButton" type="button" data-i18n="backToPreview">Back to Preview</button>
           <div class="footer-spacer"></div>
         </footer>
       </section>

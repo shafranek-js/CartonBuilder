@@ -35,6 +35,7 @@ import {
   SRGBColorSpace,
   Vector2,
   Vector3,
+  WebGLRenderTarget,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -62,6 +63,9 @@ const CAMERA_PROJECTIONS = new Set(['perspective', 'orthographic']);
 const CAMERA_PRESETS = Object.freeze({
   isometric: new Vector3(1, 1, 1).normalize(),
   front: new Vector3(0, 0, 1),
+  'front-right': new Vector3(1, 0.65, 1).normalize(),
+  'front-left': new Vector3(-1, 0.65, 1).normalize(),
+  'top-front': new Vector3(0.45, 1, 1).normalize(),
   top: new Vector3(0, 1, 0),
   right: new Vector3(1, 0, 0),
 });
@@ -141,20 +145,20 @@ function makeExteriorMaterial(preset, texture) {
       toneMapped: false,
     });
   }
-  if (preset === 'photorealistic') {
+  if (preset === 'photorealistic' || preset === 'gloss') {
     return new MeshPhysicalMaterial({
       map: texture,
       side: FrontSide,
-      roughness: 0.68,
+      roughness: preset === 'gloss' ? 0.46 : 0.68,
       metalness: 0,
-      clearcoat: 0.05,
-      clearcoatRoughness: 0.85,
+      clearcoat: preset === 'gloss' ? 0.25 : 0.05,
+      clearcoatRoughness: preset === 'gloss' ? 0.35 : 0.85,
     });
   }
   return new MeshStandardMaterial({
     map: texture,
     side: FrontSide,
-    roughness: 0.86,
+    roughness: preset === 'uncoated' ? 0.94 : preset === 'matte' ? 0.82 : 0.86,
     metalness: 0,
   });
 }
@@ -167,13 +171,13 @@ function makeInteriorMaterial(preset) {
       toneMapped: false,
     });
   }
-  const Material = preset === 'photorealistic'
+  const Material = preset === 'photorealistic' || preset === 'gloss'
     ? MeshPhysicalMaterial
     : MeshStandardMaterial;
   return new Material({
     color: 0xf4f2ec,
     side: BackSide,
-    roughness: 0.95,
+    roughness: preset === 'gloss' ? 0.72 : 0.95,
     metalness: 0,
   });
 }
@@ -208,6 +212,9 @@ export class BoxScene {
     cameraPreset = 'isometric',
     cameraFov = PERSPECTIVE_FOV,
     backgroundColor = null,
+    backgroundMode = 'solid',
+    alpha = false,
+    materialProfile = null,
     windowRef = window,
     onSelection = () => {},
     onContextLost = () => {},
@@ -226,6 +233,9 @@ export class BoxScene {
       ? cameraProjection
       : 'perspective';
     this.scenePreset = SCENE_PRESETS.has(scenePreset) ? scenePreset : 'studio';
+    this.materialProfile = materialProfile || this.scenePreset;
+    this.backgroundMode = backgroundMode === 'transparent' ? 'transparent' : 'solid';
+    this.backgroundColor = backgroundColor || '#e8eaeb';
     this.selectedPanelId = selectedPanelId;
     this.panelObjects = new Map();
     this.pickMeshes = [];
@@ -236,7 +246,7 @@ export class BoxScene {
     this.renderer = new WebGLRenderer({
       canvas,
       antialias: true,
-      alpha: false,
+      alpha: Boolean(alpha),
       powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(windowRef.devicePixelRatio || 1, 2));
@@ -244,7 +254,10 @@ export class BoxScene {
     this.renderer.shadowMap.type = PCFSoftShadowMap;
 
     this.scene = new Scene();
-    this.scene.background = new Color(0xe8eaeb);
+    this.scene.background = this.backgroundMode === 'transparent'
+      ? null
+      : new Color(this.backgroundColor);
+    this.renderer.setClearColor(this.backgroundMode === 'transparent' ? 0x000000 : this.backgroundColor, this.backgroundMode === 'transparent' ? 0 : 1);
     this.perspectiveCamera = new PerspectiveCamera(PERSPECTIVE_FOV, 1, 0.1, 10_000);
     this.orthographicCamera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10_000);
     this.camera = this.cameraProjection === 'orthographic'
@@ -422,6 +435,7 @@ export class BoxScene {
   applyMaterials(preset) {
     const previousExterior = this.exteriorMaterial;
     const previousInterior = this.interiorMaterial;
+    this.materialProfile = preset;
     this.exteriorMaterial = makeExteriorMaterial(preset, this.texture);
     this.interiorMaterial = makeInteriorMaterial(preset);
     for (const entry of this.panelObjects.values()) {
@@ -551,8 +565,10 @@ export class BoxScene {
     this.render();
   }
 
-  setOrthographicHeight(height) {
-    const aspect = Math.max(0.01, this.container.clientWidth / Math.max(1, this.container.clientHeight));
+  setOrthographicHeight(height, aspectOverride = null) {
+    const aspect = Number.isFinite(aspectOverride)
+      ? Math.max(0.01, aspectOverride)
+      : Math.max(0.01, this.container.clientWidth / Math.max(1, this.container.clientHeight));
     this.orthographicHeight = Math.max(1, height);
     this.orthographicCamera.top = this.orthographicHeight / 2;
     this.orthographicCamera.bottom = -this.orthographicHeight / 2;
@@ -596,7 +612,7 @@ export class BoxScene {
     this.applyMaterials(preset);
 
     if (preset === 'technical') {
-      this.scene.background.set(0xf2f3f3);
+      this.setBackgroundMode('solid', '#f2f3f3', { render: false });
       this.hemisphereLight.visible = false;
       this.directionalLight.visible = false;
       this.ground.visible = false;
@@ -605,7 +621,7 @@ export class BoxScene {
       this.renderer.toneMapping = NoToneMapping;
     } else if (preset === 'photorealistic') {
       this.ensureEnvironment();
-      this.scene.background.set(0xd9dcde);
+      this.setBackgroundMode('solid', '#d9dcde', { render: false });
       this.hemisphereLight.visible = true;
       this.hemisphereLight.intensity = 0.4;
       this.directionalLight.visible = true;
@@ -617,7 +633,7 @@ export class BoxScene {
       this.renderer.toneMappingExposure = 0.85;
     } else {
       this.ensureEnvironment();
-      this.scene.background.set(0xe8eaeb);
+      this.setBackgroundMode('solid', '#e8eaeb', { render: false });
       this.hemisphereLight.visible = true;
       this.hemisphereLight.intensity = 1.7;
       this.directionalLight.visible = true;
@@ -719,8 +735,124 @@ export class BoxScene {
 
   setBackgroundColor(color) {
     if (!color) return;
-    this.scene.background.set(color);
+    this.setBackgroundMode('solid', color, { render: false });
     this.render();
+  }
+
+  setBackgroundMode(mode, color = this.backgroundColor, { render = true } = {}) {
+    this.backgroundMode = mode === 'transparent' ? 'transparent' : 'solid';
+    this.backgroundColor = color || this.backgroundColor || '#e8eaeb';
+    if (this.backgroundMode === 'transparent') {
+      this.scene.background = null;
+      this.renderer.setClearColor(0x000000, 0);
+    } else {
+      if (!this.scene.background) this.scene.background = new Color(this.backgroundColor);
+      else this.scene.background.set(this.backgroundColor);
+      this.renderer.setClearColor(this.backgroundColor, 1);
+    }
+    if (render) this.render();
+  }
+
+  setMaterialProfile(profile) {
+    const allowed = ['technical', 'studio', 'photorealistic', 'uncoated', 'matte', 'gloss'];
+    if (!allowed.includes(profile)) return;
+    this.applyMaterials(profile);
+    this.render();
+  }
+
+  setExposure(exposure) {
+    this.renderer.toneMappingExposure = Math.max(0.1, Math.min(3, Number(exposure) || 1));
+    this.render();
+  }
+
+  setToneMapping(mode = 'neutral') {
+    this.renderer.toneMapping = mode === 'none' ? NoToneMapping : NeutralToneMapping;
+    this.render();
+  }
+
+  getCameraState() {
+    return {
+      preset: this.cameraPreset,
+      projection: this.cameraProjection,
+      fov: this.cameraFov,
+      position: this.camera.position.toArray(),
+      target: this.controls.target.toArray(),
+    };
+  }
+
+  setCameraState(state = {}) {
+    if (CAMERA_PROJECTIONS.has(state.projection) && state.projection !== this.cameraProjection) {
+      this.setCameraProjection(state.projection);
+    }
+    if (Number.isFinite(Number(state.fov))) this.setFov(state.fov);
+    if (Array.isArray(state.position) && state.position.length === 3 && state.position.every(Number.isFinite)) {
+      this.camera.position.fromArray(state.position);
+    }
+    if (Array.isArray(state.target) && state.target.length === 3 && state.target.every(Number.isFinite)) {
+      this.controls.target.fromArray(state.target);
+      this.camera.lookAt(this.controls.target);
+    }
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.render();
+  }
+
+  async renderToPixels({ width, height, backgroundMode = this.backgroundMode, backgroundColor = this.backgroundColor, includeShadow = true, signal }) {
+    if (signal?.aborted) throw new DOMException('Render export aborted.', 'AbortError');
+    const outputWidth = Math.max(1, Math.floor(width));
+    const outputHeight = Math.max(1, Math.floor(height));
+    const target = new WebGLRenderTarget(outputWidth, outputHeight, {
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    const previousSize = this.renderer.getSize(new Vector2());
+    const previousTarget = this.renderer.getRenderTarget();
+    const previousBackgroundMode = this.backgroundMode;
+    const previousBackgroundColor = this.backgroundColor;
+    const previousProjection = this.cameraProjection;
+    const previousPerspectiveAspect = this.perspectiveCamera.aspect;
+    const previousOrthographicHeight = this.orthographicHeight;
+    const previousGroundVisible = this.ground.visible;
+    const previousContactShadowVisible = this.contactShadow?.visible;
+    try {
+      this.setBackgroundMode(backgroundMode, backgroundColor, { render: false });
+      if (!includeShadow) {
+        this.ground.visible = false;
+        if (this.contactShadow) this.contactShadow.visible = false;
+      }
+      this.renderer.setSize(outputWidth, outputHeight, false);
+      this.perspectiveCamera.aspect = outputWidth / outputHeight;
+      this.perspectiveCamera.updateProjectionMatrix();
+      if (this.camera.isOrthographicCamera && previousOrthographicHeight) {
+        this.setOrthographicHeight(previousOrthographicHeight, outputWidth / outputHeight);
+      }
+      this.renderer.setRenderTarget(target);
+      this.renderer.clear(true, true, true);
+      this.renderer.render(this.scene, this.camera);
+      const pixels = new Uint8Array(outputWidth * outputHeight * 4);
+      if (typeof this.renderer.readRenderTargetPixelsAsync === 'function') {
+        await this.renderer.readRenderTargetPixelsAsync(target, 0, 0, outputWidth, outputHeight, pixels);
+      } else {
+        this.renderer.readRenderTargetPixels(target, 0, 0, outputWidth, outputHeight, pixels);
+      }
+      if (signal?.aborted) throw new DOMException('Render export aborted.', 'AbortError');
+      return { pixels, width: outputWidth, height: outputHeight };
+    } finally {
+      this.renderer.setRenderTarget(previousTarget);
+      this.renderer.setSize(previousSize.x, previousSize.y, false);
+      this.perspectiveCamera.aspect = previousPerspectiveAspect;
+      this.perspectiveCamera.updateProjectionMatrix();
+      if (this.camera.isOrthographicCamera && previousOrthographicHeight) {
+        this.setOrthographicHeight(previousOrthographicHeight);
+      }
+      this.backgroundMode = previousBackgroundMode;
+      this.backgroundColor = previousBackgroundColor;
+      this.setBackgroundMode(previousBackgroundMode, previousBackgroundColor, { render: false });
+      this.ground.visible = previousGroundVisible;
+      if (this.contactShadow) this.contactShadow.visible = previousContactShadowVisible;
+      target.dispose();
+      if (previousProjection !== this.cameraProjection) this.setCameraProjection(previousProjection);
+    }
   }
 
   setShadowBlur(blur) {
@@ -832,11 +964,21 @@ export class BoxScene {
   }
 
   getResourceInfo() {
+    const context = this.renderer.getContext?.();
+    const maxRenderbufferSize = context?.getParameter?.(context.MAX_RENDERBUFFER_SIZE);
     return {
       panels: this.panelObjects.size,
       geometries: this.renderer.info.memory.geometries,
       textures: this.renderer.info.memory.textures,
       calls: this.renderer.info.render.calls,
+      maxTextureSize: this.renderer.capabilities.maxTextureSize,
+      maxRenderbufferSize: Number.isFinite(maxRenderbufferSize)
+        ? maxRenderbufferSize
+        : this.renderer.capabilities.maxTextureSize,
+      drawingBufferWidth: this.renderer.domElement.width,
+      drawingBufferHeight: this.renderer.domElement.height,
+      shadowMapSize: this.shadowMapSize,
+      foldProgress: this.foldProgress,
     };
   }
 

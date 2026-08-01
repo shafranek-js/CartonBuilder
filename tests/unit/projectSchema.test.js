@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256 } from '../../src/artwork/fileValidation.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import {
+  CURRENT_PROJECT_SCHEMA_VERSION,
   migrateProjectSnapshot,
   validateProjectBundle,
 } from '../../src/project/projectSchema.js';
@@ -37,7 +38,8 @@ async function createBundle() {
     centerYmm: 45,
     initialWidthMm: 150,
     initialHeightMm: 75,
-    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
     rotation: 0,
     opacity: 1,
     modified: false,
@@ -63,7 +65,8 @@ describe('project schema', () => {
     const { snapshot, artwork } = await createBundle();
     const migrated = migrateProjectSnapshot(snapshot);
 
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
+    expect(migrated.render).toMatchObject({ presetId: 'clean-studio', aspect: 'square', longEdge: 2048 });
     expect(migrated.artworks).toEqual([{ artwork, visible: true }]);
     expect(migrated.activeArtworkIndex).toBe(0);
     expect(migrated).not.toBe(snapshot);
@@ -71,11 +74,32 @@ describe('project schema', () => {
     expect(snapshot.artwork.centerXmm).toBe(75);
   });
 
+  it('migrates v2 snapshots to v3 without changing canonical artwork and box data', async () => {
+    const { snapshot } = await createBundle();
+    const v2 = migrateProjectSnapshot(snapshot);
+    const canonical = {
+      box: structuredClone(v2.box),
+      artworks: structuredClone(v2.artworks),
+      history: structuredClone(v2.history),
+      view: structuredClone(v2.view),
+    };
+    delete v2.render;
+    v2.schemaVersion = 2;
+    const migrated = migrateProjectSnapshot(v2);
+
+    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.render).toMatchObject({ presetId: 'clean-studio', longEdge: 2048 });
+    expect(migrated.box).toEqual(canonical.box);
+    expect(migrated.artworks).toEqual(canonical.artworks);
+    expect(migrated.history).toEqual(canonical.history);
+    expect(migrated.view).toEqual(canonical.view);
+  });
+
   it('normalizes unknown workflow modes and rejects unknown schema versions', async () => {
     const { snapshot } = await createBundle();
     expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'unknown' }).workflowStep).toBe('box');
     expect(migrateProjectSnapshot({ ...snapshot, workflowStep: 'box' }).workflowStep).toBe('box');
-    expect(() => migrateProjectSnapshot({ ...snapshot, schemaVersion: 3 })).toThrowError(
+    expect(() => migrateProjectSnapshot({ ...snapshot, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION + 1 })).toThrowError(
       expect.objectContaining({ code: 'projectVersionUnsupported' }),
     );
   });

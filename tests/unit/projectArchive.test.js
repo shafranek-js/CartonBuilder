@@ -6,6 +6,7 @@ import {
   createProjectArchive,
   readProjectArchive,
 } from '../../src/project/projectArchive.js';
+import { DEFAULT_RENDER_SETTINGS } from '../../src/render/RenderSettings.js';
 
 async function createArtworkEntry(fileName) {
   const originalBlob = new Blob([
@@ -37,7 +38,8 @@ async function createArtworkEntry(fileName) {
       centerYmm: 45,
       initialWidthMm: 150,
       initialHeightMm: 75,
-      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
       rotation: 0,
       opacity: 1,
       modified: false,
@@ -51,7 +53,7 @@ async function createFixture() {
   const first = await createArtworkEntry('top.png');
   const second = await createArtworkEntry('bottom.png');
   const snapshot = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     meta: { name: 'Unit project' },
     workflowStep: 'artwork',
     box: new BoxNetModel().toJSON(),
@@ -60,6 +62,7 @@ async function createFixture() {
       { artwork: second.artwork, visible: true },
     ],
     activeArtworkIndex: 0,
+    render: structuredClone(DEFAULT_RENDER_SETTINGS),
     view: {},
     history: { undo: [], redo: [] },
   };

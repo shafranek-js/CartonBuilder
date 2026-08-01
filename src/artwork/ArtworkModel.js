@@ -79,7 +79,8 @@ export class ArtworkModel {
     this.centerYmm = 0;
     this.initialWidthMm = 1;
     this.initialHeightMm = 1;
-    this.scale = 1;
+    this.scaleX = 1;
+    this.scaleY = 1;
     this.rotation = 0;
     this.opacity = 1;
     this.bgOpacity = 0.28;
@@ -104,11 +105,11 @@ export class ArtworkModel {
   }
 
   get unrotatedWidthMm() {
-    return this.initialWidthMm * this.scale;
+    return this.initialWidthMm * this.scaleX;
   }
 
   get unrotatedHeightMm() {
-    return this.initialHeightMm * this.scale;
+    return this.initialHeightMm * this.scaleY;
   }
 
   get displayedWidthMm() {
@@ -186,7 +187,8 @@ export class ArtworkModel {
     if (setInitial) {
       this.initialWidthMm = targetWidth;
       this.initialHeightMm = targetHeight;
-      this.scale = 1;
+      this.scaleX = 1;
+      this.scaleY = 1;
       this.centerXmm = bounds.minX + width / 2;
       this.centerYmm = bounds.minY + height / 2;
     } else {
@@ -265,9 +267,24 @@ export class ArtworkModel {
   }
 
   setScale(scale) {
+    return this.setScaleX(scale).setScaleY(scale);
+  }
+
+  setScaleX(scale) {
     const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(scale, 'scale')));
     const reference = this.getReferencePosition();
-    this.scale = next;
+    this.scaleX = next;
+    const offset = this.getReferenceOffset();
+    this.centerXmm = reference.x - offset.x;
+    this.centerYmm = reference.y - offset.y;
+    this.modified = true;
+    return this;
+  }
+
+  setScaleY(scale) {
+    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(scale, 'scale')));
+    const reference = this.getReferencePosition();
+    this.scaleY = next;
     const offset = this.getReferenceOffset();
     this.centerXmm = reference.x - offset.x;
     this.centerYmm = reference.y - offset.y;
@@ -277,12 +294,12 @@ export class ArtworkModel {
 
   setDisplayedWidth(widthMm) {
     const base = this.rotation % 180 === 0 ? this.initialWidthMm : this.initialHeightMm;
-    return this.setScale(positiveNumber(widthMm, 'widthMm') / base);
+    return this.setScaleX(positiveNumber(widthMm, 'widthMm') / base);
   }
 
   setDisplayedHeight(heightMm) {
     const base = this.rotation % 180 === 0 ? this.initialHeightMm : this.initialWidthMm;
-    return this.setScale(positiveNumber(heightMm, 'heightMm') / base);
+    return this.setScaleY(positiveNumber(heightMm, 'heightMm') / base);
   }
 
   setOpacity(opacity) {
@@ -308,7 +325,8 @@ export class ArtworkModel {
   }
 
   resetTransform() {
-    this.scale = 1;
+    this.scaleX = 1;
+    this.scaleY = 1;
     this.rotation = this.source?.pdfPageRotation || 0;
     this.opacity = 1;
     this.bgOpacity = 0.28;
@@ -330,7 +348,9 @@ export class ArtworkModel {
       centerYmm: this.centerYmm,
       initialWidthMm: this.initialWidthMm,
       initialHeightMm: this.initialHeightMm,
-      scale: this.scale,
+      scaleX: this.scaleX,
+      scaleY: this.scaleY,
+      scale: this.scaleX === this.scaleY ? this.scaleX : undefined,
       rotation: this.rotation,
       opacity: this.opacity,
       bgOpacity: this.bgOpacity,
@@ -348,7 +368,14 @@ export class ArtworkModel {
     this.centerYmm = finiteNumber(state.centerYmm, 'centerYmm');
     this.initialWidthMm = positiveNumber(state.initialWidthMm, 'initialWidthMm');
     this.initialHeightMm = positiveNumber(state.initialHeightMm, 'initialHeightMm');
-    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(state.scale, 'scale')));
+    const clampScale = (v) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(v, 'scale')));
+    if (state.scaleX != null || state.scaleY != null) {
+      this.scaleX = clampScale(state.scaleX ?? state.scale ?? 1);
+      this.scaleY = clampScale(state.scaleY ?? state.scale ?? 1);
+    } else {
+      this.scaleX = clampScale(state.scale ?? 1);
+      this.scaleY = this.scaleX;
+    }
     this.rotation = normalizeQuarterTurn(state.rotation);
     this.opacity = Math.min(1, Math.max(0, finiteNumber(state.opacity, 'opacity')));
     this.bgOpacity = state.bgOpacity != null

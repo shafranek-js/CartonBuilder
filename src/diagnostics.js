@@ -47,7 +47,8 @@ export function createDiagnosticsBlob({ boxModel, artwork, workflowStep, windowR
       transform: {
         centerXmm: artwork.centerXmm,
         centerYmm: artwork.centerYmm,
-        scale: artwork.scale,
+        scaleX: artwork.scaleX,
+        scaleY: artwork.scaleY,
         rotation: artwork.rotation,
         opacity: artwork.opacity,
         bgOpacity: artwork.bgOpacity,
