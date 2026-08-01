@@ -129,11 +129,11 @@ const VIEWER_SCRIPT = `
 
   const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x73777a, 0.4);
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1);
-  directionalLight.position.set(1, 2, 2);
   directionalLight.castShadow = true;
   directionalLight.shadow.mapSize.set(1024, 1024);
   directionalLight.shadow.bias = -0.0002;
   directionalLight.shadow.normalBias = 0.2;
+  directionalLight.shadow.radius = 1.5;
   directionalLight.shadow.camera.left = -shadowExtent;
   directionalLight.shadow.camera.right = shadowExtent;
   directionalLight.shadow.camera.top = shadowExtent;
@@ -143,15 +143,110 @@ const VIEWER_SCRIPT = `
   directionalLight.shadow.camera.updateProjectionMatrix();
   scene.add(hemisphereLight, directionalLight);
 
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
-    new THREE.ShadowMaterial({ color: 0x1d2428, opacity: 0.18 }),
-  );
+  const lightAzimuthEl = document.getElementById('lightAzimuth');
+  const lightAzimuthValue = document.getElementById('lightAzimuthValue');
+  const lightElevationEl = document.getElementById('lightElevation');
+  const lightElevationValue = document.getElementById('lightElevationValue');
+  const lightIntensityEl = document.getElementById('lightIntensity');
+  const lightIntensityValue = document.getElementById('lightIntensityValue');
+  const shadowBlurEl = document.getElementById('shadowBlur');
+  const shadowBlurValue = document.getElementById('shadowBlurValue');
+  const shadowIntensityEl = document.getElementById('shadowIntensity');
+  const shadowIntensityValue = document.getElementById('shadowIntensityValue');
+
+  let lightAzimuth = 63;
+  let lightElevation = 48;
+  let shadowIntensity = 0.25;
+
+  const groundMaterial = new THREE.ShadowMaterial({ color: 0x1d2428, opacity: 0.25 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), groundMaterial);
   ground.rotation.x = -Math.PI / 2;
-  ground.scale.set(shadowExtent, shadowExtent, 1);
-  ground.position.y = extents.minY - Math.max(2, boxRadius * 0.04);
   ground.receiveShadow = true;
   scene.add(ground);
+
+  function createContactShadow() {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, 'rgba(15, 20, 24, 1)');
+    gradient.addColorStop(0.35, 'rgba(15, 20, 24, 0.55)');
+    gradient.addColorStop(1, 'rgba(15, 20, 24, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, opacity: 1 }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.renderOrder = -1;
+    scene.add(mesh);
+    return mesh;
+  }
+  const contactShadow = createContactShadow();
+
+  function applyShadowIntensity() {
+    groundMaterial.opacity = shadowIntensity;
+    contactShadow.material.opacity = Math.min(1, shadowIntensity * 1.4);
+  }
+
+  function applyGroundLayout() {
+    ground.scale.set(shadowExtent, shadowExtent, 1);
+    ground.position.y = extents.minY - 0.02;
+    contactShadow.scale.set(shadowExtent * 0.64, shadowExtent * 0.64, 1);
+    contactShadow.position.y = extents.minY - 0.01;
+  }
+  applyGroundLayout();
+  applyShadowIntensity();
+
+  function applyLightDirection() {
+    const elevation = lightElevation * Math.PI / 180;
+    const azimuth = lightAzimuth * Math.PI / 180;
+    directionalLight.position.set(
+      Math.sin(elevation) * Math.cos(azimuth),
+      Math.cos(elevation),
+      Math.sin(elevation) * Math.sin(azimuth),
+    );
+    directionalLight.updateMatrixWorld();
+  }
+  applyLightDirection();
+
+  function syncLightControls() {
+    lightAzimuthValue.textContent = Math.round(lightAzimuth) + '°';
+    lightElevationValue.textContent = Math.round(lightElevation) + '°';
+    lightIntensityValue.textContent = directionalLight.intensity.toFixed(1);
+    shadowBlurValue.textContent = directionalLight.shadow.radius.toFixed(1);
+  }
+  lightAzimuthEl.addEventListener('input', () => {
+    lightAzimuth = Number(lightAzimuthEl.value);
+    applyLightDirection();
+    syncLightControls();
+  });
+  lightElevationEl.addEventListener('input', () => {
+    lightElevation = Number(lightElevationEl.value);
+    applyLightDirection();
+    syncLightControls();
+  });
+  lightIntensityEl.addEventListener('input', () => {
+    directionalLight.intensity = Number(lightIntensityEl.value);
+    syncLightControls();
+  });
+  shadowBlurEl.addEventListener('input', () => {
+    directionalLight.shadow.radius = Number(shadowBlurEl.value);
+    renderer.shadowMap.needsUpdate = true;
+    syncLightControls();
+  });
+  syncLightControls();
+
+  shadowIntensityEl.addEventListener('input', () => {
+    shadowIntensity = Number(shadowIntensityEl.value);
+    applyShadowIntensity();
+    shadowIntensityValue.textContent = shadowIntensity.toFixed(2);
+  });
 
   radius = boxRadius * 2.4;
   let radiusMin = boxRadius * 0.4;
@@ -414,6 +509,73 @@ export async function createInteractive3dHtml({
     background: transparent;
     cursor: pointer;
   }
+  #lightRow { display: grid; gap: 6px; }
+  #lightRow label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+  #lightRow input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    min-width: 0;
+    height: 6px;
+    margin: 0;
+    padding: 0;
+    border-radius: 999px;
+    background: linear-gradient(to right, #afca42 0%, #afca42 var(--slider-progress, 100%), #4a4a4a var(--slider-progress, 100%), #4a4a4a 100%);
+    outline: none;
+    cursor: pointer;
+  }
+  #lightRow input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+  }
+  #lightRow input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -3px;
+    border: 2px solid #3e3e3e;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+  }
+  #lightRow input[type="range"]:hover::-webkit-slider-thumb {
+    background: #afca42;
+  }
+  #lightRow input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+  }
+  #lightRow input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #3e3e3e;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+  }
+  #lightRow input[type="range"]:hover::-moz-range-thumb {
+    background: #afca42;
+  }
+  #lightRow output {
+    min-width: 34px;
+    color: #e8e8e8;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
   #foldRow { display: flex; align-items: center; gap: 8px; }
   #foldRow input[type="range"] {
     -webkit-appearance: none;
@@ -493,6 +655,13 @@ export async function createInteractive3dHtml({
   <div id="bgRow">
     <label for="bgColor">Background</label>
     <input id="bgColor" type="color" value="#e8e8e8">
+  </div>
+  <div id="lightRow">
+    <label>Azimuth <input id="lightAzimuth" type="range" min="0" max="360" step="1" value="63"><output id="lightAzimuthValue">63°</output></label>
+    <label>Elevation <input id="lightElevation" type="range" min="5" max="85" step="1" value="48"><output id="lightElevationValue">48°</output></label>
+    <label>Light <input id="lightIntensity" type="range" min="0" max="5" step="0.05" value="1.1"><output id="lightIntensityValue">1.1</output></label>
+    <label>Shadow blur <input id="shadowBlur" type="range" min="0" max="8" step="0.1" value="1.5"><output id="shadowBlurValue">1.5</output></label>
+    <label>Shadow intensity <input id="shadowIntensity" type="range" min="0" max="1" step="0.01" value="0.25"><output id="shadowIntensityValue">0.25</output></label>
   </div>
 </div>
 <div id="hint">Drag to orbit · wheel to zoom · right-drag to pan</div>
