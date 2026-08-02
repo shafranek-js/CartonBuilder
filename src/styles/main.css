@@ -2153,16 +2153,32 @@ dialog button {
 
 .preview-main-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-areas: "left canvas right";
   min-height: 0;
 }
 
 .scene-sidebar {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
-  border-left: 1px solid var(--panel-border, #444);
   background: var(--surface, #4e4e4e);
   color: var(--text, #ffffff);
+  scrollbar-gutter: stable;
+}
+
+.preview-canvas-wrap {
+  grid-area: canvas;
+}
+
+.preview-settings-panel-left {
+  grid-area: left;
+  border-right: 1px solid var(--panel-border, #444);
+}
+
+.preview-settings-panel-right {
+  grid-area: right;
+  border-left: 1px solid var(--panel-border, #444);
 }
 
 .scene-sidebar .field {
@@ -2193,6 +2209,10 @@ dialog button {
 
 .scene-sidebar .light-control input[type="range"] {
   width: 130px;
+}
+
+.preview-settings-panel .tool-section {
+  min-width: 0;
 }
 
 .sidebar-button {
@@ -3163,6 +3183,32 @@ dialog input {
   .box-dim-row {
     grid-template-columns: 52px minmax(0, 1fr);
     gap: 6px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .preview-main-row {
+    grid-template-columns: 220px minmax(0, 1fr) 250px;
+  }
+
+  .scene-sidebar .light-control input[type="range"] {
+    width: 110px;
+  }
+}
+
+@media (max-width: 840px) {
+  .preview-main-row {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(360px, 1fr) auto auto;
+    grid-template-areas: "canvas" "left" "right";
+    overflow: auto;
+  }
+
+  .preview-settings-panel {
+    max-height: 42vh;
+    border-right: 0;
+    border-left: 0;
+    border-top: 1px solid var(--panel-border, #444);
   }
 }
 

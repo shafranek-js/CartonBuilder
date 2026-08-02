@@ -552,7 +552,7 @@
             <p class="sr-only" id="preview3dSummary" role="status" aria-live="polite" aria-atomic="true"></p>
           </div>
 
-          <aside class="scene-sidebar" aria-label="Scene settings" data-i18n-aria-label="sceneSettingsLabel">
+          <aside class="scene-sidebar preview-settings-panel preview-settings-panel-left" aria-label="Scene settings" data-i18n-aria-label="sceneSettingsLabel">
             <section class="tool-section">
               <h2 data-i18n="scenePresets3d">Scene presets</h2>
               <div class="field">
@@ -610,6 +610,34 @@
             </section>
 
             <section class="tool-section">
+              <h2 data-i18n="environment3d">Environment</h2>
+              <div class="field">
+                <span data-i18n="environmentType3d">Type</span>
+                <select id="environment">
+                  <option value="none" data-i18n="environmentNone3d">None</option>
+                  <option value="studio" data-i18n="environmentStudio3d">Studio</option>
+                  <option value="neutral" data-i18n="environmentNeutral3d">Neutral</option>
+                  <option value="warm" data-i18n="environmentWarm3d">Warm</option>
+                  <option value="cool" data-i18n="environmentCool3d">Cool</option>
+                  <option value="bright" data-i18n="environmentBright3d">Bright</option>
+                  <option value="night" data-i18n="environmentNight3d">Night</option>
+                </select>
+              </div>
+              <div class="light-control">
+                <span data-i18n="environmentIntensity3d">Intensity</span>
+                <input id="environmentIntensity" type="range" min="0" max="2" step="0.05" value="0.65">
+                <output id="environmentIntensityValue" for="environmentIntensity">0.65</output>
+              </div>
+              <div class="field">
+                <span data-i18n="backgroundColor3d">Background</span>
+                <input id="backgroundColor" type="color" value="#e8eaeb">
+              </div>
+            </section>
+          </aside>
+
+          <aside class="scene-sidebar preview-settings-panel preview-settings-panel-right" aria-label="Camera, lighting, shadow and model settings">
+
+            <section class="tool-section">
               <h2 data-i18n="camera3d">Camera</h2>
               <div class="field">
                 <span data-i18n="cameraProjection3d">Projection</span>
@@ -633,31 +661,6 @@
                 <output id="cameraFovValue" for="cameraFov">35°</output>
               </div>
               <button class="sidebar-button" id="reset3dViewButton" type="button" data-i18n="resetView3d">Reset View</button>
-            </section>
-
-            <section class="tool-section">
-              <h2 data-i18n="environment3d">Environment</h2>
-              <div class="field">
-                <span data-i18n="environmentType3d">Type</span>
-                <select id="environment">
-                  <option value="none" data-i18n="environmentNone3d">None</option>
-                  <option value="studio" data-i18n="environmentStudio3d">Studio</option>
-                  <option value="neutral" data-i18n="environmentNeutral3d">Neutral</option>
-                  <option value="warm" data-i18n="environmentWarm3d">Warm</option>
-                  <option value="cool" data-i18n="environmentCool3d">Cool</option>
-                  <option value="bright" data-i18n="environmentBright3d">Bright</option>
-                  <option value="night" data-i18n="environmentNight3d">Night</option>
-                </select>
-              </div>
-              <div class="light-control">
-                <span data-i18n="environmentIntensity3d">Intensity</span>
-                <input id="environmentIntensity" type="range" min="0" max="2" step="0.05" value="0.65">
-                <output id="environmentIntensityValue" for="environmentIntensity">0.65</output>
-              </div>
-              <div class="field">
-                <span data-i18n="backgroundColor3d">Background</span>
-                <input id="backgroundColor" type="color" value="#e8eaeb">
-              </div>
             </section>
 
             <section class="tool-section">
