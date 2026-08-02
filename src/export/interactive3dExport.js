@@ -2,8 +2,12 @@ import threeCoreSource from '../../node_modules/three/build/three.core.min.js?ra
 import threeModuleSource from '../../node_modules/three/build/three.module.min.js?raw';
 import roomEnvironmentSource from '../../node_modules/three/examples/jsm/environments/RoomEnvironment.js?raw';
 
+import { HTML_EXPORT_QUALITY_OPTIONS } from '../render/RenderSettings.js';
 import { buildFoldGraph } from '../preview3d/foldGraph.js';
-import { composeArtworkTexture } from '../preview3d/textureComposer.js';
+import {
+  composeArtworkTexture,
+  HTML_TEXTURE_LIMITS,
+} from '../preview3d/textureComposer.js';
 
 const VIEWER_SCRIPT = `
   const DATA = __DATA__;
@@ -438,11 +442,16 @@ async function canvasToDataUrl(canvas) {
 export async function createInteractive3dHtml({
   boxModel,
   artworks,
+  htmlQuality = 'auto',
   documentRef = globalThis.document,
   composeTexture = composeArtworkTexture,
 } = {}) {
   const entries = (artworks || [])
-    .filter((entry) => entry?.model?.hasArtwork && entry.visible !== false && entry.previewBlob);
+    .filter((entry) => (
+      entry?.model?.hasArtwork
+      && entry.visible !== false
+      && (entry.previewBlob || entry.originalBlob)
+    ));
   if (!entries.length) {
     throw new Error('Artwork preview is required for the 3D export.');
   }
@@ -466,7 +475,25 @@ export async function createInteractive3dHtml({
     });
   }
 
-  const composed = await composeTexture({ boxModel, artworks: entries, documentRef });
+  const quality = HTML_EXPORT_QUALITY_OPTIONS.includes(Number(htmlQuality))
+    ? Number(htmlQuality)
+    : 'auto';
+  const renderQuality = entries
+    .map((entry) => Number(entry.model?.quality?.render))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const targetDpi = quality === 'auto'
+    ? Math.max(600, renderQuality.length ? Math.max(...renderQuality) : 0)
+    : quality;
+  const composed = await composeTexture({
+    boxModel,
+    artworks: entries,
+    documentRef,
+    purpose: 'render-export',
+    targetDpi,
+    textureLimits: HTML_TEXTURE_LIMITS,
+    useNativeSourceResolution: true,
+    getEntryTargetDpi: () => targetDpi,
+  });
   const textureUrl = await canvasToDataUrl(composed.canvas);
 
   const data = {

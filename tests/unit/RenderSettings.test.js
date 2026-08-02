@@ -18,7 +18,7 @@ describe('RenderSettings', () => {
       lighting: { azimuth: 63, elevation: 48, intensity: 2.6 },
       shadows: { enabled: true, mapSize: 1024 },
       material: { profile: 'matte' },
-      quality: { interactive: 'balanced', export: 'high' },
+      quality: { interactive: 'balanced', export: 'high', html: 'auto' },
       effects: { gtao: { enabled: true }, dof: { enabled: false } },
     });
   });
@@ -46,7 +46,7 @@ describe('RenderSettings', () => {
       },
       shadows: { enabled: false, intensity: 2, blur: -1, mapSize: 777 },
       material: { profile: 'bad' },
-      quality: { interactive: 'bad', export: 'high' },
+      quality: { interactive: 'bad', export: 'high', html: 2400 },
       effects: {
         gtao: { enabled: 'bad', intensity: 2, radius: -1, resolution: 'bad' },
         antialiasing: { interactive: 'bad', settled: 'taa', export: 'taa', taaSamples: 999 },
@@ -64,7 +64,7 @@ describe('RenderSettings', () => {
     expect(result.lighting).toMatchObject({ azimuth: 0, elevation: 85, intensity: 0, environment: 'studio', environmentIntensity: 5, exposure: 3 });
     expect(result.shadows).toMatchObject({ enabled: false, intensity: 1, blur: 0, mapSize: 1024 });
     expect(result.material.profile).toBe('matte');
-    expect(result.quality).toMatchObject({ interactive: 'balanced', export: 'high' });
+    expect(result.quality).toMatchObject({ interactive: 'balanced', export: 'high', html: 2400 });
     expect(result.effects.gtao).toMatchObject({ enabled: true, intensity: 1, radius: 0.01, resolution: 'half' });
     expect(result.effects.antialiasing).toMatchObject({ interactive: 'smaa', settled: 'taa', export: 'taa', taaSamples: 64 });
     expect(result.effects.dof).toMatchObject({ enabled: false, focusMode: 'carton-center', focusDistance: 0.01, aperture: 0.2, maxBlur: 0 });

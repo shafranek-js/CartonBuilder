@@ -2474,7 +2474,13 @@ export function createArtworkApp({
         fallback = 'exportPdfFailed';
       } else if (type === 'html') {
         const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
-        blob = await createInteractive3dHtml({ boxModel, artworks: exportArtworks, documentRef });
+        const renderState = sanitizeRenderSettings(getRenderState());
+        blob = await createInteractive3dHtml({
+          boxModel,
+          artworks: exportArtworks,
+          htmlQuality: renderState.quality.html,
+          documentRef,
+        });
         suggestedName = 'carton-3d.html';
         types = [{
           description: 'Interactive 3D HTML (*.html)',

@@ -212,6 +212,42 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
     });
 });
 
+test('shows the Render frame and format-specific export summaries in Preview', async ({ page }) => {
+  await page.goto('/');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openPreview(page);
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+
+  await expect(page.locator('#previewExportViewportLabel')).toHaveText('Render frame · 2048 × 2048 px');
+  await expect(page.locator('#previewExportPresentationSummary')).toContainText('2048 × 2048 px (1:1)');
+  await expect(page.locator('#previewExportFlatSummary')).toContainText('DPI');
+  await expect(page.locator('#previewExportHtmlSummary')).toContainText('texture quality: Auto');
+
+  await page.locator('#previewExportHtmlQuality').selectOption('1200');
+  await expect(page.locator('#previewExportHtmlSummary')).toContainText('texture quality: 1200 DPI');
+  expect(await page.evaluate(() => window.cartonBuilderApp.render.getState().quality.html)).toBe(1200);
+
+  await page.getByRole('button', { name: 'Render', exact: true }).click();
+  await page.locator('#renderAspect').selectOption('wide');
+  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await expect(page.locator('#previewExportViewportLabel')).toHaveText('Render frame · 2048 × 1152 px');
+
+  const frame = await page.evaluate(() => {
+    const overlay = document.getElementById('previewExportViewportOverlay').getBoundingClientRect();
+    const viewport = document.getElementById('previewExportViewportFrame');
+    return {
+      ratio: parseFloat(viewport.style.width) / parseFloat(viewport.style.height),
+      overlayWidth: overlay.width,
+      overlayHeight: overlay.height,
+      viewportWidth: parseFloat(viewport.style.width),
+      viewportHeight: parseFloat(viewport.style.height),
+    };
+  });
+  expect(frame.ratio).toBeCloseTo(16 / 9, 2);
+  expect(frame.viewportWidth).toBeLessThanOrEqual(frame.overlayWidth);
+  expect(frame.viewportHeight).toBeLessThanOrEqual(frame.overlayHeight);
+});
+
 test('updates the texture after repeated artwork replacement without resource growth', async ({ page }) => {
   await page.goto('/');
   await openPreview(page);
