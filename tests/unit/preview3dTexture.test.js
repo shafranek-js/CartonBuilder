@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  HTML_TEXTURE_LIMITS,
   PREVIEW_TEXTURE_LIMITS,
   composeArtworkTexture,
   getTextureSize,
@@ -103,6 +104,54 @@ describe('3D texture composition', () => {
     expect(size.width).toBeLessThanOrEqual(PREVIEW_TEXTURE_LIMITS.maxEdge);
     expect(size.height).toBeLessThanOrEqual(PREVIEW_TEXTURE_LIMITS.maxEdge);
     expect(size.width * size.height).toBeLessThanOrEqual(PREVIEW_TEXTURE_LIMITS.maxPixels);
+  });
+
+  it('caps HTML texture resolution by native raster pixels instead of upscaling', () => {
+    const size = getTextureSize(
+      { width: 150, height: 90 },
+      [{
+        model: {
+          hasArtwork: true,
+          source: {
+            previewWidthPx: 600,
+            previewHeightPx: 360,
+            widthPx: 1200,
+            heightPx: 720,
+          },
+          unrotatedWidthMm: 150,
+          unrotatedHeightMm: 90,
+        },
+      }],
+      HTML_TEXTURE_LIMITS,
+      { targetDpi: 2400, useNativeSourceResolution: true },
+    );
+    expect(size.width).toBe(1200);
+    expect(size.height).toBe(720);
+  });
+
+  it('does not treat vector source metadata as a raster ceiling', () => {
+    const size = getTextureSize(
+      { width: 150, height: 90 },
+      [{
+        model: {
+          hasArtwork: true,
+          source: {
+            vector: true,
+            mimeType: 'application/pdf',
+            previewWidthPx: 600,
+            previewHeightPx: 360,
+            widthPx: 600,
+            heightPx: 360,
+          },
+          unrotatedWidthMm: 150,
+          unrotatedHeightMm: 90,
+        },
+      }],
+      HTML_TEXTURE_LIMITS,
+      { targetDpi: 2400, useNativeSourceResolution: true },
+    );
+    expect(size.width).toBeGreaterThan(1200);
+    expect(size.height).toBeGreaterThan(720);
   });
 
   it('closes the decoded bitmap after successful composition', async () => {

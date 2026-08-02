@@ -13,7 +13,7 @@ function buildCompleteBox() {
   return model;
 }
 
-const fakeArtwork = { hasArtwork: true };
+const fakeArtwork = { hasArtwork: true, quality: { render: 'auto' } };
 const fakePreview = new Blob(['preview'], { type: 'image/png' });
 
 function fakeEntries() {
@@ -59,6 +59,50 @@ describe('createInteractive3dHtml', () => {
     const scriptBlock = html.match(/<script type="module">([\s\S]*)<\/script>/);
     expect(scriptBlock).not.toBeNull();
     expect(scriptBlock[1]).not.toContain('</script');
+  });
+
+  it('composes the HTML texture with the selected high-quality render profile', async () => {
+    let options;
+    const composeTexture = async (nextOptions) => {
+      options = nextOptions;
+      return { canvas: { toDataURL: () => 'data:image/png;base64,QUALITY' } };
+    };
+    const blob = await createInteractive3dHtml({
+      boxModel: buildCompleteBox(),
+      artworks: [{
+        model: { hasArtwork: true, quality: { render: 1200 } },
+        visible: true,
+        previewBlob: fakePreview,
+      }],
+      htmlQuality: 2400,
+      composeTexture,
+    });
+
+    expect(await blob.text()).toContain('data:image/png;base64,QUALITY');
+    expect(options).toMatchObject({
+      purpose: 'render-export',
+      targetDpi: 2400,
+      useNativeSourceResolution: true,
+    });
+    expect(options.textureLimits).toMatchObject({ maxEdge: 8192, maxPixels: 24_000_000 });
+    expect(options.getEntryTargetDpi()).toBe(2400);
+  });
+
+  it('lets Auto follow the highest per-artwork Render quality', async () => {
+    let options;
+    await createInteractive3dHtml({
+      boxModel: buildCompleteBox(),
+      artworks: [{
+        model: { hasArtwork: true, quality: { render: 1200 } },
+        visible: true,
+        previewBlob: fakePreview,
+      }],
+      composeTexture: async (nextOptions) => {
+        options = nextOptions;
+        return { canvas: { toDataURL: () => 'data:image/png;base64,AUTO' } };
+      },
+    });
+    expect(options.targetDpi).toBe(1200);
   });
 
   it('rejects when no artwork preview is available', async () => {

@@ -524,6 +524,13 @@ export function createRenderApp({
     if (active) syncScene({ force: true });
   }
 
+  function setHtmlExportQuality(value) {
+    const next = clone(state);
+    next.quality.html = value;
+    updateState(next);
+    return state.quality.html;
+  }
+
   async function loadNamedPresets() {
     try {
       namedPresets = await getRenderPresets();
@@ -734,6 +741,7 @@ export function createRenderApp({
     activate,
     deactivate,
     restoreState,
+    setHtmlExportQuality,
     resetForProject,
     exportImage,
     getState,

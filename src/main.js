@@ -357,6 +357,8 @@ preview3dFacade = createLazyPreview3DFacade({
     artwork: artworkApp.artwork,
     getArtworks: () => artworkApp.getArtworks(),
     getArtworksJson: () => artworkApp.getArtworksJson(),
+    getRenderState: () => renderApp?.getState?.(),
+    setHtmlExportQuality: (value) => renderApp?.setHtmlExportQuality?.(value),
   }),
 });
 

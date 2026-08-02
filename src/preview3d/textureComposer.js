@@ -6,12 +6,23 @@ export const PREVIEW_TEXTURE_LIMITS = Object.freeze({
   bleedPixels: 2,
 });
 
+export const HTML_TEXTURE_LIMITS = Object.freeze({
+  maxEdge: 8192,
+  maxPixels: 24_000_000,
+  bleedPixels: 4,
+});
+
 function finitePositive(value, fallback = 1) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-export function getTextureSize(bounds, artworks, limits = PREVIEW_TEXTURE_LIMITS, { targetDpi = null } = {}) {
+export function getTextureSize(
+  bounds,
+  artworks,
+  limits = PREVIEW_TEXTURE_LIMITS,
+  { targetDpi = null, useNativeSourceResolution = false } = {},
+) {
   const widthMm = finitePositive(bounds.width);
   const heightMm = finitePositive(bounds.height);
   const edgeScale = Math.min(limits.maxEdge / widthMm, limits.maxEdge / heightMm);
@@ -22,15 +33,25 @@ export function getTextureSize(bounds, artworks, limits = PREVIEW_TEXTURE_LIMITS
     if (!artwork?.hasArtwork) continue;
     const previewWidth = finitePositive(artwork?.source?.previewWidthPx);
     const previewHeight = finitePositive(artwork?.source?.previewHeightPx);
+    const sourceWidth = useNativeSourceResolution
+      ? finitePositive(artwork?.source?.widthPx, previewWidth)
+      : previewWidth;
+    const sourceHeight = useNativeSourceResolution
+      ? finitePositive(artwork?.source?.heightPx, previewHeight)
+      : previewHeight;
     const artworkWidth = finitePositive(artwork?.unrotatedWidthMm);
     const artworkHeight = finitePositive(artwork?.unrotatedHeightMm);
+    const isVector = artwork?.source?.vector || artwork?.source?.mimeType === 'application/pdf';
+    if (useNativeSourceResolution && isVector) continue;
     sourceScale = Math.min(
       sourceScale,
-      Math.min(previewWidth / artworkWidth, previewHeight / artworkHeight),
+      Math.min(sourceWidth / artworkWidth, sourceHeight / artworkHeight),
     );
   }
   if (!Number.isFinite(sourceScale)) sourceScale = Infinity;
-  const requestedScale = Number(targetDpi) > 0 ? Number(targetDpi) / 25.4 : sourceScale;
+  const requestedScale = Number(targetDpi) > 0
+    ? Math.min(Number(targetDpi) / 25.4, useNativeSourceResolution ? sourceScale : Infinity)
+    : sourceScale;
   const pixelsPerMm = Math.max(0.01, Math.min(edgeScale, areaScale, requestedScale));
   const width = Math.max(1, Math.floor(widthMm * pixelsPerMm));
   const height = Math.max(1, Math.floor(heightMm * pixelsPerMm));
@@ -109,12 +130,18 @@ export async function composeArtworkTexture({
   createImageBitmapFn = globalThis.createImageBitmap,
   purpose = 'preview',
   targetDpi = null,
+  textureLimits = PREVIEW_TEXTURE_LIMITS,
+  useNativeSourceResolution = false,
   getEntryTargetDpi = null,
   rasterize = rasterizeArtwork,
   signal,
 }) {
   const entries = (artworks || [])
-    .filter((entry) => entry?.model?.hasArtwork && entry.visible !== false && entry.previewBlob);
+    .filter((entry) => (
+      entry?.model?.hasArtwork
+      && entry.visible !== false
+      && (entry.previewBlob || entry.originalBlob)
+    ));
   if (!entries.length) {
     throw new Error('At least one artwork with a preview is required for the 3D texture.');
   }
@@ -122,7 +149,12 @@ export async function composeArtworkTexture({
 
   const bounds = boxModel.getBounds();
   const panels = boxModel.getPanels();
-  const { width, height, pixelsPerMm } = getTextureSize(bounds, entries, PREVIEW_TEXTURE_LIMITS, { targetDpi });
+  const { width, height, pixelsPerMm } = getTextureSize(
+    bounds,
+    entries,
+    textureLimits,
+    { targetDpi, useNativeSourceResolution },
+  );
   const rawCanvas = createCanvas(width, height, documentRef);
   const rawContext = rawCanvas.getContext('2d', { alpha: true });
   const outputCanvas = createCanvas(width, height, documentRef);
@@ -131,7 +163,7 @@ export async function composeArtworkTexture({
 
   try {
     for (const entry of entries) {
-      let renderBlob = entry.renderBlob || entry.previewBlob;
+      let renderBlob = entry.renderBlob || entry.previewBlob || entry.originalBlob;
       if (rasterize && (entry.originalBlob || entry.model?.source?.vector) && !entry.renderBlob) {
         const entryTargetDpi = typeof getEntryTargetDpi === 'function'
           ? getEntryTargetDpi(entry, pixelsPerMm * 25.4)
@@ -170,7 +202,7 @@ export async function composeArtworkTexture({
       panels,
       bounds,
       pixelsPerMm,
-      PREVIEW_TEXTURE_LIMITS.bleedPixels,
+      textureLimits.bleedPixels,
     );
     outputContext.drawImage(rawCanvas, 0, 0);
     return {

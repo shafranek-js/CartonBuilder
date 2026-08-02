@@ -529,6 +529,11 @@
         <div class="preview-main-row">
           <div class="preview-canvas-wrap preview-3d-panel" id="preview3dPanel" aria-busy="false">
             <canvas id="preview3dCanvas" role="img" tabindex="0" aria-label="Interactive folded carton preview" data-i18n-aria-label="preview3dCanvasLabel"></canvas>
+            <div class="preview-export-viewport-overlay" id="previewExportViewportOverlay" aria-hidden="true">
+              <div class="preview-export-viewport-frame" id="previewExportViewportFrame">
+                <span class="preview-export-viewport-label" id="previewExportViewportLabel"></span>
+              </div>
+            </div>
             <div class="preview-3d-busy" id="preview3dBusy" role="status" aria-live="polite" hidden>
               <span class="spinner" aria-hidden="true"></span>
               <span data-i18n="loading3d">Loading 3D preview…</span>
@@ -560,6 +565,35 @@
                 <button id="deleteScenePresetBtn" type="button" disabled data-i18n="deletePreset3d">Delete</button>
               </div>
               <span class="sidebar-status" id="scenePresetStatus" role="status" aria-live="polite"></span>
+            </section>
+
+            <section class="tool-section preview-export-section">
+              <h2 data-i18n="previewExportFrameTitle">Export frame</h2>
+              <p class="quality-help" data-i18n="previewExportFrameHelp">The frame shows the crop used by presentation PNG/JPG exports. The 3D scene remains interactive.</p>
+              <label class="field preview-export-quality-field">
+                <span data-i18n="previewExportHtmlQuality">HTML texture quality</span>
+                <select id="previewExportHtmlQuality" aria-label="HTML texture quality" data-i18n-aria-label="previewExportHtmlQuality">
+                  <option value="auto" data-i18n="qualityAuto">Auto</option>
+                  <option value="600">600 DPI</option>
+                  <option value="1200">1200 DPI</option>
+                  <option value="2400">2400 DPI</option>
+                </select>
+              </label>
+              <p class="quality-help" data-i18n="previewExportHtmlQualityHelp">Auto follows the highest Render artwork quality, while raster sources remain limited by their native pixels.</p>
+              <div class="preview-export-details" aria-live="polite">
+                <p>
+                  <strong data-i18n="previewExportPresentation">Render PNG/JPG</strong>
+                  <span id="previewExportPresentationSummary"></span>
+                </p>
+                <p>
+                  <strong data-i18n="previewExportFlat">2D PNG/JPG, SVG and PDF</strong>
+                  <span id="previewExportFlatSummary"></span>
+                </p>
+                <p>
+                  <strong data-i18n="previewExportHtml">HTML</strong>
+                  <span id="previewExportHtmlSummary"></span>
+                </p>
+              </div>
             </section>
 
             <section class="tool-section">

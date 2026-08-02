@@ -2,6 +2,10 @@ import { t } from '../i18n.js';
 import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
 import { BoxScene } from './BoxScene.js';
 import { composeArtworkTexture } from './textureComposer.js';
+import {
+  getCenteredPreviewViewportRect,
+  getPreviewExportViewportInfo,
+} from './previewExportViewport.js';
 import { readSceneSettings, sanitizeSceneSettings, writeSceneSettings, SCENE_FIELDS } from './sceneSettings.js';
 import {
   deleteScenePreset,
@@ -85,6 +89,8 @@ export function createPreview3DApp({
   artwork,
   getArtworks,
   getArtworksJson,
+  getRenderState = () => null,
+  setHtmlExportQuality = () => false,
   documentRef = document,
   windowRef = window,
   onModeChange = () => {},
@@ -92,6 +98,13 @@ export function createPreview3DApp({
   const elements = {
     panel3d: documentRef.getElementById('preview3dPanel'),
     canvas: documentRef.getElementById('preview3dCanvas'),
+    exportViewportOverlay: documentRef.getElementById('previewExportViewportOverlay'),
+    exportViewportFrame: documentRef.getElementById('previewExportViewportFrame'),
+    exportViewportLabel: documentRef.getElementById('previewExportViewportLabel'),
+    exportHtmlQuality: documentRef.getElementById('previewExportHtmlQuality'),
+    exportPresentationSummary: documentRef.getElementById('previewExportPresentationSummary'),
+    exportFlatSummary: documentRef.getElementById('previewExportFlatSummary'),
+    exportHtmlSummary: documentRef.getElementById('previewExportHtmlSummary'),
     foldSlider: documentRef.getElementById('foldProgress'),
     foldValue: documentRef.getElementById('foldProgressValue'),
     open: documentRef.getElementById('open3dButton'),
@@ -192,6 +205,57 @@ export function createPreview3DApp({
     }
   }
 
+  function updateExportViewport() {
+    const info = getPreviewExportViewportInfo({
+      boxModel,
+      artworks: getArtworks?.() || [],
+      renderSettings: getRenderState?.(),
+    });
+    const presentationSummary = t('previewExportPresentationSummary', {
+      width: info.render.width,
+      height: info.render.height,
+      aspect: info.render.aspectLabel,
+      longEdge: info.render.longEdge,
+    });
+    const flatSummary = t('previewExportFlatSummary', {
+      width: info.flat.width,
+      height: info.flat.height,
+      dpi: info.flat.dpi,
+      widthMm: info.flat.widthMm,
+      heightMm: info.flat.heightMm,
+    });
+    if (elements.exportPresentationSummary) {
+      elements.exportPresentationSummary.textContent = presentationSummary;
+    }
+    if (elements.exportFlatSummary) elements.exportFlatSummary.textContent = flatSummary;
+    const htmlQualityLabel = info.html.quality === 'auto'
+      ? t('qualityAuto')
+      : `${info.html.quality} DPI`;
+    if (elements.exportHtmlQuality) elements.exportHtmlQuality.value = String(info.html.quality);
+    if (elements.exportHtmlSummary) {
+      elements.exportHtmlSummary.textContent = t('previewExportHtmlSummary', {
+        quality: htmlQualityLabel,
+      });
+    }
+    if (elements.exportViewportLabel) {
+      elements.exportViewportLabel.textContent = t('previewExportViewportLabel', {
+        width: info.render.width,
+        height: info.render.height,
+      });
+    }
+    if (!elements.exportViewportOverlay || !elements.exportViewportFrame) return;
+
+    const rect = getCenteredPreviewViewportRect(
+      elements.exportViewportOverlay.clientWidth,
+      elements.exportViewportOverlay.clientHeight,
+      info.render.aspect,
+    );
+    elements.exportViewportFrame.style.width = `${rect.width}px`;
+    elements.exportViewportFrame.style.height = `${rect.height}px`;
+    elements.exportViewportFrame.style.left = `${rect.left}px`;
+    elements.exportViewportFrame.style.top = `${rect.top}px`;
+  }
+
   function updateModeDom() {
     onModeChange(state.active);
   }
@@ -241,6 +305,7 @@ export function createPreview3DApp({
       || '#e8eaeb';
     updateInspector();
     updateSummary();
+    updateExportViewport();
   }
 
   function setBusy(value) {
@@ -419,7 +484,9 @@ export function createPreview3DApp({
     artworkSignature = '';
     updateModeDom();
     updateControls();
-    return syncScene();
+    const result = await syncScene();
+    windowRef.requestAnimationFrame?.(updateExportViewport);
+    return result;
   }
 
   function deactivate() {
@@ -580,6 +647,11 @@ export function createPreview3DApp({
     event.preventDefault();
     selectPanel(null);
   });
+  listen(elements.exportHtmlQuality, 'change', (event) => {
+    setHtmlExportQuality(event.target.value);
+    updateExportViewport();
+  });
+  listen(windowRef, 'resize', updateExportViewport);
 
   function updateLightDirection() {
     scene?.setLightDirection(state.lightAzimuth, state.lightElevation);
@@ -699,6 +771,11 @@ export function createPreview3DApp({
       textures: 0,
       calls: 0,
     },
+    getExportViewportInfo: () => getPreviewExportViewportInfo({
+      boxModel,
+      artworks: getArtworks?.() || [],
+      renderSettings: getRenderState?.(),
+    }),
     resetForProject,
     dispose() {
       if (disposed) return;

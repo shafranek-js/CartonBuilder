@@ -2401,6 +2401,62 @@ dialog button {
   touch-action: none;
 }
 
+.preview-export-viewport-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.preview-export-viewport-frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid color-mix(in srgb, var(--focus, #b5d63d) 88%, #ffffff);
+  box-shadow: 0 0 0 9999px rgb(20 20 20 / 18%);
+  transition: width 160ms ease, height 160ms ease, left 160ms ease, top 160ms ease;
+}
+
+.preview-export-viewport-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 3px 6px;
+  overflow: hidden;
+  color: #ffffff;
+  background: rgb(20 20 20 / 72%);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-export-section {
+  background: color-mix(in srgb, var(--surface, #4e4e4e) 86%, var(--accent, #afca42));
+}
+
+.preview-export-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.preview-export-details p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: var(--muted-text, #c8c8c8);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.preview-export-details strong {
+  color: var(--text, #ffffff);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .preview-3d-busy,
 .preview-3d-recovery {
   position: absolute;

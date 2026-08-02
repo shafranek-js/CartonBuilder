@@ -152,6 +152,15 @@ off in Preview by default.
 - Three.js is downloaded only when 3D is first opened. WebGL 2 is required for
   3D, but not for 2D editing, project files, or export.
 
+Preview also shows an `Export frame` overlay driven by the current Render
+Aspect and Long edge. The frame and the sidebar summaries make the export
+contract explicit: presentation PNG/JPG use the framed pixel dimensions,
+2D PNG/JPG use the dieline bounds and effective artwork DPI, SVG/PDF preserve
+the physical dieline size, and HTML is a responsive interactive viewer. HTML
+texture quality can be set to Auto, 600, 1200, or 2400 DPI; Auto follows the
+highest artwork Render quality while raster sources remain capped by native
+pixels.
+
 ## Presentation Render
 
 Render is intentionally separate from the technical Preview. It always starts

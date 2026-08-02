@@ -9,6 +9,7 @@ export const RENDER_LONG_EDGES = Object.freeze([2048, 4096]);
 
 export const RENDER_MATERIAL_PROFILES = Object.freeze(['uncoated', 'matte', 'gloss']);
 export const RENDER_PRESETS = Object.freeze(['clean-studio', 'catalogue', 'soft-grey', 'transparent']);
+export const HTML_EXPORT_QUALITY_OPTIONS = Object.freeze(['auto', 600, 1200, 2400]);
 export const RENDER_CAMERA_PRESETS = Object.freeze([
   'front',
   'front-right',
@@ -54,6 +55,7 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   quality: Object.freeze({
     interactive: 'balanced',
     export: 'high',
+    html: 'auto',
   }),
   effects: Object.freeze({
     gtao: Object.freeze({
@@ -81,6 +83,7 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
 const ENVIRONMENTS = new Set(['none', 'studio', 'neutral', 'warm', 'cool', 'bright', 'night']);
 const PROJECTIONS = new Set(['perspective', 'orthographic']);
 const QUALITIES = new Set(['fast', 'balanced', 'high']);
+const HTML_EXPORT_QUALITIES = new Set(HTML_EXPORT_QUALITY_OPTIONS.filter((value) => value !== 'auto'));
 const AO_RESOLUTIONS = new Set(['half', 'full']);
 const AA_MODES = new Set(['native', 'smaa', 'taa']);
 const FOCUS_MODES = new Set(['carton-center', 'custom']);
@@ -95,6 +98,12 @@ function numberInRange(value, fallback, min, max) {
 
 function enumValue(value, allowed, fallback) {
   return allowed.has(value) ? value : fallback;
+}
+
+function htmlExportQualityValue(value, fallback) {
+  if (value === 'auto') return 'auto';
+  const number = Number(value);
+  return HTML_EXPORT_QUALITIES.has(number) ? number : fallback;
 }
 
 function finiteVector(value, fallback) {
@@ -176,6 +185,7 @@ export function sanitizeRenderSettings(input = null) {
     quality: {
       interactive: enumValue(quality.interactive, QUALITIES, fallback.quality.interactive),
       export: enumValue(quality.export, QUALITIES, fallback.quality.export),
+      html: htmlExportQualityValue(quality.html, fallback.quality.html),
     },
     effects: {
       gtao: {
