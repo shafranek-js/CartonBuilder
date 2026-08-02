@@ -10,18 +10,23 @@ import {
 } from '../project/ProjectStore.js';
 import { createProjectArchive, readProjectArchive } from '../project/projectArchive.js';
 import { CURRENT_PROJECT_SCHEMA_VERSION, validateProjectBundle } from '../project/projectSchema.js';
-import { ArtworkModel, getReferenceFraction } from './ArtworkModel.js';
+import { ArtworkModel } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
 import { ViewportModel } from './ViewportModel.js';
 import { loadArtworkFile, renderPdfWithLayers } from './fileLoader.js';
-import { getSnapOffset, buildSnapTargets, getResizeSnapScale, getDisplayedReferenceFraction } from './snap.js';
+import {
+  getSnapOffset,
+  buildSnapTargets,
+  getResizeSnapFactor,
+} from './snap.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { getArtworkRasterSignature, rasterizeArtwork, resolveArtworkDpi } from './artworkRasterizer.js';
 
 const SNAP_SCREEN_PX = 6;
+const SNAP_RELEASE_SCREEN_PX = 9;
 
 function downloadBlob(documentRef, windowRef, blob, fileName) {
   const url = windowRef.URL.createObjectURL(blob);
@@ -85,6 +90,17 @@ function getVisibleCornerWorldPoint(model, corner) {
   const rect = model.visibleLocalRect;
   const localX = corner.includes('e') ? rect.x + rect.width : rect.x;
   const localY = corner.includes('s') ? rect.y + rect.height : rect.y;
+  const rotated = rotateVector({
+    x: localX - model.unrotatedWidthMm / 2,
+    y: localY - model.unrotatedHeightMm / 2,
+  }, model.rotation);
+  return {
+    x: model.centerXmm + rotated.x,
+    y: model.centerYmm + rotated.y,
+  };
+}
+
+function getCropLocalWorldPoint(model, localX, localY) {
   const rotated = rotateVector({
     x: localX - model.unrotatedWidthMm / 2,
     y: localY - model.unrotatedHeightMm / 2,
@@ -1389,6 +1405,11 @@ export function createArtworkApp({
       : detail.corner
         ? getVisibleCornerWorldPoint(artwork, fixedCornerByCorner[detail.corner])
         : null;
+    const resizeStartPoint = detail.side
+      ? getVisibleEdgeWorldPoint(artwork, detail.side)
+      : detail.corner
+        ? getVisibleCornerWorldPoint(artwork, detail.corner)
+        : null;
 
     gesture = {
       ...detail,
@@ -1407,14 +1428,29 @@ export function createArtworkApp({
       startDistFromAnchor: Math.max(0.001, startDistFromAnchor),
       startDistFromCenter: Math.max(0.001, startDistFromCenter),
       resizeAnchorWorld,
+      resizeStartPoint,
       resizeFixedSide: detail.side ? fixedSideBySide[detail.side] : null,
       resizeFixedCorner: detail.corner ? fixedCornerByCorner[detail.corner] : null,
+      activeSnapTargets: {},
     };
     svg.setPointerCapture(event.pointerId);
     render();
   }
 
   function updateResizeGesture(event, point) {
+    const targets = buildSnapTargets(boxModel);
+    const threshold = SNAP_SCREEN_PX / viewport.zoom;
+    const releaseThreshold = SNAP_RELEASE_SCREEN_PX / viewport.zoom;
+    const bypassSnap = event.ctrlKey || event.metaKey;
+    const activeTargets = bypassSnap ? {} : (gesture.activeSnapTargets || {});
+    const nextActiveTargets = {};
+    const guides = [];
+    const keepTarget = (key, target) => {
+      if (!target) return;
+      nextActiveTargets[key] = target;
+      guides.push(target);
+    };
+
     if (gesture.corner && !constrainProportions) {
       const anchor = event.altKey ? gesture.startCenter : gesture.resizeAnchorWorld;
       const xDirection = rotateVector({ x: gesture.sx, y: 0 }, artwork.rotation);
@@ -1432,8 +1468,48 @@ export function createArtworkApp({
         Math.max(0.01 / gesture.startScaleY, Math.abs(yProjection) / Math.max(0.001, yBase)),
       );
 
-      artwork.setScaleX(gesture.startScaleX * xFactor);
-      artwork.setScaleY(gesture.startScaleY * yFactor);
+      let nextXFactor = xFactor;
+      let nextYFactor = yFactor;
+      if (!bypassSnap) {
+        const factors = [
+          {
+            key: 'corner-x',
+            factor: xFactor,
+            vector: { x: xDirection.x * xBase, y: xDirection.y * xBase },
+            minFactor: 0.01 / gesture.startScaleX,
+            maxFactor: 20 / gesture.startScaleX,
+          },
+          {
+            key: 'corner-y',
+            factor: yFactor,
+            vector: { x: yDirection.x * yBase, y: yDirection.y * yBase },
+            minFactor: 0.01 / gesture.startScaleY,
+            maxFactor: 20 / gesture.startScaleY,
+          },
+        ];
+        for (const item of factors) {
+          const axis = Math.abs(item.vector.x) >= Math.abs(item.vector.y) ? 'x' : 'y';
+          const resolved = getResizeSnapFactor({
+            candidateFactor: item.factor,
+            anchor,
+            vector: item.vector,
+            axis,
+            targets,
+            threshold,
+            releaseThreshold,
+            minFactor: item.minFactor,
+            maxFactor: item.maxFactor,
+            activeTarget: activeTargets[item.key],
+            point,
+          });
+          if (item.key === 'corner-x') nextXFactor = resolved.factor;
+          else nextYFactor = resolved.factor;
+          keepTarget(item.key, resolved.target);
+        }
+      }
+
+      artwork.setScaleX(gesture.startScaleX * nextXFactor);
+      artwork.setScaleY(gesture.startScaleY * nextYFactor);
       if (event.altKey) {
         artwork.setVisibleCenter(gesture.startCenter.x, gesture.startCenter.y);
       } else {
@@ -1443,6 +1519,8 @@ export function createArtworkApp({
           anchor.y - nextAnchor.y,
         );
       }
+      gesture.activeSnapTargets = nextActiveTargets;
+      renderer.setSnapGuides(guides);
       return;
     }
 
@@ -1462,14 +1540,37 @@ export function createArtworkApp({
         ? Math.min(20 / gesture.startScaleX, 20 / gesture.startScaleY)
         : 20 / startScale;
       const nextFactor = Math.min(maximumFactor, Math.max(minimumFactor, rawFactor));
-      const nextScale = startScale * nextFactor;
+      let resolvedFactor = nextFactor;
+      if (!bypassSnap) {
+        const vector = {
+          x: direction.x * baseDimension,
+          y: direction.y * baseDimension,
+        };
+        const snapAxis = Math.abs(vector.x) >= Math.abs(vector.y) ? 'x' : 'y';
+        const resolved = getResizeSnapFactor({
+          candidateFactor: nextFactor,
+          anchor,
+          vector,
+          axis: snapAxis,
+          targets,
+          threshold,
+          releaseThreshold,
+          minFactor: minimumFactor,
+          maxFactor: maximumFactor,
+          activeTarget: activeTargets.side,
+          point,
+        });
+        resolvedFactor = resolved.factor;
+        keepTarget('side', resolved.target);
+      }
+      const nextScale = startScale * resolvedFactor;
 
       if (axis === 'x') {
         artwork.setScaleX(nextScale);
-        if (constrainProportions) artwork.setScaleY(gesture.startScaleY * nextFactor);
+        if (constrainProportions) artwork.setScaleY(gesture.startScaleY * resolvedFactor);
       } else {
         artwork.setScaleY(nextScale);
-        if (constrainProportions) artwork.setScaleX(gesture.startScaleX * nextFactor);
+        if (constrainProportions) artwork.setScaleX(gesture.startScaleX * resolvedFactor);
       }
 
       if (event.altKey) {
@@ -1481,6 +1582,8 @@ export function createArtworkApp({
           anchor.y - nextAnchor.y,
         );
       }
+      gesture.activeSnapTargets = nextActiveTargets;
+      renderer.setSnapGuides(guides);
       return;
     }
 
@@ -1492,28 +1595,44 @@ export function createArtworkApp({
     const maximumFactor = Math.min(20 / gesture.startScaleX, 20 / gesture.startScaleY);
     const nextFactor = Math.min(maximumFactor, Math.max(minimumFactor, factor));
 
-    const fraction = isAlt
-      ? { x: 0, y: 0 }
-      : getDisplayedReferenceFraction(
-        artwork.rotation,
-        getReferenceFraction(artwork.referencePoint),
-      );
-    const snappedFactor = getResizeSnapScale({
-      candidateScale: nextFactor,
-      anchor,
-      baseW: gesture.startDisplayedWidth,
-      baseH: gesture.startDisplayedHeight,
-      fraction,
-      targets: buildSnapTargets(boxModel),
-      threshold: SNAP_SCREEN_PX / viewport.zoom,
-      minScale: minimumFactor,
-      maxScale: maximumFactor,
-    });
+    let snappedFactor = nextFactor;
+    if (!bypassSnap) {
+      const vector = {
+        x: gesture.resizeStartPoint.x - anchor.x,
+        y: gesture.resizeStartPoint.y - anchor.y,
+      };
+      let best = null;
+      for (const axis of ['x', 'y']) {
+        if (Math.abs(vector[axis]) < 1e-9) continue;
+        const resolved = getResizeSnapFactor({
+          candidateFactor: nextFactor,
+          anchor,
+          vector,
+          axis,
+          targets,
+          threshold,
+          releaseThreshold,
+          minFactor: minimumFactor,
+          maxFactor: maximumFactor,
+          activeTarget: activeTargets.corner,
+          point,
+        });
+        if (!best || Math.abs(resolved.factor - nextFactor) < Math.abs(best.factor - nextFactor)) {
+          best = resolved;
+        }
+      }
+      if (best) {
+        snappedFactor = best.factor;
+        keepTarget('corner', best.target);
+      }
+    }
     artwork.setScaleX(gesture.startScaleX * snappedFactor);
     artwork.setScaleY(gesture.startScaleY * snappedFactor);
     if (isAlt) {
       artwork.setVisibleCenter(gesture.startCenter.x, gesture.startCenter.y);
     }
+    gesture.activeSnapTargets = nextActiveTargets;
+    renderer.setSnapGuides(guides);
   }
 
   svg.addEventListener('pointermove', (event) => {
@@ -1571,6 +1690,7 @@ export function createArtworkApp({
       scheduleSave();
     }
     gesture = null;
+    renderer.setSnapGuides([]);
     svg.classList.remove('canvas-panning');
     releasePointerCapture(pointerId);
   }
@@ -1591,6 +1711,7 @@ export function createArtworkApp({
       cropDrawStart = null;
     }
     cropGesture = null;
+    renderer.setSnapGuides([]);
     releasePointerCapture(pointerId);
     render();
   }
@@ -1638,6 +1759,7 @@ export function createArtworkApp({
       startCrop: { ...cropPreview },
       initialLocalX: localX,
       initialLocalY: localY,
+      activeSnapTargets: {},
     };
     const cornerEl = event.target.closest('[data-crop-corner]');
     if (cornerEl) {
@@ -1744,6 +1866,122 @@ export function createArtworkApp({
       cropPreview.y = newY;
       cropPreview.width = newW;
       cropPreview.height = newH;
+    }
+
+    if (cropGesture.type === 'resize') {
+      const bypassSnap = event.ctrlKey || event.metaKey;
+      const targets = buildSnapTargets(boxModel);
+      const threshold = SNAP_SCREEN_PX / viewport.zoom;
+      const releaseThreshold = SNAP_RELEASE_SCREEN_PX / viewport.zoom;
+      const activeTargets = bypassSnap ? {} : (cropGesture.activeSnapTargets || {});
+      const nextActiveTargets = {};
+      const guides = [];
+      const keepTarget = (key, target) => {
+        if (!target) return;
+        nextActiveTargets[key] = target;
+        guides.push(target);
+      };
+      const startCrop = cropGesture.startCrop;
+      const anchorLocal = {
+        x: cropGesture.anchorX ?? (startCrop.x + startCrop.width / 2),
+        y: cropGesture.anchorY ?? (startCrop.y + startCrop.height / 2),
+      };
+      const applyLocalAxisSnap = (key, localAxis, sign, startDimension, currentCoordinate, maxCoordinate) => {
+        if (!Number.isFinite(anchorLocal[localAxis]) || startDimension <= 0) return currentCoordinate;
+        const candidateFactor = Math.abs(currentCoordinate - anchorLocal[localAxis]) / startDimension;
+        const vectorLocal = localAxis === 'x'
+          ? { x: sign * startDimension, y: 0 }
+          : { x: 0, y: sign * startDimension };
+        const vector = rotateVector(vectorLocal, artwork.rotation);
+        const axis = Math.abs(vector.x) >= Math.abs(vector.y) ? 'x' : 'y';
+        const minFactor = 1 / startDimension;
+        const maxFactor = Math.max(minFactor, Math.abs(maxCoordinate - anchorLocal[localAxis]) / startDimension);
+        const resolved = getResizeSnapFactor({
+          candidateFactor,
+          anchor: getCropLocalWorldPoint(artwork, anchorLocal.x, anchorLocal.y),
+          vector,
+          axis,
+          targets,
+          threshold,
+          releaseThreshold,
+          minFactor,
+          maxFactor,
+          activeTarget: activeTargets[key],
+          point,
+        });
+        keepTarget(key, resolved.target);
+        return anchorLocal[localAxis] + sign * startDimension * resolved.factor;
+      };
+
+      if (cropGesture.corner != null) {
+        const cornerSigns = [
+          { x: -1, y: -1 },
+          { x: 1, y: -1 },
+          { x: 1, y: 1 },
+          { x: -1, y: 1 },
+        ][cropGesture.corner];
+        const currentX = cornerSigns.x > 0 ? cropPreview.x + cropPreview.width : cropPreview.x;
+        const currentY = cornerSigns.y > 0 ? cropPreview.y + cropPreview.height : cropPreview.y;
+        let snappedX = currentX;
+        let snappedY = currentY;
+        if (!bypassSnap) {
+          snappedX = applyLocalAxisSnap(
+            'crop-x',
+            'x',
+            cornerSigns.x,
+            startCrop.width,
+            currentX,
+            cornerSigns.x > 0 ? maxW : 0,
+          );
+          snappedY = applyLocalAxisSnap(
+            'crop-y',
+            'y',
+            cornerSigns.y,
+            startCrop.height,
+            currentY,
+            cornerSigns.y > 0 ? maxH : 0,
+          );
+        }
+        if (cornerSigns.x > 0) cropPreview.width = Math.max(1, snappedX - cropPreview.x);
+        else {
+          cropPreview.x = snappedX;
+          cropPreview.width = Math.max(1, cropGesture.anchorX - snappedX);
+        }
+        if (cornerSigns.y > 0) cropPreview.height = Math.max(1, snappedY - cropPreview.y);
+        else {
+          cropPreview.y = snappedY;
+          cropPreview.height = Math.max(1, cropGesture.anchorY - snappedY);
+        }
+      } else if (cropGesture.edge) {
+        const edge = cropGesture.edge;
+        const localAxis = edge === 'e' || edge === 'w' ? 'x' : 'y';
+        const sign = edge === 'e' || edge === 's' ? 1 : -1;
+        const startDimension = localAxis === 'x' ? startCrop.width : startCrop.height;
+        const currentCoordinate = localAxis === 'x'
+          ? (sign > 0 ? cropPreview.x + cropPreview.width : cropPreview.x)
+          : (sign > 0 ? cropPreview.y + cropPreview.height : cropPreview.y);
+        const maxCoordinate = localAxis === 'x'
+          ? (sign > 0 ? maxW : 0)
+          : (sign > 0 ? maxH : 0);
+        const snapped = bypassSnap
+          ? currentCoordinate
+          : applyLocalAxisSnap('crop-edge', localAxis, sign, startDimension, currentCoordinate, maxCoordinate);
+        if (localAxis === 'x') {
+          if (sign > 0) cropPreview.width = Math.max(1, snapped - cropPreview.x);
+          else {
+            cropPreview.x = snapped;
+            cropPreview.width = Math.max(1, cropGesture.anchorX - snapped);
+          }
+        } else if (sign > 0) cropPreview.height = Math.max(1, snapped - cropPreview.y);
+        else {
+          cropPreview.y = snapped;
+          cropPreview.height = Math.max(1, cropGesture.anchorY - snapped);
+        }
+      }
+      cropGesture.activeSnapTargets = nextActiveTargets;
+      renderer.setSnapGuides(guides);
+    } else {
+      renderer.setSnapGuides([]);
     }
     renderer.cropFrame = cropPreview;
     renderer.render();
@@ -2026,6 +2264,7 @@ export function createArtworkApp({
     cropBeforeState = null;
     renderer.cropFrame = null;
     renderer.drawRect = null;
+    renderer.setSnapGuides([]);
     svg.style.cursor = '';
     releasePointerCapture(pointerId);
     if (updateUi) {

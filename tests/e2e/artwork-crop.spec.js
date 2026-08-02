@@ -214,6 +214,37 @@ test('allows non-proportional corner resize when proportions are unconstrained',
   expect(after.scaleX).not.toBeCloseTo(after.scaleY, 2);
 });
 
+test('snaps artwork resize to a dieline line, highlights it, and supports Ctrl bypass', async ({ page }) => {
+  await openArtwork(page);
+  const handle = page.locator('.resize-side-handle[data-resize-side="e"]');
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error('East artwork resize handle has no screen bounds');
+  const startX = handleBox.x + handleBox.width / 2;
+  const startY = handleBox.y + handleBox.height / 2;
+  const targetScreen = await page.evaluate((currentY) => {
+    const state = window.cartonBuilderApp.getState();
+    const artwork = window.cartonBuilderApp.artwork.artwork;
+    const candidates = state.box.panels.flatMap((panel) => [panel.x, panel.x + panel.width]);
+    const targetX = candidates.reduce((best, value) => (
+      Math.abs(value - artwork.bounds.maxX) < Math.abs(best - artwork.bounds.maxX) ? value : best
+    ), candidates[0]);
+    const svg = document.getElementById('artworkWorkspace');
+    const point = svg.createSVGPoint();
+    point.x = targetX;
+    point.y = artwork.bounds.minY + artwork.bounds.height / 2;
+    const screen = point.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: currentY };
+  }, startY);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(targetScreen.x, targetScreen.y);
+  await expect(page.locator('.snap-guide')).toHaveCount(1);
+  await page.mouse.move(startX + 18, startY, { modifiers: ['Control'] });
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
+  await page.mouse.up();
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
+});
+
 test('resizes the crop frame with a side handle while keeping the opposite edge fixed', async ({ page }) => {
   await openArtwork(page);
   await page.locator('#cropFrameButton').click();
@@ -232,6 +263,22 @@ test('resizes the crop frame with a side handle while keeping the opposite edge 
 
   expect(Number(await frame.getAttribute('x'))).toBeCloseTo(before.x, 5);
   expect(Number(await frame.getAttribute('width'))).toBeLessThan(before.width);
+});
+
+test('snaps crop resize handles to dieline lines and clears the transient guide', async ({ page }) => {
+  await openArtwork(page);
+  await page.locator('#cropFrameButton').click();
+  const eastHandle = page.locator('.crop-side-handle[data-crop-edge="e"]');
+  const eastBox = await eastHandle.boundingBox();
+  if (!eastBox) throw new Error('East crop handle has no screen bounds');
+  const startX = eastBox.x + eastBox.width / 2;
+  const startY = eastBox.y + eastBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 2, startY);
+  await expect(page.locator('.snap-guide')).toHaveCount(1);
+  await page.mouse.up();
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
 });
 
 test('pans the empty artwork canvas with a right-button drag', async ({ page }) => {
