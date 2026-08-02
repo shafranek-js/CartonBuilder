@@ -40,10 +40,11 @@ header{
   position:sticky;top:0;z-index:20;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);
   border-bottom:1px solid rgba(11,61,47,.1)
 }
-.nav{height:72px;display:flex;align-items:center;justify-content:space-between;gap:24px}
-.brand{display:flex;align-items:center;gap:12px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.nav{height:104px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:18px;min-width:0;font-weight:800;color:var(--ink);letter-spacing:-.02em}
 .brand img{display:none}
-.brand:before{content:"";display:block;flex:none;width:54px;height:50px;background:url("./assets/lemurlogo.png") center/contain no-repeat}
+.brand:before{content:"";display:block;flex:none;width:104px;height:82px;background:url("./assets/lemur-mark.png") center/contain no-repeat}
+.brand>span{font-size:1.05rem;line-height:1.15}
 .brand small{display:block;color:var(--muted);font-weight:600;font-size:.68rem;letter-spacing:.11em;text-transform:uppercase}
 nav{display:flex;gap:24px;color:#3f514a;font-size:.9rem;font-weight:650}
 nav a:hover{color:var(--ink)}
@@ -164,11 +165,12 @@ footer strong{color:white}
 footer p{font-size:.84rem;line-height:1.6}
 .legal{margin-top:32px;padding-top:20px;border-top:1px solid rgba(255,255,255,.12);font-size:.72rem;color:#8da79e}
 @media(max-width:900px){
-  nav{display:none} .hero-grid,.fact-grid,.faq{grid-template-columns:1fr}
+  nav{display:none} .nav{height:88px} .brand{gap:12px} .brand:before{width:80px;height:63px} .hero-grid,.fact-grid,.faq{grid-template-columns:1fr}
   .viewer-card{min-height:620px} .grid3{grid-template-columns:1fr}
   .section-head{display:block} .footer-grid{grid-template-columns:1fr} .showcase-strip,.feedback-grid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:560px){
+  .nav{height:88px;gap:12px} .brand{gap:8px} .brand:before{width:66px;height:52px} .brand>span{font-size:.9rem} .brand small{font-size:.58rem;letter-spacing:.08em} .cta{padding:10px 14px;font-size:.82rem}
   .hero{padding-top:44px} h1{font-size:clamp(2.5rem,16vw,3.7rem)}
   .box3d{--w:178px;--h:280px;--d:78px} .viewer-card{min-height:540px}
   .scene{inset:82px 0 152px} .shadow{width:260px;bottom:112px}
