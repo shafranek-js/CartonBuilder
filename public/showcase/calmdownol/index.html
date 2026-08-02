@@ -69,7 +69,7 @@ h1 sup{font-size:.22em;vertical-align:top;letter-spacing:0}
 .viewer-label{position:absolute;top:22px;left:24px;z-index:3}
 .viewer-label strong{display:block;color:var(--ink)}
 .viewer-label span{font-size:.76rem;color:var(--muted)}
-.scene{position:absolute;inset:90px 0 74px;perspective:1100px;cursor:grab;touch-action:none}
+.scene{position:absolute;inset:90px 0 112px;perspective:1100px;cursor:grab;touch-action:none}
 .scene:active{cursor:grabbing}
 .box3d{
   --w:252px;--h:396px;--d:108px;
@@ -94,10 +94,11 @@ h1 sup{font-size:.22em;vertical-align:top;letter-spacing:0}
 .icon-btn:hover{background:white;transform:translateY(-1px)}
 .viewer-card.is-loading .scene,.viewer-card.is-loading .shadow,.viewer-card.is-loading .viewer-controls{visibility:hidden}
 .viewer-card.is-loaded .scene,.viewer-card.is-loaded .shadow,.viewer-card.is-loaded .viewer-controls{display:none}
-.viewer-loader{position:absolute;inset:90px 22px 74px;z-index:4;display:grid;place-items:center;text-align:center;pointer-events:none}
-.viewer-loader-inner{max-width:280px;padding:22px;border:1px solid rgba(11,61,47,.14);border-radius:22px;background:rgba(255,255,255,.86);box-shadow:0 12px 34px rgba(13,53,41,.12);backdrop-filter:blur(10px);pointer-events:auto}
+.viewer-loader{position:absolute;inset:auto 18px 16px;z-index:4;display:flex;justify-content:center;text-align:left;pointer-events:none}
+.viewer-loader-inner{width:min(100%,520px);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;padding:13px 16px;border:1px solid rgba(11,61,47,.14);border-radius:18px;background:rgba(255,255,255,.9);box-shadow:0 12px 34px rgba(13,53,41,.12);backdrop-filter:blur(10px);pointer-events:auto}
+.viewer-loader-copy{min-width:0}
 .viewer-loader strong{display:block;color:var(--ink);font-size:1.05rem}
-.viewer-loader p{margin:8px 0 16px;color:var(--muted);font-size:.8rem;line-height:1.45}
+.viewer-loader p{margin:4px 0 0;color:var(--muted);font-size:.78rem;line-height:1.4}
 .viewer-loader button{border:0;border-radius:999px;padding:11px 16px;background:var(--ink);color:#fff;font-weight:800;cursor:pointer}
 .viewer-loader button:hover{background:var(--ink-2);transform:translateY(-1px)}
 .viewer-card.is-loading .viewer-loader{background:rgba(234,246,240,.45);border-radius:22px}
@@ -164,8 +165,9 @@ footer p{font-size:.84rem;line-height:1.6}
 }
 @media(max-width:560px){
   .hero{padding-top:44px} h1{font-size:3.7rem}
-  .box3d{--w:205px;--h:322px;--d:88px} .viewer-card{min-height:500px}
-  .scene{inset:90px 0 70px} .shadow{width:260px} .showcase-strip,.feedback-grid{grid-template-columns:1fr} .viewer-loader{inset:90px 14px 70px}
+  .box3d{--w:178px;--h:280px;--d:78px} .viewer-card{min-height:500px}
+  .scene{inset:82px 0 104px} .shadow{width:260px} .showcase-strip,.feedback-grid{grid-template-columns:1fr}
+  .viewer-loader{inset:auto 10px 10px}.viewer-loader-inner{grid-template-columns:1fr;gap:8px;padding:13px 14px;text-align:center}.viewer-loader button{justify-self:center}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 </style>
@@ -208,8 +210,10 @@ footer p{font-size:.84rem;line-height:1.6}
       <div class="viewer-label"><strong>Interactive product inspection</strong><span>Drag to rotate · scroll to zoom</span></div>
       <div class="viewer-loader" id="viewerLoader">
         <div class="viewer-loader-inner">
-          <strong>Explore the real 3D carton</strong>
-          <p>Load the CartonBuilder viewer to orbit, fold and inspect every panel. The larger viewer loads only when requested.</p>
+          <div class="viewer-loader-copy">
+            <strong>Explore the real 3D carton</strong>
+            <p>Load the CartonBuilder viewer to orbit, fold and inspect every panel. The larger viewer loads only when requested.</p>
+          </div>
           <button id="loadModelButton" type="button">Load interactive model</button>
         </div>
       </div>
