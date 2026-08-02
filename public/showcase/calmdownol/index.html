@@ -52,7 +52,7 @@ nav a:hover{color:var(--ink)}
 .hero-grid{display:grid;grid-template-columns:1.03fr .97fr;align-items:center;gap:54px}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--ink-2);font-weight:800;text-transform:uppercase;letter-spacing:.12em;font-size:.74rem}
 .eyebrow:before{content:"";width:24px;height:2px;background:var(--gold)}
-h1{font-size:clamp(3.4rem,7vw,6.9rem);line-height:.84;letter-spacing:-.07em;margin:20px 0 22px;color:var(--ink)}
+h1{font-size:clamp(2.5rem,7vw,6rem);line-height:.9;letter-spacing:-.07em;margin:20px 0 22px;color:var(--ink);white-space:nowrap}
 h1 sup{font-size:.22em;vertical-align:top;letter-spacing:0}
 .lead{font-size:clamp(1.2rem,2.1vw,1.7rem);line-height:1.35;color:#315248;max-width:620px}
 .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin:30px 0}
@@ -165,7 +165,7 @@ footer p{font-size:.84rem;line-height:1.6}
   .section-head{display:block} .footer-grid{grid-template-columns:1fr} .showcase-strip,.feedback-grid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:560px){
-  .hero{padding-top:44px} h1{font-size:3.7rem}
+  .hero{padding-top:44px} h1{font-size:clamp(2.5rem,16vw,3.7rem)}
   .box3d{--w:178px;--h:280px;--d:78px} .viewer-card{min-height:540px}
   .scene{inset:82px 0 152px} .shadow{width:260px;bottom:112px}
   .viewer-controls{bottom:124px;gap:6px}.icon-btn{padding:9px 12px;font-size:.78rem}
@@ -195,7 +195,7 @@ footer p{font-size:.84rem;line-height:1.6}
   <div class="wrap hero-grid">
     <div>
       <div class="eyebrow">Advanced emotional cooling technology</div>
-      <h1>Calm<br>downol<sup>®</sup></h1>
+      <h1>Calmdownol<sup>®</sup></h1>
       <p class="lead">1000 mg of Pure Unbothered Energy for the temporary relief of internal screaming, comment-section overreaction and relationship drama.</p>
       <div class="hero-actions">
         <a class="btn primary" href="#science">Read the evidence</a>

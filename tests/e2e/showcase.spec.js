@@ -13,7 +13,7 @@ test('serves the showcase and lazy-loads the interactive viewer', async ({ page 
   });
 
   await page.goto('/showcase/calmdownol/index.html');
-  await expect(page.getByRole('heading', { name: 'Calm downol®' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Calmdownol®' })).toBeVisible();
   await expect(page.locator('#cartonViewer')).not.toHaveAttribute('src', /.+/);
   expect(viewerRequests).toHaveLength(0);
 
