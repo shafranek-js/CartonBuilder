@@ -751,6 +751,48 @@ test('reference point selector swaps X/Y without moving artwork and anchors tran
   expect(anchorAfterRotate.y).toBeCloseTo(anchorAfterScale.y, 4);
 });
 
+test('keeps transform and scale controls aligned on one parameter grid', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page);
+
+  const geometry = await page.evaluate(() => {
+    const rect = (selector) => {
+      const element = document.querySelector(selector);
+      const bounds = element.getBoundingClientRect();
+      return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+    };
+    return {
+      x: rect('#artworkX'),
+      y: rect('#artworkY'),
+      width: rect('#artworkWidth'),
+      height: rect('#artworkHeight'),
+      scaleX: rect('#artworkScaleX'),
+      scaleY: rect('#artworkScaleY'),
+      chain: rect('#constrainProportionsBtn'),
+      transformUnits: [...document.querySelectorAll('.transform-fields .transform-unit')].map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { x: bounds.x, width: bounds.width };
+      }),
+      scaleUnits: [...document.querySelectorAll('.scale-fields .transform-unit')].map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { x: bounds.x, width: bounds.width };
+      }),
+    };
+  });
+
+  expect(geometry.scaleX.x).toBeCloseTo(geometry.x.x, 5);
+  expect(geometry.scaleY.x).toBeCloseTo(geometry.width.x, 5);
+  expect(geometry.scaleX.width).toBeCloseTo(geometry.x.width, 5);
+  expect(geometry.scaleY.width).toBeCloseTo(geometry.width.width, 5);
+  expect(geometry.scaleUnits[0].x).toBeCloseTo(geometry.transformUnits[0].x, 5);
+  expect(geometry.scaleUnits[1].x).toBeCloseTo(geometry.transformUnits[1].x, 5);
+
+  const widthCenter = geometry.width.y + geometry.width.height / 2;
+  const heightCenter = geometry.height.y + geometry.height.height / 2;
+  const chainCenter = geometry.chain.y + geometry.chain.height / 2;
+  expect(chainCenter).toBeCloseTo((widthCenter + heightCenter) / 2, 5);
+});
+
 test('adds multiple artworks with named sublayers, reorders and renames them', async ({ page }) => {
   await openArtworkStep(page);
   await loadGeneratedPng(page, 'first.png');

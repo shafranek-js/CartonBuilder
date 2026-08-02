@@ -19,6 +19,7 @@ import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 import { createRenderApp } from './render/RenderApp.js';
 import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
+import { restoreStartupProject } from './project/firstRunExample.js';
 
 initializeI18n();
 applyTheme(getSavedTheme());
@@ -395,7 +396,13 @@ for (const button of stepButtons) {
 
 document.getElementById('openRenderButton')?.addEventListener('click', () => showStep('render'));
 
-artworkApp.restoreAutosave();
+restoreStartupProject({
+  restoreAutosave: () => artworkApp.restoreAutosave(),
+  restoreExample: () => artworkApp.restoreProjectFromUrl(
+    new URL('Calmdownol_template.carton', document.baseURI).href,
+  ),
+  storage: window.localStorage,
+});
 window.addEventListener('beforeunload', () => {
   preview3dFacade.dispose();
   renderApp.dispose();

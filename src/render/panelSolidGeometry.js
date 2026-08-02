@@ -36,7 +36,10 @@ function roundedPerimeter(width, height, radius, segments = 3) {
 
 function flatNetUv(point, panel, bounds) {
   const netX = panel.x + point[0] + panel.width / 2;
-  const netY = panel.y + point[1] + panel.height / 2;
+  // The panel's local +Y axis is the visual top of the carton in Three.js,
+  // while the canonical flat-net Y axis grows downward. Keep the Render cap
+  // mapping aligned with the flat Preview geometry and CanvasTexture rows.
+  const netY = panel.y + panel.height / 2 - point[1];
   return [
     (netX - bounds.minX) / bounds.width,
     1 - (netY - bounds.minY) / bounds.height,

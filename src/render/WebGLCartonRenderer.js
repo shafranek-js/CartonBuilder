@@ -198,12 +198,22 @@ export class WebGLCartonRenderer {
   renderToPixels(options) {
     const previousQuality = this.qualityState;
     this.qualityManager.beginExport();
-    return this.scene.renderToPixels({
+    const exportOptions = {
       ...options,
       renderOverride: ({ target }) => this.postProcessing.renderToTarget(target),
-    }).finally(() => {
-      this.qualityManager.endExport(previousQuality === 'export' ? 'settled' : previousQuality);
-    });
+    };
+    return this.scene.renderToPixels(exportOptions)
+      .then(async (result) => {
+        // Some WebGL implementations leave EffectComposer's offscreen buffer
+        // transparent black even though the on-screen composer is rendered.
+        // If readback contains no pixels at all, fall back to the same scene
+        // without post-processing so PNG/JPG export remains usable.
+        if (result.pixels.some((value) => value !== 0)) return result;
+        return this.scene.renderToPixels({ ...options, renderOverride: null });
+      })
+      .finally(() => {
+        this.qualityManager.endExport(previousQuality === 'export' ? 'settled' : previousQuality);
+      });
   }
 
   async exportImage(options = {}) {
