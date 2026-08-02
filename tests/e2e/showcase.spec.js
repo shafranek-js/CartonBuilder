@@ -40,3 +40,19 @@ test('serves the showcase and lazy-loads the interactive viewer', async ({ page 
   await expect(viewer.locator('#panel')).toBeHidden();
   expect(viewerRequests).toHaveLength(1);
 });
+
+test('restarts the background music after a short gap', async ({ page }) => {
+  await page.goto('/showcase/calmdownol/index.html');
+  const music = page.locator('#siteMusic');
+  const musicToggle = page.locator('#musicToggle');
+  await musicToggle.click();
+  await musicToggle.click();
+  await expect.poll(async () => music.evaluate((audio) => audio.paused)).toBe(false);
+  await music.evaluate((audio) => {
+    audio.currentTime = audio.duration;
+    audio.dispatchEvent(new Event('ended'));
+  });
+  await page.waitForTimeout(3_400);
+  await expect(music).toHaveJSProperty('paused', false);
+  await expect.poll(async () => music.evaluate((audio) => audio.currentTime)).toBeLessThan(2);
+});

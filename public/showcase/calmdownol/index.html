@@ -399,7 +399,8 @@ footer p{font-size:.84rem;line-height:1.6}
   const MUSIC_MAX_VOLUME=.42;
   const MUSIC_FADE_IN_SECONDS=6;
   const MUSIC_FADE_OUT_SECONDS=8;
-  let musicEnabled=true, musicFrame=0, musicStarted=false;
+  const MUSIC_GAP_SECONDS=3;
+  let musicEnabled=true, musicFrame=0, musicStarted=false, musicRestartTimer=0;
   try{musicEnabled=localStorage.getItem(MUSIC_STORAGE_KEY)!=='false';}catch{}
 
   const updateMusicButton=(enabled,blocked=false)=>{
@@ -442,6 +443,14 @@ footer p{font-size:.84rem;line-height:1.6}
       return false;
     }
   };
+  const scheduleMusicRestart=()=>{
+    if(!siteMusic||!musicEnabled)return;
+    window.clearTimeout(musicRestartTimer);
+    musicRestartTimer=window.setTimeout(()=>{
+      musicRestartTimer=0;
+      startMusic();
+    },MUSIC_GAP_SECONDS*1000);
+  };
   const retryMusicOnInteraction=()=>{
     if(!musicEnabled||musicStarted)return;
     startMusic({fromUserGesture:true}).then(started=>{
@@ -461,6 +470,8 @@ footer p{font-size:.84rem;line-height:1.6}
     musicEnabled=!musicEnabled;
     try{localStorage.setItem(MUSIC_STORAGE_KEY,String(musicEnabled));}catch{}
     if(!musicEnabled){
+      window.clearTimeout(musicRestartTimer);
+      musicRestartTimer=0;
       siteMusic?.pause();
       if(siteMusic)siteMusic.volume=0;
       musicStarted=false;
@@ -474,7 +485,7 @@ footer p{font-size:.84rem;line-height:1.6}
       window.removeEventListener('keydown',retryMusicOnInteraction);
     }
   });
-  siteMusic?.addEventListener('ended',()=>{musicStarted=false;siteMusic.volume=0;});
+  siteMusic?.addEventListener('ended',()=>{musicStarted=false;siteMusic.volume=0;scheduleMusicRestart();});
 
   const render=()=>{ box.style.transform=`translate(-50%,-50%) rotateX(${rx}deg) rotateY(${ry}deg) scale(${scale})`; };
   const loop=()=>{ if(auto && !dragging){ry+=.18;render();} raf=requestAnimationFrame(loop); };
