@@ -8,6 +8,13 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4173',
     headless: true,
     trace: 'retain-on-failure',
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: 'http://127.0.0.1:4173',
+        localStorage: [{ name: 'carton-builder-first-run-example-v1', value: 'true' }],
+      }],
+    },
   },
   webServer: {
     command: 'npm run preview -- --host 127.0.0.1 --port 4173',

@@ -2528,6 +2528,26 @@ export function createArtworkApp({
     }
   }
 
+  async function restoreProjectFromUrl(url) {
+    try {
+      processing.hidden = false;
+      processing.setAttribute('aria-busy', 'true');
+      processingText.textContent = t('processing');
+      const response = await windowRef.fetch(url, { cache: 'force-cache' });
+      if (!response.ok) throw new Error(`Could not load example project: ${response.status}`);
+      const project = await readProjectArchive(await response.blob());
+      restoreProject(project);
+      onProjectLoaded(project.snapshot);
+      return true;
+    } catch (error) {
+      console.warn('Could not restore the first-run example project', error);
+      return false;
+    } finally {
+      processing.hidden = true;
+      processing.removeAttribute('aria-busy');
+    }
+  }
+
   render();
 
   return {
@@ -2546,6 +2566,7 @@ export function createArtworkApp({
     flushPendingSave,
     dispose,
     restoreAutosave,
+    restoreProjectFromUrl,
     get originalBlob() { return originalBlob; },
     get previewBlob() { return previewBlob; },
     getArtworks,

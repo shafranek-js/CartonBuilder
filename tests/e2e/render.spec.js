@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { inflateSync } from 'node:zlib';
 
 test.setTimeout(90_000);
 
@@ -37,6 +38,63 @@ async function loadArtwork(page) {
   });
   await expect(page.locator('#artworkFileName')).toHaveText('render-fixture.png');
   await expect(page.locator('#processingOverlay')).toBeHidden();
+}
+
+function getPngPixelSummary(bytes) {
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let colorType = 0;
+  const imageData = [];
+  while (offset < bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString('ascii', offset + 4, offset + 8);
+    const chunk = bytes.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = chunk.readUInt32BE(0);
+      height = chunk.readUInt32BE(4);
+      colorType = chunk[9];
+    } else if (type === 'IDAT') {
+      imageData.push(chunk);
+    } else if (type === 'IEND') {
+      break;
+    }
+    offset += length + 12;
+  }
+  if (colorType !== 6 || !width || !height) return { varied: false, firstPixel: null };
+  const inflated = inflateSync(Buffer.concat(imageData));
+  const rowBytes = width * 4;
+  let previous = Buffer.alloc(rowBytes);
+  let firstPixel = null;
+  let varied = false;
+  let cursor = 0;
+  for (let y = 0; y < height; y += 1) {
+    const filter = inflated[cursor++];
+    const row = Buffer.from(inflated.subarray(cursor, cursor + rowBytes));
+    cursor += rowBytes;
+    for (let x = 0; x < rowBytes; x += 1) {
+      const left = x >= 4 ? row[x - 4] : 0;
+      const above = previous[x];
+      const upperLeft = x >= 4 ? previous[x - 4] : 0;
+      if (filter === 1) row[x] = (row[x] + left) & 0xff;
+      else if (filter === 2) row[x] = (row[x] + above) & 0xff;
+      else if (filter === 3) row[x] = (row[x] + Math.floor((left + above) / 2)) & 0xff;
+      else if (filter === 4) {
+        const p = left + above - upperLeft;
+        const pa = Math.abs(p - left);
+        const pb = Math.abs(p - above);
+        const pc = Math.abs(p - upperLeft);
+        row[x] = (row[x] + (pa <= pb && pa <= pc ? left : pb <= pc ? above : upperLeft)) & 0xff;
+      } else if (filter !== 0) return { varied: false, firstPixel: null };
+    }
+    for (let x = 0; x < rowBytes; x += 4) {
+      const pixel = row.subarray(x, x + 4).toString('hex');
+      if (firstPixel == null) firstPixel = pixel;
+      else if (pixel !== firstPixel) varied = true;
+    }
+    previous = row;
+  }
+  return { varied, firstPixel };
 }
 
 async function openRender(page) {
@@ -145,6 +203,8 @@ test('exports a PNG with the selected 2048 output dimensions', async ({ page }) 
   expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   expect(bytes.readUInt32BE(16)).toBe(2048);
   expect(bytes.readUInt32BE(20)).toBe(1536);
+  expect(bytes.length).toBeGreaterThan(10_000);
+  expect(getPngPixelSummary(bytes)).toMatchObject({ varied: true });
 });
 
 test('restores Render settings and workflow step through autosave', async ({ page }) => {
