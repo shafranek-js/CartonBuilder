@@ -14,6 +14,12 @@ test('serves the showcase and lazy-loads the interactive viewer', async ({ page 
 
   await page.goto('/showcase/calmdownol/index.html');
   await expect(page.getByRole('heading', { name: 'Calmdownol®' })).toBeVisible();
+  await expect(page.locator('#siteMusic')).toHaveAttribute('src', './assets/royal-lemur-protocol.mp3');
+  const musicToggle = page.locator('#musicToggle');
+  await expect(musicToggle).toHaveAttribute('aria-pressed', 'true');
+  await musicToggle.click();
+  await expect(musicToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(musicToggle).toContainText('Music: off');
   await expect(page.locator('#cartonViewer')).not.toHaveAttribute('src', /.+/);
   expect(viewerRequests).toHaveLength(0);
 

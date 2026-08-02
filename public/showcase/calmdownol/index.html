@@ -59,6 +59,10 @@ h1 sup{font-size:.22em;vertical-align:top;letter-spacing:0}
 .btn{border-radius:999px;padding:14px 21px;font-weight:800;border:1px solid var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:9px}
 .btn.primary{background:var(--ink);color:white}
 .btn.secondary{background:white;color:var(--ink)}
+.music-toggle{background:var(--mint-2);color:var(--ink);border-color:var(--line)}
+.music-toggle[aria-pressed="false"]{background:white;color:var(--muted)}
+.music-toggle span:first-child{font-size:1.15em;line-height:1}
+.site-music{display:none}
 .disclaimer{font-size:.78rem;color:var(--muted);max-width:580px;line-height:1.5}
 .badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
 .badge{border:1px solid var(--line);background:rgba(255,255,255,.72);padding:9px 12px;border-radius:12px;font-size:.78rem;font-weight:750;color:#36584e}
@@ -200,6 +204,9 @@ footer p{font-size:.84rem;line-height:1.6}
       <div class="hero-actions">
         <a class="btn primary" href="#science">Read the evidence</a>
         <a class="btn secondary" href="#viewer">Examine packaging in 3D</a>
+        <button class="btn music-toggle" id="musicToggle" type="button" aria-pressed="true" title="Toggle music">
+          <span aria-hidden="true">♫</span><span data-music-label>Music: on</span>
+        </button>
       </div>
       <p class="disclaimer"><strong>Important:</strong> Calmdownol® is a fictional parody product. It does not diagnose, treat, cure or prevent anything—except perhaps the mood of the person reading this page.</p>
       <div class="badges">
@@ -358,6 +365,8 @@ footer p{font-size:.84rem;line-height:1.6}
 </section>
 </main>
 
+<audio class="site-music" id="siteMusic" src="./assets/royal-lemur-protocol.mp3" preload="auto" aria-hidden="true"></audio>
+
 <footer>
   <div class="wrap">
     <div class="footer-grid">
@@ -379,7 +388,91 @@ footer p{font-size:.84rem;line-height:1.6}
   const loadModelButton = document.getElementById('loadModelButton');
   const viewerLoader = document.getElementById('viewerLoader');
   const cartonViewer = document.getElementById('cartonViewer');
+  const siteMusic = document.getElementById('siteMusic');
+  const musicToggle = document.getElementById('musicToggle');
+  const musicLabel = musicToggle?.querySelector('[data-music-label]');
   let rx=-10, ry=-28, scale=1, dragging=false, sx=0, sy=0, startRx=0, startRy=0, auto=true, raf;
+
+  const MUSIC_STORAGE_KEY='calmdownol-music-enabled-v1';
+  const MUSIC_MAX_VOLUME=.42;
+  const MUSIC_FADE_IN_SECONDS=6;
+  const MUSIC_FADE_OUT_SECONDS=8;
+  let musicEnabled=true, musicFrame=0, musicStarted=false;
+  try{musicEnabled=localStorage.getItem(MUSIC_STORAGE_KEY)!=='false';}catch{}
+
+  const updateMusicButton=(enabled,blocked=false)=>{
+    if(!musicToggle)return;
+    musicToggle.setAttribute('aria-pressed',String(enabled));
+    musicToggle.title=enabled?'Turn music off':'Turn music on';
+    if(musicLabel)musicLabel.textContent=blocked?'Enable music':`Music: ${enabled?'on':'off'}`;
+  };
+  const musicVolume=()=>{
+    if(!siteMusic?.duration||!Number.isFinite(siteMusic.duration))return 0;
+    const elapsed=siteMusic.currentTime;
+    const fadeOutStart=Math.max(MUSIC_FADE_IN_SECONDS,siteMusic.duration-MUSIC_FADE_OUT_SECONDS);
+    if(elapsed<MUSIC_FADE_IN_SECONDS)return MUSIC_MAX_VOLUME*(elapsed/MUSIC_FADE_IN_SECONDS);
+    if(elapsed>fadeOutStart)return MUSIC_MAX_VOLUME*Math.max(0,(siteMusic.duration-elapsed)/MUSIC_FADE_OUT_SECONDS);
+    return MUSIC_MAX_VOLUME;
+  };
+  const animateMusic=()=>{
+    if(!siteMusic)return;
+    siteMusic.volume=Math.max(0,Math.min(MUSIC_MAX_VOLUME,musicVolume()));
+    if(!siteMusic.paused)musicFrame=requestAnimationFrame(animateMusic);
+    else musicFrame=0;
+  };
+  const startMusic=async({fromUserGesture=false}={})=>{
+    if(!siteMusic||!musicEnabled)return false;
+    if(siteMusic.ended)siteMusic.currentTime=0;
+    siteMusic.volume=0;
+    try{
+      await siteMusic.play();
+      if(!musicEnabled){
+        siteMusic.pause();
+        siteMusic.volume=0;
+        return false;
+      }
+      musicStarted=true;
+      updateMusicButton(true);
+      if(!musicFrame)animateMusic();
+      return true;
+    }catch{
+      if(fromUserGesture)updateMusicButton(true,true);
+      return false;
+    }
+  };
+  const retryMusicOnInteraction=()=>{
+    if(!musicEnabled||musicStarted)return;
+    startMusic({fromUserGesture:true}).then(started=>{
+      if(started){
+        window.removeEventListener('pointerdown',retryMusicOnInteraction);
+        window.removeEventListener('keydown',retryMusicOnInteraction);
+      }
+    });
+  };
+  updateMusicButton(musicEnabled);
+  if(musicEnabled){
+    startMusic();
+    window.addEventListener('pointerdown',retryMusicOnInteraction,{passive:true});
+    window.addEventListener('keydown',retryMusicOnInteraction);
+  }
+  musicToggle?.addEventListener('click',async()=>{
+    musicEnabled=!musicEnabled;
+    try{localStorage.setItem(MUSIC_STORAGE_KEY,String(musicEnabled));}catch{}
+    if(!musicEnabled){
+      siteMusic?.pause();
+      if(siteMusic)siteMusic.volume=0;
+      musicStarted=false;
+      updateMusicButton(false);
+      return;
+    }
+    updateMusicButton(true);
+    const started=await startMusic({fromUserGesture:true});
+    if(started){
+      window.removeEventListener('pointerdown',retryMusicOnInteraction);
+      window.removeEventListener('keydown',retryMusicOnInteraction);
+    }
+  });
+  siteMusic?.addEventListener('ended',()=>{musicStarted=false;siteMusic.volume=0;});
 
   const render=()=>{ box.style.transform=`translate(-50%,-50%) rotateX(${rx}deg) rotateY(${ry}deg) scale(${scale})`; };
   const loop=()=>{ if(auto && !dragging){ry+=.18;render();} raf=requestAnimationFrame(loop); };
