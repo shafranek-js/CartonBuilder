@@ -19,12 +19,14 @@ import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 import { createRenderApp } from './render/RenderApp.js';
 import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
+import { readRenderSettings, writeRenderSettings } from './render/renderSettingsStorage.js';
 import { restoreStartupProject } from './project/firstRunExample.js';
 
 initializeI18n();
 applyTheme(getSavedTheme());
 
 const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
+const storedRenderSettings = readRenderSettings();
 const boxStep = document.getElementById('boxStep');
 const artworkStep = document.getElementById('artworkStep');
 const previewStep = document.getElementById('previewStep');
@@ -324,7 +326,7 @@ artworkApp = createArtworkApp({
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot) => {
     preview3dFacade?.resetForProject();
-    renderApp?.restoreState(snapshot.render);
+    renderApp?.restoreState(snapshot.render, snapshot.renderAppearance);
     const hasArtwork = Boolean(snapshot.artworks?.length);
     let targetStep = 'box';
     if (snapshot.workflowStep === 'render' && hasArtwork && model.isComplete) {
@@ -343,6 +345,7 @@ artworkApp = createArtworkApp({
   },
   getWorkflowStep: () => currentStep,
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
+  getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
   onArtworkQualityChanged: ({ kind } = {}) => {
     if (kind === 'preview') preview3dFacade?.refreshArtwork?.();
@@ -366,8 +369,15 @@ renderApp = createRenderApp({
   boxModel: model,
   getArtworks: () => artworkApp.getArtworks(),
   getArtworksJson: () => artworkApp.getArtworksJson(),
-  initialState: DEFAULT_RENDER_SETTINGS,
-  onStateChange: () => artworkApp?.notifyRenderStateChanged?.(),
+  initialState: storedRenderSettings?.renderSettings || DEFAULT_RENDER_SETTINGS,
+  initialBoardAppearance: storedRenderSettings?.boardAppearance,
+  onStateChange: () => {
+    writeRenderSettings({
+      renderSettings: renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
+      boardAppearance: renderApp?.getBoardAppearance?.(),
+    });
+    artworkApp?.notifyRenderStateChanged?.();
+  },
   setArtworkQuality: (...args) => artworkApp?.setArtworkQuality?.(...args),
   onBackToPreview: () => showStep('preview'),
 });

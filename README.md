@@ -183,9 +183,11 @@ The optional path-tracing experiment is only exposed with
 `VITE_ENABLE_RENDER_PATH_TRACING=true`; it is not part of the production raster
 pipeline and requires a separately installed compatible addon.
 
-Render settings and per-artwork quality are part of project schema version 6 and are restored by
-IndexedDB autosave and `.carton` archives. GPU resources, progress, and renderer
-diagnostics remain transient. WebGL 2 is required for the presentation scene;
+All Render controls, including Board appearance and HTML texture quality, are
+saved immediately in browser storage and included in the current project
+snapshot. They are restored after a page reload, IndexedDB autosave restore,
+or `.carton` import. GPU resources, progress, and renderer diagnostics remain
+transient. WebGL 2 is required for the presentation scene;
 when unavailable, the 2D editor, technical exports, and project files remain
 usable.
 
