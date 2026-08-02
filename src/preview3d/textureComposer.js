@@ -1,3 +1,5 @@
+import { rasterizeArtwork } from '../artwork/artworkRasterizer.js';
+
 export const PREVIEW_TEXTURE_LIMITS = Object.freeze({
   maxEdge: 4096,
   maxPixels: 16_000_000,
@@ -9,7 +11,7 @@ function finitePositive(value, fallback = 1) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-export function getTextureSize(bounds, artworks, limits = PREVIEW_TEXTURE_LIMITS) {
+export function getTextureSize(bounds, artworks, limits = PREVIEW_TEXTURE_LIMITS, { targetDpi = null } = {}) {
   const widthMm = finitePositive(bounds.width);
   const heightMm = finitePositive(bounds.height);
   const edgeScale = Math.min(limits.maxEdge / widthMm, limits.maxEdge / heightMm);
@@ -28,7 +30,8 @@ export function getTextureSize(bounds, artworks, limits = PREVIEW_TEXTURE_LIMITS
     );
   }
   if (!Number.isFinite(sourceScale)) sourceScale = Infinity;
-  const pixelsPerMm = Math.max(0.01, Math.min(edgeScale, areaScale, sourceScale));
+  const requestedScale = Number(targetDpi) > 0 ? Number(targetDpi) / 25.4 : sourceScale;
+  const pixelsPerMm = Math.max(0.01, Math.min(edgeScale, areaScale, requestedScale));
   const width = Math.max(1, Math.floor(widthMm * pixelsPerMm));
   const height = Math.max(1, Math.floor(heightMm * pixelsPerMm));
   return { width, height, pixelsPerMm };
@@ -104,6 +107,10 @@ export async function composeArtworkTexture({
   artworks,
   documentRef = globalThis.document,
   createImageBitmapFn = globalThis.createImageBitmap,
+  purpose = 'preview',
+  targetDpi = null,
+  getEntryTargetDpi = null,
+  rasterize = rasterizeArtwork,
   signal,
 }) {
   const entries = (artworks || [])
@@ -115,7 +122,7 @@ export async function composeArtworkTexture({
 
   const bounds = boxModel.getBounds();
   const panels = boxModel.getPanels();
-  const { width, height, pixelsPerMm } = getTextureSize(bounds, entries);
+  const { width, height, pixelsPerMm } = getTextureSize(bounds, entries, PREVIEW_TEXTURE_LIMITS, { targetDpi });
   const rawCanvas = createCanvas(width, height, documentRef);
   const rawContext = rawCanvas.getContext('2d', { alpha: true });
   const outputCanvas = createCanvas(width, height, documentRef);
@@ -124,7 +131,22 @@ export async function composeArtworkTexture({
 
   try {
     for (const entry of entries) {
-      const bitmap = await createImageBitmapFn(entry.previewBlob, { imageOrientation: 'from-image' });
+      let renderBlob = entry.renderBlob || entry.previewBlob;
+      if (rasterize && (entry.originalBlob || entry.model?.source?.vector) && !entry.renderBlob) {
+        const entryTargetDpi = typeof getEntryTargetDpi === 'function'
+          ? getEntryTargetDpi(entry, pixelsPerMm * 25.4)
+          : pixelsPerMm * 25.4;
+        const rendered = await rasterize({
+          entry,
+          purpose,
+          targetDpi: entryTargetDpi,
+          requiredDpi: entryTargetDpi,
+          documentRef,
+          signal,
+        });
+        renderBlob = rendered.blob;
+      }
+      const bitmap = await createImageBitmapFn(renderBlob, { imageOrientation: 'from-image' });
       bitmaps.push(bitmap);
     }
     throwIfAborted(signal);
@@ -156,6 +178,7 @@ export async function composeArtworkTexture({
       width,
       height,
       pixelsPerMm,
+      dpi: pixelsPerMm * 25.4,
     };
   } finally {
     for (const bitmap of bitmaps) bitmap?.close?.();

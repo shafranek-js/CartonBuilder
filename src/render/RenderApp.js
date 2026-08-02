@@ -1,4 +1,6 @@
 import { t } from '../i18n.js';
+import { ARTWORK_RENDER_QUALITY_OPTIONS } from '../artwork/ArtworkModel.js';
+import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
 import { composeArtworkTexture } from '../preview3d/textureComposer.js';
 import { buildRenderSceneModel, getRenderArtworkSignature } from './RenderSceneModel.js';
@@ -51,6 +53,21 @@ function createSaveTypes(format) {
     : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
 }
 
+function getRenderTextureDpi(boxModel, dimensions) {
+  const bounds = boxModel.getBounds();
+  return Math.max(
+    150,
+    Math.max(dimensions.width / bounds.width, dimensions.height / bounds.height) * 25.4 * 1.25,
+  );
+}
+
+const RENDER_ASPECT_LABELS = Object.freeze({
+  square: '1:1',
+  landscape: '4:3',
+  wide: '16:9',
+  portrait: '3:4',
+});
+
 export function createRenderApp({
   boxModel,
   getArtworks,
@@ -58,6 +75,7 @@ export function createRenderApp({
   windowRef = window,
   initialState = DEFAULT_RENDER_SETTINGS,
   onStateChange = () => {},
+  setArtworkQuality = () => false,
   onBackToPreview = () => {},
 }) {
   const elements = {
@@ -122,6 +140,11 @@ export function createRenderApp({
     deleteNamedPreset: documentRef.getElementById('deleteRenderPresetButton'),
     experimentalPathTracing: documentRef.getElementById('experimentalPathTracingButton'),
     diagnosticsOutput: documentRef.getElementById('renderDiagnosticsOutput'),
+    artworkQualityList: documentRef.getElementById('renderArtworkQualityList'),
+    viewportOverlay: documentRef.getElementById('renderViewportOverlay'),
+    viewportFrame: documentRef.getElementById('renderViewportFrame'),
+    viewportLabel: documentRef.getElementById('renderViewportLabel'),
+    viewportSummary: documentRef.getElementById('renderViewportSummary'),
     presetButtons: [...documentRef.querySelectorAll('[data-render-preset]')],
   };
 
@@ -190,6 +213,70 @@ export function createRenderApp({
       elements.namedPreset.append(option);
     }
     elements.namedPreset.value = namedPresets.some((preset) => preset.id === selected) ? selected : '';
+  }
+
+  function updateArtworkQualityList() {
+    if (!elements.artworkQualityList) return;
+    const entries = getArtworks?.() || [];
+    elements.artworkQualityList.replaceChildren();
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      const model = entry?.model;
+      if (!model?.hasArtwork || entry.visible === false) continue;
+      const row = documentRef.createElement('label');
+      row.className = 'render-artwork-quality-row';
+      const name = documentRef.createElement('span');
+      name.className = 'render-artwork-quality-name';
+      name.textContent = model.source?.fileName || t('artwork');
+      name.title = name.textContent;
+      const select = documentRef.createElement('select');
+      select.dataset.renderArtworkIndex = String(index);
+      select.setAttribute('aria-label', `${t('renderQuality')} ${name.textContent}`);
+      for (const value of ARTWORK_RENDER_QUALITY_OPTIONS) {
+        const option = documentRef.createElement('option');
+        option.value = String(value);
+        option.textContent = value === 'auto' ? t('qualityAuto') : `${value} DPI`;
+        select.appendChild(option);
+      }
+      select.value = String(model.quality?.render || 'auto');
+      if (!model.source?.vector) {
+        select.disabled = true;
+        select.title = t('qualityNativePixels');
+      }
+      select.addEventListener('change', () => {
+        setArtworkQuality('render', select.value, index);
+        updateArtworkQualityList();
+      });
+      row.append(name, select);
+      elements.artworkQualityList.appendChild(row);
+    }
+  }
+
+  function updateViewportOverlay() {
+    const dimensions = getRenderOutputDimensions(state);
+    const aspect = dimensions.width / dimensions.height;
+    const aspectLabel = RENDER_ASPECT_LABELS[state.aspect] || `${dimensions.width}:${dimensions.height}`;
+    const summary = t('renderViewportSummary', {
+      width: dimensions.width,
+      height: dimensions.height,
+      aspect: aspectLabel,
+    });
+    if (elements.viewportSummary) elements.viewportSummary.textContent = summary;
+    if (elements.viewportLabel) elements.viewportLabel.textContent = summary;
+    if (!elements.viewportOverlay || !elements.viewportFrame) return;
+
+    const availableWidth = Math.max(1, elements.viewportOverlay.clientWidth);
+    const availableHeight = Math.max(1, elements.viewportOverlay.clientHeight);
+    let frameWidth = availableWidth;
+    let frameHeight = frameWidth / aspect;
+    if (frameHeight > availableHeight) {
+      frameHeight = availableHeight;
+      frameWidth = frameHeight * aspect;
+    }
+    elements.viewportFrame.style.width = `${Math.max(1, Math.floor(frameWidth))}px`;
+    elements.viewportFrame.style.height = `${Math.max(1, Math.floor(frameHeight))}px`;
+    elements.viewportFrame.style.left = `${Math.max(0, Math.floor((availableWidth - frameWidth) / 2))}px`;
+    elements.viewportFrame.style.top = `${Math.max(0, Math.floor((availableHeight - frameHeight) / 2))}px`;
   }
 
   function updateControls() {
@@ -272,6 +359,8 @@ export function createRenderApp({
     if (elements.namedPreset) elements.namedPreset.value = activeNamedPresetId;
     updateNamedPresetOptions();
     updatePresetButtons();
+    updateArtworkQualityList();
+    updateViewportOverlay();
     updateDiagnostics();
   }
 
@@ -323,7 +412,7 @@ export function createRenderApp({
     };
   }
 
-  async function syncScene({ force = false } = {}) {
+  async function syncScene({ force = false, purpose = 'render-screen', targetDpi = null } = {}) {
     if (!active || disposed) return false;
     const signatures = currentSignatures();
     const structureChanged = force || !renderer || signatures.structure !== structureSignature;
@@ -343,10 +432,20 @@ export function createRenderApp({
     hideRecovery();
 
     try {
+      const textureDpi = targetDpi || getRenderTextureDpi(boxModel, {
+        width: Math.max(1, elements.canvas?.clientWidth || 1),
+        height: Math.max(1, elements.canvas?.clientHeight || 1),
+      });
       const composed = await composeArtworkTexture({
         boxModel,
         artworks: signatures.sceneModel.artworks,
         documentRef,
+        purpose,
+        targetDpi: textureDpi,
+        getEntryTargetDpi: (entry) => resolveArtworkDpi(entry?.model?.quality?.render, {
+          purpose,
+          requiredDpi: textureDpi,
+        }),
         signal: syncController.signal,
       });
       if (generation !== syncGeneration || syncController.signal.aborted) return false;
@@ -407,6 +506,7 @@ export function createRenderApp({
     updateControls();
     await syncScene();
     windowRef.requestAnimationFrame(() => renderer?.resize());
+    windowRef.requestAnimationFrame(updateViewportOverlay);
     return Boolean(renderer);
   }
 
@@ -510,6 +610,13 @@ export function createRenderApp({
     setBusy(true);
     elements.status.textContent = t('renderExporting');
     try {
+      const outputDimensions = getRenderOutputDimensions(exportState);
+      const synced = await syncScene({
+        force: true,
+        purpose: 'render-export',
+        targetDpi: getRenderTextureDpi(boxModel, outputDimensions),
+      });
+      if (!synced || !renderer) throw new Error('Render texture could not be prepared.');
       const blob = await renderStill({
         renderer,
         settings: exportState,
@@ -518,7 +625,6 @@ export function createRenderApp({
         signal: controller.signal,
       });
       const dimensions = boxModel.dimensions;
-      const outputDimensions = getRenderOutputDimensions(exportState);
       const extension = format === 'png' ? 'png' : 'jpg';
       await saveOrDownloadFile({
         blob,
@@ -614,6 +720,13 @@ export function createRenderApp({
   elements.jpg.addEventListener('click', () => exportImage('jpg'));
   elements.back.addEventListener('click', onBackToPreview);
   elements.retry.addEventListener('click', () => syncScene({ force: true }));
+  const handleWindowResize = () => {
+    renderer?.resize();
+    updateViewportOverlay();
+  };
+  const handleLocaleChanged = () => updateControls();
+  windowRef.addEventListener('resize', handleWindowResize);
+  documentRef.addEventListener('carton-locale-changed', handleLocaleChanged);
 
   updateControls();
 
@@ -626,6 +739,10 @@ export function createRenderApp({
     getState,
     getBoardAppearance() {
       return cloneBoardAppearance(boardAppearance);
+    },
+    refreshArtwork() {
+      if (!active) return Promise.resolve(false);
+      return syncScene({ force: true });
     },
     render() {
       renderer?.render();
@@ -641,6 +758,8 @@ export function createRenderApp({
       pathTracingService?.dispose();
       renderer?.dispose();
       renderer = null;
+      windowRef.removeEventListener('resize', handleWindowResize);
+      documentRef.removeEventListener('carton-locale-changed', handleLocaleChanged);
     },
   };
 }

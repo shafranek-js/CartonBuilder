@@ -18,6 +18,7 @@ import { loadArtworkFile, renderPdfWithLayers } from './fileLoader.js';
 import { getSnapOffset, buildSnapTargets, getResizeSnapScale, getDisplayedReferenceFraction } from './snap.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
+import { getArtworkRasterSignature, rasterizeArtwork, resolveArtworkDpi } from './artworkRasterizer.js';
 
 const SNAP_SCREEN_PX = 6;
 
@@ -146,6 +147,7 @@ export function createArtworkApp({
   getWorkflowStep = () => 'artwork',
   getRenderState = () => DEFAULT_RENDER_SETTINGS,
   onRenderStateChanged = () => {},
+  onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
 }) {
   let artwork = new ArtworkModel();
@@ -196,6 +198,9 @@ export function createArtworkApp({
     bgOpacity: documentRef.getElementById('artworkBgOpacity'),
     bgOpacityValue: documentRef.getElementById('artworkBgOpacityValue'),
     dpi: documentRef.getElementById('effectiveDpi'),
+    previewQuality: documentRef.getElementById('artworkPreviewQuality'),
+    renderQuality: documentRef.getElementById('artworkRenderQuality'),
+    qualitySummary: documentRef.getElementById('artworkQualitySummary'),
     choose: documentRef.getElementById('chooseArtworkButton'),
     replace: documentRef.getElementById('replaceArtworkButton'),
     remove: documentRef.getElementById('removeArtworkButton'),
@@ -251,6 +256,9 @@ export function createArtworkApp({
   let processingController = null;
   let pdfRenderGeneration = 0;
   let pdfRenderController = null;
+  let previewResourceGeneration = 0;
+  let previewResourceController = null;
+  const previewResourceSignatures = new Map();
   let projectCreatedAt = new Date().toISOString();
   let errorRetry = null;
   let currentError = null;
@@ -344,6 +352,7 @@ export function createArtworkApp({
         color: entry.color || assignLayerColor(artworks.map((e) => e.color)),
         originalBlob: entry.originalBlob || null,
         previewBlob: entry.previewBlob || null,
+        displayBlob: null,
       });
     }
     Object.assign(layers, state.layers);
@@ -455,6 +464,7 @@ export function createArtworkApp({
     renderer.setArtworks(artworks);
     renderPdfLayers();
     render();
+    refreshPreviewResources();
     if (fit) windowRef.requestAnimationFrame(() => renderer.fitToScreen());
     scheduleSave();
   }
@@ -464,8 +474,66 @@ export function createArtworkApp({
       model: entry.model,
       originalBlob: entry.originalBlob,
       previewBlob: entry.previewBlob,
+      displayBlob: entry.displayBlob || null,
       visible: entry.visible,
     }));
+  }
+
+  function getPreviewResourceDpi() {
+    const bounds = boxModel.getBounds();
+    const width = Math.max(1, svg?.clientWidth || 1);
+    const height = Math.max(1, svg?.clientHeight || 1);
+    return Math.max(
+      150,
+      Math.min(600, Math.max(width / Math.max(1, bounds.width), height / Math.max(1, bounds.height)) * 25.4 * 1.5),
+    );
+  }
+
+  async function refreshPreviewResources({ force = false } = {}) {
+    if (disposed || !artworks.length) return false;
+    const targetDpi = getPreviewResourceDpi();
+    const candidates = artworks.filter((entry) => entry.model.hasArtwork && entry.originalBlob);
+    const pending = candidates.filter((entry) => {
+      const signature = `${getArtworkRasterSignature(entry, 'preview')}|${targetDpi.toFixed(2)}`;
+      return force || previewResourceSignatures.get(entry.model.source.id) !== signature;
+    });
+    if (!pending.length) return false;
+    previewResourceController?.abort();
+    const controller = new AbortController();
+    previewResourceController = controller;
+    const generation = ++previewResourceGeneration;
+    try {
+      for (const entry of pending) {
+        const entryTargetDpi = resolveArtworkDpi(entry.model.quality?.preview, {
+          purpose: 'preview',
+          requiredDpi: targetDpi,
+        });
+        const rendered = await rasterizeArtwork({
+          entry,
+          purpose: 'preview',
+          targetDpi: entryTargetDpi,
+          requiredDpi: targetDpi,
+          signal: controller.signal,
+          documentRef,
+        });
+        if (generation !== previewResourceGeneration || controller.signal.aborted || disposed) return false;
+        entry.displayBlob = rendered.blob;
+        previewResourceSignatures.set(
+          entry.model.source.id,
+          `${getArtworkRasterSignature(entry, 'preview')}|${targetDpi.toFixed(2)}`,
+        );
+      }
+      renderer.setArtworks(artworks);
+      render();
+      return true;
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.warn('Could not prepare high-quality artwork preview', error);
+      }
+      return false;
+    } finally {
+      if (generation === previewResourceGeneration) previewResourceController = null;
+    }
   }
 
   function getArtworksJson() {
@@ -604,6 +672,17 @@ export function createArtworkApp({
     const dpi = artwork.getEffectiveDpi();
     controls.dpi.textContent = !enabled ? '—' : dpi == null ? 'Vector' : `${Math.round(dpi)} DPI`;
     controls.dpi.classList.toggle('low-dpi', dpi != null && dpi < 300);
+    if (controls.previewQuality) controls.previewQuality.value = enabled ? String(artwork.quality?.preview || 'auto') : 'auto';
+    if (controls.renderQuality) controls.renderQuality.value = enabled ? String(artwork.quality?.render || 'auto') : 'auto';
+    if (controls.previewQuality) controls.previewQuality.disabled = !enabled || !artwork.source?.vector;
+    if (controls.renderQuality) controls.renderQuality.disabled = !enabled || !artwork.source?.vector;
+    if (controls.qualitySummary) {
+      controls.qualitySummary.textContent = !enabled
+        ? t('qualityNoArtwork')
+        : artwork.source?.vector
+          ? t('qualityVectorSummary')
+          : t('qualityNativeSummary', { dpi: Math.round(dpi || 0) });
+    }
 
     for (const control of [
       controls.x, controls.y, controls.width, controls.height, controls.opacity,
@@ -810,6 +889,7 @@ export function createArtworkApp({
       model,
       originalBlob: entry.originalBlob ? new Blob([entry.originalBlob], { type: entry.originalBlob.type }) : null,
       previewBlob: entry.previewBlob ? new Blob([entry.previewBlob], { type: 'image/png' }) : null,
+      displayBlob: null,
       visible: entry.visible,
       locked: false,
       color,
@@ -834,6 +914,10 @@ export function createArtworkApp({
     const before = captureEditorState();
     pdfRenderController?.abort();
     pdfRenderController = null;
+    previewResourceController?.abort();
+    previewResourceController = null;
+    previewResourceGeneration += 1;
+    previewResourceSignatures.clear();
     pdfRenderGeneration += 1;
     toRemove.sort((a, b) => b - a);
     for (const index of toRemove) {
@@ -1143,6 +1227,7 @@ export function createArtworkApp({
       previewBlob = entry.previewBlob;
       renderer.setArtworks(artworks);
       render();
+      refreshPreviewResources({ force: true });
     } catch (error) {
       if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return;
       console.error(error);
@@ -1217,6 +1302,7 @@ export function createArtworkApp({
         entry.model = model;
         entry.originalBlob = loaded.originalBlob;
         entry.previewBlob = loaded.previewBlob;
+        entry.displayBlob = null;
         entry.locked = false;
       } else {
         const existingColors = artworks.map((e) => e.color);
@@ -1224,6 +1310,7 @@ export function createArtworkApp({
           model,
           originalBlob: loaded.originalBlob,
           previewBlob: loaded.previewBlob,
+          displayBlob: null,
           visible: true,
           locked: false,
           color: assignLayerColor(existingColors),
@@ -1237,6 +1324,7 @@ export function createArtworkApp({
       renderPdfLayers();
       render();
       windowRef.requestAnimationFrame(() => renderer.fitToScreen());
+      refreshPreviewResources({ force: true });
       commitChange(replace ? 'Replace artwork' : 'Add artwork', before);
       announce(t('processingComplete'));
       windowRef.dispatchEvent(new CustomEvent('artwork-loaded', {
@@ -1805,6 +1893,27 @@ export function createArtworkApp({
   bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
 
+  function setArtworkQuality(kind, value, index = activeArtworkIndex) {
+    const entry = artworks[index];
+    if (!entry?.model?.hasArtwork || !['preview', 'render'].includes(kind)) return false;
+    const before = captureEditorState();
+    if (kind === 'preview') entry.model.setPreviewQuality(value);
+    else entry.model.setRenderQuality(value);
+    commitChange(`Set artwork ${kind} quality`, before);
+    if (kind === 'preview') {
+      refreshPreviewResources({ force: true });
+    }
+    onArtworkQualityChanged({ kind, index, value: entry.model.quality[kind] });
+    return true;
+  }
+
+  controls.previewQuality?.addEventListener('change', (event) => {
+    setArtworkQuality('preview', event.target.value);
+  });
+  controls.renderQuality?.addEventListener('change', (event) => {
+    setArtworkQuality('render', event.target.value);
+  });
+
   let lastNonZeroArtworkOpacity = 1.0;
   const opacityLabel = controls.opacity?.closest('.opacity-row');
   if (opacityLabel) {
@@ -2333,10 +2442,21 @@ export function createArtworkApp({
       } else if (type === 'png' || type === 'jpg') {
         const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
         const { createPreviewBlob } = await import('../export/artworkExport.js');
+        const selectedDpi = exportArtworks
+          .map((entry) => Number(entry.model.quality?.render))
+          .filter((value) => Number.isFinite(value) && value > 0);
+        const hasAutoQuality = exportArtworks.some(
+          (entry) => !Number.isFinite(Number(entry.model.quality?.render)),
+        );
+        const exportDpi = Math.max(
+          selectedDpi.length ? Math.max(...selectedDpi) : 150,
+          hasAutoQuality ? 300 : 0,
+        );
         blob = await createPreviewBlob({
           boxModel,
           artworks: exportArtworks,
           type: mimeType,
+          dpi: exportDpi,
         });
         suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
         types = type === 'png'
@@ -2388,6 +2508,7 @@ export function createArtworkApp({
         color: entry.color || assignLayerColor(artworks.map((e) => e.color)),
         originalBlob: blobs.originalBlob || null,
         previewBlob: blobs.previewBlob || null,
+        displayBlob: null,
       });
     }
     Object.assign(layers, snapshot.view?.layers || {});
@@ -2408,6 +2529,7 @@ export function createArtworkApp({
     for (const [key, control] of Object.entries(layerLockControls)) control.checked = layerLocks[key];
     renderPdfLayers();
     render();
+    refreshPreviewResources({ force: true });
     scheduleSave();
   }
 
@@ -2485,7 +2607,10 @@ export function createArtworkApp({
   windowRef.addEventListener('keyup', (event) => {
     if (event.key === ' ') spacePressed = false;
   });
-  windowRef.addEventListener('resize', () => renderer.render());
+  windowRef.addEventListener('resize', () => {
+    renderer.render();
+    if (!artworkStep.hidden) refreshPreviewResources();
+  });
   documentRef.addEventListener('carton-locale-changed', () => {
     render();
     renderCurrentError();
@@ -2501,6 +2626,10 @@ export function createArtworkApp({
     processingController = null;
     pdfRenderController?.abort();
     pdfRenderController = null;
+    previewResourceController?.abort();
+    previewResourceController = null;
+    previewResourceGeneration += 1;
+    previewResourceSignatures.clear();
     for (const [, cached] of thumbnailUrlCache) {
       if (cached.url) URL.revokeObjectURL(cached.url);
     }
@@ -2557,7 +2686,10 @@ export function createArtworkApp({
     layers,
     layerLocks,
     render,
-    fitToScreen: () => renderer.fitToScreen(),
+    fitToScreen: () => {
+      renderer.fitToScreen();
+      return refreshPreviewResources();
+    },
     createSnapshot,
     saveProjectArchive,
     persistWorkflowStep,
@@ -2571,6 +2703,8 @@ export function createArtworkApp({
     get previewBlob() { return previewBlob; },
     getArtworks,
     getArtworksJson,
+    setArtworkQuality,
+    refreshPreviewResources,
     hasModifiedArtwork: () => artwork.hasArtwork && artwork.modified,
     exportDeliverable,
     resetPlacementForNewDimensions() {

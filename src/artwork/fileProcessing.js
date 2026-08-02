@@ -135,7 +135,15 @@ async function openPdf(file, signal) {
   };
 }
 
-async function renderPdfPageToBlob({ page, pageIndex, originalBytes, optionalContentConfig, signal }) {
+async function renderPdfPageToBlob({
+  page,
+  pageIndex,
+  originalBytes,
+  optionalContentConfig,
+  signal,
+  dpi = null,
+  targetWidthMm = null,
+}) {
   throwIfAborted(signal);
   const { PDFDocument } = await import('pdf-lib');
   throwIfAborted(signal);
@@ -147,7 +155,15 @@ async function renderPdfPageToBlob({ page, pageIndex, originalBytes, optionalCon
   const mediaWidth = Math.abs(mediaBox.width);
   const mediaHeight = Math.abs(mediaBox.height);
   const baseScale = getPreviewScale(mediaWidth * 2, mediaHeight * 2) * 2;
-  const renderScale = Math.max(0.05, baseScale);
+  const requestedWidthPx = Number(dpi) > 0 && Number(targetWidthMm) > 0
+    ? (Number(targetWidthMm) / 25.4) * Number(dpi)
+    : Number(dpi) > 0
+      ? (mediaWidth / 72) * Number(dpi)
+      : null;
+  const renderScale = Math.max(
+    0.05,
+    requestedWidthPx ? requestedWidthPx / mediaWidth : baseScale,
+  );
 
   const cropViewport = page.getViewport({ scale: renderScale, rotation: 0 });
   const cropCanvas = createCanvas(
@@ -248,6 +264,8 @@ async function loadPdf(file, choosePage, signal) {
 export async function renderPdfPreview(file, {
   pageIndex = 0,
   visibility = null,
+  dpi = null,
+  targetWidthMm = null,
   signal,
 } = {}) {
   throwIfAborted(signal);
@@ -271,6 +289,8 @@ export async function renderPdfPreview(file, {
       originalBytes,
       optionalContentConfig,
       signal,
+      dpi,
+      targetWidthMm,
     });
     return {
       previewBlob: rendered.previewBlob,

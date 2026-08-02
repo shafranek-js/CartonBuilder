@@ -42,6 +42,7 @@ async function createBundle() {
     scaleY: 1,
     rotation: 0,
     opacity: 1,
+    quality: { preview: 'auto', render: 'auto' },
     modified: false,
   };
 
@@ -74,7 +75,7 @@ describe('project schema', () => {
     expect(snapshot.artwork.centerXmm).toBe(75);
   });
 
-  it('migrates v2 snapshots through v5 without changing uncropped artwork and box data', async () => {
+  it('migrates v2 snapshots through v6 without changing uncropped artwork and box data', async () => {
     const { snapshot } = await createBundle();
     const v2 = migrateProjectSnapshot(snapshot);
     const canonical = {
@@ -87,7 +88,7 @@ describe('project schema', () => {
     v2.schemaVersion = 2;
     const migrated = migrateProjectSnapshot(v2);
 
-    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(migrated.render).toMatchObject({ presetId: 'clean-studio', longEdge: 2048 });
     expect(migrated.render.effects).toMatchObject({ gtao: { enabled: true }, dof: { enabled: false } });
     expect(migrated.render.boardAppearance).toBeUndefined();
@@ -124,7 +125,7 @@ describe('project schema', () => {
     const current = migrated.artworks[0].artwork;
     const historyArtwork = migrated.history.undo[0].after.artworks[0].artwork;
 
-    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(current).toMatchObject({
       initialWidthMm: 75,
       initialHeightMm: 56.25,
@@ -139,6 +140,25 @@ describe('project schema', () => {
       scaleY: 1,
     });
     expect(migrated.history.redo[0].before.artworks[0].artwork.scaleX).toBe(1);
+  });
+
+  it('adds independent quality defaults to v5 artwork and history snapshots', async () => {
+    const { snapshot } = await createBundle();
+    const v5 = migrateProjectSnapshot(snapshot);
+    delete v5.artworks[0].artwork.quality;
+    const historyState = {
+      artworks: [{ artwork: { ...v5.artworks[0].artwork }, visible: true }],
+      activeArtworkIndex: 0,
+    };
+    delete historyState.artworks[0].artwork.quality;
+    v5.schemaVersion = 5;
+    v5.history = { undo: [{ label: 'legacy', before: historyState, after: historyState }], redo: [] };
+
+    const migrated = migrateProjectSnapshot(v5);
+
+    expect(migrated.artworks[0].artwork.quality).toEqual({ preview: 'auto', render: 'auto' });
+    expect(migrated.history.undo[0].before.artworks[0].artwork.quality)
+      .toEqual({ preview: 'auto', render: 'auto' });
   });
 
   it('normalizes unknown workflow modes and rejects unknown schema versions', async () => {

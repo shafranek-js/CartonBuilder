@@ -20,6 +20,7 @@ import {
 
 import { AppError } from '../errors.js';
 import { getDielineSegments } from '../model/dieline.js';
+import { rasterizeArtwork, resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
 
 const POINTS_PER_MM = 72 / 25.4;
 const EXPORT_DPI = 300;
@@ -49,9 +50,10 @@ export async function createPreviewBlob({
   type = 'image/png',
   dpi = EXPORT_DPI,
   showDieline = true,
+  rasterize = rasterizeArtwork,
 }) {
   const entries = (artworks || [])
-    .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && entry.previewBlob);
+    .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && (entry.previewBlob || entry.originalBlob));
   if (!entries.length) throw new AppError('artworkRequired');
   const bounds = boxModel.getBounds();
   const pixelsPerMm = dpi / 25.4;
@@ -84,9 +86,17 @@ export async function createPreviewBlob({
   const bitmaps = [];
   try {
     for (const entry of entries) {
-      const renderBlob = entry.model.source.mimeType === 'application/pdf'
-        ? entry.previewBlob
-        : entry.originalBlob || entry.previewBlob;
+      const targetDpi = resolveArtworkDpi(entry.model.quality?.render, {
+        purpose: 'raster-export',
+        requiredDpi: dpi,
+      });
+      const rendered = await rasterize({
+        entry,
+        purpose: 'raster-export',
+        targetDpi,
+        requiredDpi: dpi,
+      });
+      const renderBlob = rendered.blob || entry.originalBlob || entry.previewBlob;
       const bitmap = await createImageBitmap(renderBlob, { imageOrientation: 'from-image' });
       bitmaps.push(bitmap);
       context.save();

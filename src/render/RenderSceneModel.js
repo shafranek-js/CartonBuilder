@@ -16,6 +16,7 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
     .map((entry) => ({
       model: entry.model,
       visible: true,
+      originalBlob: entry.originalBlob || null,
       previewBlob: entry.previewBlob || null,
     }));
   if (!visibleArtworks.length) {

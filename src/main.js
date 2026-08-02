@@ -344,6 +344,10 @@ artworkApp = createArtworkApp({
   getWorkflowStep: () => currentStep,
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
+  onArtworkQualityChanged: ({ kind } = {}) => {
+    if (kind === 'preview') preview3dFacade?.refreshArtwork?.();
+    renderApp?.refreshArtwork?.();
+  },
   onStateChanged: () => updateStepNavigationStates(),
 });
 
@@ -362,6 +366,7 @@ renderApp = createRenderApp({
   getArtworksJson: () => artworkApp.getArtworksJson(),
   initialState: DEFAULT_RENDER_SETTINGS,
   onStateChange: () => artworkApp?.notifyRenderStateChanged?.(),
+  setArtworkQuality: (...args) => artworkApp?.setArtworkQuality?.(...args),
   onBackToPreview: () => showStep('preview'),
 });
 

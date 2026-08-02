@@ -44,7 +44,7 @@ async function startJob(jobId, file) {
   }
 }
 
-async function startRenderJob(jobId, file, { pageIndex, visibility }) {
+async function startRenderJob(jobId, file, { pageIndex, visibility, dpi, targetWidthMm }) {
   activeJob?.controller.abort();
   const controller = new AbortController();
   activeJob = {
@@ -58,6 +58,8 @@ async function startRenderJob(jobId, file, { pageIndex, visibility }) {
     const result = await renderPdfPreview(file, {
       pageIndex,
       visibility,
+      dpi,
+      targetWidthMm,
       signal: controller.signal,
     });
     if (activeJob?.jobId !== jobId) return;

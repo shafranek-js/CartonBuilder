@@ -1,4 +1,5 @@
 import { t } from '../i18n.js';
+import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
 import { BoxScene } from './BoxScene.js';
 import { composeArtworkTexture } from './textureComposer.js';
 import { readSceneSettings, sanitizeSceneSettings, writeSceneSettings, SCENE_FIELDS } from './sceneSettings.js';
@@ -60,6 +61,23 @@ function easeInOutCubic(value) {
 
 function roundDimension(value) {
   return Number(value.toFixed(2)).toString();
+}
+
+function getPreviewTextureDpi(boxModel, artworks, canvas) {
+  const bounds = boxModel.getBounds();
+  const width = Math.max(1, canvas?.clientWidth || canvas?.width || 1);
+  const height = Math.max(1, canvas?.clientHeight || canvas?.height || 1);
+  const requiredDpi = Math.max(
+    150,
+    Math.min(600, Math.max(width / bounds.width, height / bounds.height) * 25.4 * 1.25),
+  );
+  return Math.max(
+    150,
+    ...(artworks || []).map((entry) => resolveArtworkDpi(entry?.model?.quality?.preview, {
+      purpose: 'preview',
+      requiredDpi,
+    })),
+  );
 }
 
 export function createPreview3DApp({
@@ -275,10 +293,18 @@ export function createPreview3DApp({
     hideRecovery();
 
     try {
+      const artworks = getArtworks ? getArtworks() : [];
+      const targetDpi = getPreviewTextureDpi(boxModel, artworks, elements.canvas);
       const composed = await composeArtworkTexture({
         boxModel,
-        artworks: getArtworks ? getArtworks() : [],
+        artworks,
         documentRef,
+        purpose: 'preview',
+        targetDpi,
+        getEntryTargetDpi: (entry) => resolveArtworkDpi(entry?.model?.quality?.preview, {
+          purpose: 'preview',
+          requiredDpi: targetDpi,
+        }),
         signal: controller.signal,
       });
       if (disposed || generation !== syncGeneration || controller.signal.aborted) return false;
@@ -403,6 +429,11 @@ export function createPreview3DApp({
     setBusy(false);
     state.active = false;
     updateModeDom();
+  }
+
+  function refreshArtwork() {
+    if (state.active) return syncScene({ force: true });
+    return Promise.resolve(false);
   }
 
   function suspend() {
@@ -650,6 +681,7 @@ export function createPreview3DApp({
 
   return {    activate,
     deactivate,
+    refreshArtwork,
     suspend,
     setFoldProgress,
     setCameraProjection,

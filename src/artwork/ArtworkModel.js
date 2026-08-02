@@ -1,6 +1,12 @@
 const MIN_SCALE = 0.01;
 const MAX_SCALE = 20;
 
+export const ARTWORK_PREVIEW_QUALITY_OPTIONS = Object.freeze(['auto', 150, 300, 600]);
+export const ARTWORK_RENDER_QUALITY_OPTIONS = Object.freeze(['auto', 150, 300, 600, 1200, 2400]);
+// Keep the legacy export name available for integrations that used the shared list.
+export const ARTWORK_QUALITY_OPTIONS = ARTWORK_RENDER_QUALITY_OPTIONS;
+const DEFAULT_ARTWORK_QUALITY = Object.freeze({ preview: 'auto', render: 'auto' });
+
 function finiteNumber(value, name) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -27,6 +33,19 @@ function normalizeQuarterTurn(value) {
 
 function cloneSource(source) {
   return source ? { ...source } : null;
+}
+
+function normalizeArtworkQuality(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const normalize = (candidate, options) => {
+    if (candidate === 'auto' || candidate == null) return 'auto';
+    const dpi = Number(candidate);
+    return options.includes(dpi) ? dpi : 'auto';
+  };
+  return {
+    preview: normalize(source.preview, ARTWORK_PREVIEW_QUALITY_OPTIONS),
+    render: normalize(source.render, ARTWORK_RENDER_QUALITY_OPTIONS),
+  };
 }
 
 export const REFERENCE_POINTS = Object.freeze([
@@ -109,6 +128,7 @@ export class ArtworkModel {
     this.bgOpacity = 0.28;
     this.referencePoint = 'center';
     this.pdfLayerVisibility = null;
+    this.quality = { ...DEFAULT_ARTWORK_QUALITY };
     this.crop = null;
     this.modified = false;
     return this;
@@ -384,6 +404,21 @@ export class ArtworkModel {
     return this;
   }
 
+  setPreviewQuality(value) {
+    this.quality.preview = normalizeArtworkQuality({ preview: value }).preview;
+    return this;
+  }
+
+  setRenderQuality(value) {
+    this.quality.render = normalizeArtworkQuality({ render: value }).render;
+    return this;
+  }
+
+  setQuality(value) {
+    this.quality = normalizeArtworkQuality(value);
+    return this;
+  }
+
   rotateQuarterTurns(turns) {
     const reference = this.getReferencePosition();
     this.rotation = normalizeQuarterTurn(this.rotation + Number(turns) * 90);
@@ -453,6 +488,7 @@ export class ArtworkModel {
       bgOpacity: this.bgOpacity,
       referencePoint: this.referencePoint,
       pdfLayerVisibility: this.pdfLayerVisibility ? { ...this.pdfLayerVisibility } : null,
+      quality: { ...this.quality },
       crop: this.crop ? { ...this.crop } : null,
       modified: this.modified,
     };
@@ -489,6 +525,7 @@ export class ArtworkModel {
     } else {
       this.pdfLayerVisibility = null;
     }
+    this.quality = normalizeArtworkQuality(state.quality);
     this.modified = Boolean(state.modified);
     this.crop = normalizeCropRect(state.crop, this.unrotatedWidthMm, this.unrotatedHeightMm);
     return this;
@@ -499,3 +536,5 @@ export const ARTWORK_SCALE_LIMITS = Object.freeze({
   min: MIN_SCALE,
   max: MAX_SCALE,
 });
+
+export const DEFAULT_ARTWORK_QUALITY_SETTINGS = DEFAULT_ARTWORK_QUALITY;

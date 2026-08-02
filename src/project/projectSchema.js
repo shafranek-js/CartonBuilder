@@ -1,10 +1,15 @@
-import { ArtworkModel } from '../artwork/ArtworkModel.js';
+import {
+  ArtworkModel,
+  ARTWORK_PREVIEW_QUALITY_OPTIONS,
+  ARTWORK_RENDER_QUALITY_OPTIONS,
+  DEFAULT_ARTWORK_QUALITY_SETTINGS,
+} from '../artwork/ArtworkModel.js';
 import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 5;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 6;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -98,6 +103,60 @@ MIGRATIONS.set(4, (snapshot) => ({
   schemaVersion: 5,
   artworks: rebaseEditorState({ artworks: snapshot.artworks }).artworks,
   history: rebaseHistory(snapshot.history),
+}));
+
+function migrateArtworkQuality(artwork) {
+  if (!artwork || typeof artwork !== 'object') return artwork;
+  const quality = artwork.quality && typeof artwork.quality === 'object'
+    ? artwork.quality
+    : {};
+  return {
+    ...artwork,
+    quality: {
+      preview: quality.preview === 'auto' || ARTWORK_PREVIEW_QUALITY_OPTIONS.includes(Number(quality.preview))
+        ? quality.preview === 'auto' ? 'auto' : Number(quality.preview)
+        : DEFAULT_ARTWORK_QUALITY_SETTINGS.preview,
+      render: quality.render === 'auto' || ARTWORK_RENDER_QUALITY_OPTIONS.includes(Number(quality.render))
+        ? quality.render === 'auto' ? 'auto' : Number(quality.render)
+        : DEFAULT_ARTWORK_QUALITY_SETTINGS.render,
+    },
+  };
+}
+
+function migrateEditorArtworkQuality(state) {
+  if (!state || typeof state !== 'object' || !Array.isArray(state.artworks)) return state;
+  return {
+    ...state,
+    artworks: state.artworks.map((entry) => ({
+      ...entry,
+      artwork: migrateArtworkQuality(entry.artwork),
+    })),
+  };
+}
+
+function migrateHistoryArtworkQuality(history) {
+  if (!history || typeof history !== 'object') return history;
+  const migrateStack = (stack) => (Array.isArray(stack)
+    ? stack.map((entry) => ({
+      ...entry,
+      before: migrateEditorArtworkQuality(entry.before),
+      after: migrateEditorArtworkQuality(entry.after),
+    }))
+    : []);
+  return {
+    ...history,
+    undo: migrateStack(history.undo),
+    redo: migrateStack(history.redo),
+  };
+}
+
+MIGRATIONS.set(5, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 6,
+  artworks: Array.isArray(snapshot.artworks)
+    ? snapshot.artworks.map((entry) => ({ ...entry, artwork: migrateArtworkQuality(entry.artwork) }))
+    : snapshot.artworks,
+  history: migrateHistoryArtworkQuality(snapshot.history),
 }));
 
 function clone(value) {

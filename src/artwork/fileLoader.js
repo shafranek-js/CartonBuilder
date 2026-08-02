@@ -133,6 +133,8 @@ export async function loadArtworkFile(file, {
 function renderPdfWithWorker(file, {
   pageIndex,
   visibility,
+  dpi,
+  targetWidthMm,
   signal,
   workerFactory = defaultWorkerFactory,
   jobId = crypto.randomUUID(),
@@ -181,13 +183,15 @@ function renderPdfWithWorker(file, {
       }
     });
 
-    worker.postMessage({ type: 'render-pdf', jobId, file, pageIndex, visibility });
+    worker.postMessage({ type: 'render-pdf', jobId, file, pageIndex, visibility, dpi, targetWidthMm });
   });
 }
 
 export async function renderPdfWithLayers(file, {
   pageIndex = 0,
   visibility = null,
+  dpi = null,
+  targetWidthMm = null,
   signal,
   workerFactory = defaultWorkerFactory,
   preferWorker = true,
@@ -199,14 +203,21 @@ export async function renderPdfWithLayers(file, {
   }
   if (preferWorker && workerSupported) {
     try {
-      return await renderPdfWithWorker(file, { pageIndex, visibility, signal, workerFactory });
+      return await renderPdfWithWorker(file, {
+        pageIndex,
+        visibility,
+        dpi,
+        targetWidthMm,
+        signal,
+        workerFactory,
+      });
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
       if (!shouldRetryOnMainThread(error)) throw error;
     }
   }
   const renderPdfPreview = render || (await import('./fileProcessing.js')).renderPdfPreview;
-  return renderPdfPreview(file, { pageIndex, visibility, signal });
+  return renderPdfPreview(file, { pageIndex, visibility, dpi, targetWidthMm, signal });
 }
 
 export { PREVIEW_LIMITS };
