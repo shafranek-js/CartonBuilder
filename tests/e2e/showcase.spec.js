@@ -19,7 +19,18 @@ test('serves the showcase and lazy-loads the interactive viewer', async ({ page 
 
   await page.getByRole('button', { name: 'Load interactive model' }).click();
   await expect(page.locator('#cartonViewer')).toHaveAttribute('src', './viewer.html');
+  await expect(page.locator('#cartonViewer')).toHaveAttribute('allowfullscreen', '');
   await expect(page.locator('#cartonViewer')).toBeVisible();
-  await expect(page.frameLocator('#cartonViewer').locator('canvas#viewer')).toHaveCount(1, { timeout: 30_000 });
+  const viewer = page.frameLocator('#cartonViewer');
+  await expect(viewer.locator('canvas#viewer')).toHaveCount(1, { timeout: 30_000 });
+  await expect(viewer.locator('#panel')).toBeHidden();
+  await expect(viewer.locator('#panelToggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(viewer.locator('#fullscreenToggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#cartonViewer').scrollIntoViewIfNeeded();
+  await viewer.locator('#panelToggle').dispatchEvent('click');
+  await expect(viewer.locator('#panel')).toBeVisible();
+  await expect(viewer.locator('#panelToggle')).toHaveAttribute('aria-expanded', 'true');
+  await viewer.locator('#panelToggle').dispatchEvent('click');
+  await expect(viewer.locator('#panel')).toBeHidden();
   expect(viewerRequests).toHaveLength(1);
 });
