@@ -343,8 +343,12 @@ test('crop is undoable, redoable, clearable, and remains aligned after quarter-t
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.crop)).not.toBeNull();
   await page.keyboard.press('Control+z');
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.crop)).toBeNull();
+  await expect(page.locator('#cropStatus')).toHaveText('Click Crop or Draw to start.');
+  await expect(page.locator('#clearCropButton')).toBeDisabled();
   await page.keyboard.press('Control+y');
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.crop)).not.toBeNull();
+  await expect(page.locator('#cropStatus')).toHaveText('Crop applied. Use Crop or Draw to adjust.');
+  await expect(page.locator('#clearCropButton')).toBeEnabled();
 
   await page.locator('#clearCropButton').click();
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.crop)).toBeNull();

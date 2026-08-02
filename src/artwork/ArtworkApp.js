@@ -350,6 +350,12 @@ export function createArtworkApp({
     Object.assign(layerLocks, state.layerLocks);
     artworkGroupCollapsed = Boolean(state.collapseArtworkGroup);
     updateTwistyDom();
+    // History restores replace every ArtworkModel instance. Keep the renderer's
+    // entry list in lockstep with those new models before the active selection
+    // and the next render are updated; otherwise the selection frame can use
+    // the restored model while the artwork image/clip still comes from the
+    // pre-undo renderer entry.
+    renderer.setArtworks(artworks);
     selectArtworkRow(
       Number.isInteger(state.activeArtworkIndex) && state.activeArtworkIndex >= 0
         ? Math.min(state.activeArtworkIndex, artworks.length - 1)
@@ -1030,6 +1036,13 @@ export function createArtworkApp({
     renderControls();
     renderSublayers();
     syncArtworkVisibility();
+    // Keep the crop controls synchronized after history restores a snapshot.
+    // Undo/redo replaces the ArtworkModel before rendering, so relying on the
+    // transient crop interaction cleanup alone can leave a stale "Crop applied"
+    // status or an enabled Clear button when the restored model has no crop.
+    updateCropButtons();
+    updateCropStatus();
+    controls.clearCrop.disabled = !artwork.crop && !cropMode;
     renderer.render();
   }
 

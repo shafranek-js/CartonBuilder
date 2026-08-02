@@ -1665,8 +1665,15 @@ dialog button {
 .transform-fields {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
+  grid-template-rows: repeat(2, 26px);
   gap: 5px 4px;
   flex: 1;
+}
+
+.transform-fields .chain-toggle--inline {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .transform-fields label {
