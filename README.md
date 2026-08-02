@@ -111,6 +111,13 @@ The presentation Render contract is in
 - `0` fits the viewport, `Escape` clears the selection, and `Delete` removes
   unlocked artwork after confirmation.
 
+Image Crop is non-destructive. `Crop` edits a frame and `Draw` creates one;
+`Apply` or `Enter` commits it, while `Escape` cancels the preview. After Apply,
+the visible crop becomes the selected artwork geometry and the new 100% scale
+baseline for Width/Height, reference points, snapping, move, resize, Fit/Fill,
+rotation, and Reset. `Clear` reveals the original source without undoing later
+transforms or moving the previously visible content.
+
 The fixed Layers panel exposes visibility and lock state for Artwork, Dieline,
 Panel names, and Front/Base highlighting. Panel labels are visible in Edit and
 off in Preview by default.
@@ -152,7 +159,7 @@ The optional path-tracing experiment is only exposed with
 `VITE_ENABLE_RENDER_PATH_TRACING=true`; it is not part of the production raster
 pipeline and requires a separately installed compatible addon.
 
-Render settings are part of project schema version 4 and are restored by
+Render settings are part of project schema version 5 and are restored by
 IndexedDB autosave and `.carton` archives. GPU resources, progress, and renderer
 diagnostics remain transient. WebGL 2 is required for the presentation scene;
 when unavailable, the 2D editor, technical exports, and project files remain
@@ -200,7 +207,8 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-schema v4 project snapshot.
+current schema v5 project snapshot. Schema v5 normalizes legacy cropped artwork
+to the same visual-equivalent 100% transform baseline.
 
 The existing events are unchanged:
 

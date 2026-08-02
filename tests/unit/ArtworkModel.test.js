@@ -219,6 +219,81 @@ describe('ArtworkModel', () => {
     model.rotateQuarterTurns(1).resetTransform();
     expect(model.rotation).toBe(90);
   });
+
+  it('treats an asymmetric crop as the visible artwork geometry', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.applyCrop({ x: 20, y: 10, width: 80, height: 40 });
+
+    expect(model.visibleLocalRect).toEqual({ x: 20, y: 10, width: 80, height: 40 });
+    expect(model.displayedWidthMm).toBe(80);
+    expect(model.displayedHeightMm).toBe(40);
+    expect(model.visibleCenter.x).toBeCloseTo(20, 5);
+    expect(model.visibleCenter.y).toBeCloseTo(-46.667, 2);
+    expect(model.bounds).toMatchObject({ width: 80, height: 40 });
+
+    const centerBeforeRotation = model.visibleCenter;
+    model.rotateQuarterTurns(1);
+    expect(model.displayedWidthMm).toBe(40);
+    expect(model.displayedHeightMm).toBe(80);
+    expect(model.visibleCenter.x).toBeCloseTo(centerBeforeRotation.x, 5);
+    expect(model.visibleCenter.y).toBeCloseTo(centerBeforeRotation.y, 5);
+    expect(model.getReferencePosition()).toEqual(model.visibleCenter);
+  });
+
+  it('rebases an applied crop to 100 percent without changing its pixels', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setScaleX(0.5);
+    model.setScaleY(0.75);
+    const fullSize = { width: model.unrotatedWidthMm, height: model.unrotatedHeightMm };
+    const sourceCenter = { x: model.centerXmm, y: model.centerYmm };
+
+    model.applyCrop({ x: 10, y: 12, width: 50, height: 35 });
+
+    expect(model.scaleX).toBe(1);
+    expect(model.scaleY).toBe(1);
+    expect(model.unrotatedWidthMm).toBeCloseTo(fullSize.width, 5);
+    expect(model.unrotatedHeightMm).toBeCloseTo(fullSize.height, 5);
+    expect(model.centerXmm).toBeCloseTo(sourceCenter.x, 5);
+    expect(model.centerYmm).toBeCloseTo(sourceCenter.y, 5);
+    expect(model.crop).toEqual({ x: 10, y: 12, width: 50, height: 35 });
+  });
+
+  it('scales crop geometry with the source while keeping its reference fixed', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.applyCrop({ x: 20, y: 10, width: 80, height: 40 });
+    model.setReferencePoint('top-left');
+    const reference = model.getReferencePosition();
+
+    model.setScaleX(2);
+    model.setScaleY(1.5);
+
+    expect(model.crop).toEqual({ x: 40, y: 15, width: 160, height: 60 });
+    expect(model.getReferencePosition().x).toBeCloseTo(reference.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(reference.y, 5);
+    expect(model.displayedWidthMm).toBeCloseTo(160, 5);
+    expect(model.displayedHeightMm).toBeCloseTo(60, 5);
+  });
+
+  it('clears the mask without moving the previously visible fragment', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.applyCrop({ x: 8, y: 10, width: 80, height: 40 });
+    model.setVisibleCenter(180, 90);
+    model.setScale(1.5);
+    const visiblePlacement = {
+      center: model.visibleCenter,
+      reference: model.getReferencePosition(),
+    };
+
+    model.clearCrop();
+
+    expect(model.crop).toBeNull();
+    expect(model.visibleCenter.x).toBeCloseTo(visiblePlacement.center.x, 5);
+    expect(model.visibleCenter.y).toBeCloseTo(visiblePlacement.center.y, 5);
+    expect(model.getReferencePosition().x).toBeCloseTo(visiblePlacement.reference.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(visiblePlacement.reference.y, 5);
+    expect(model.displayedWidthMm).toBeCloseTo(model.unrotatedWidthMm, 5);
+    expect(model.displayedHeightMm).toBeCloseTo(model.unrotatedHeightMm, 5);
+  });
 });
 
 describe('ViewportModel', () => {

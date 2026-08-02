@@ -63,6 +63,29 @@ function rotatePoint(x, y, degrees) {
   };
 }
 
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function normalizeCropRect(value, width, height) {
+  if (!value || typeof value !== 'object') return null;
+  const rawX = Number(value.x);
+  const rawY = Number(value.y);
+  const rawWidth = Number(value.width);
+  const rawHeight = Number(value.height);
+  if (![rawX, rawY, rawWidth, rawHeight].every(Number.isFinite)) return null;
+  if (rawWidth <= 0 || rawHeight <= 0) return null;
+
+  const x = clamp(rawX, 0, width);
+  const y = clamp(rawY, 0, height);
+  const maxX = clamp(rawX + rawWidth, 0, width);
+  const maxY = clamp(rawY + rawHeight, 0, height);
+  const normalizedWidth = maxX - x;
+  const normalizedHeight = maxY - y;
+  if (normalizedWidth <= 0 || normalizedHeight <= 0) return null;
+  return { x, y, width: normalizedWidth, height: normalizedHeight };
+}
+
 export function getReferenceFraction(point) {
   return REFERENCE_FRACTIONS[point] || REFERENCE_FRACTIONS.center;
 }
@@ -112,20 +135,52 @@ export class ArtworkModel {
     return this.initialHeightMm * this.scaleY;
   }
 
+  get visibleLocalRect() {
+    return this.crop
+      ? { ...this.crop }
+      : { x: 0, y: 0, width: this.unrotatedWidthMm, height: this.unrotatedHeightMm };
+  }
+
+  get visibleUnrotatedWidthMm() {
+    return this.visibleLocalRect.width;
+  }
+
+  get visibleUnrotatedHeightMm() {
+    return this.visibleLocalRect.height;
+  }
+
+  get visibleCenter() {
+    const rect = this.visibleLocalRect;
+    const localOffset = {
+      x: rect.x + rect.width / 2 - this.unrotatedWidthMm / 2,
+      y: rect.y + rect.height / 2 - this.unrotatedHeightMm / 2,
+    };
+    const rotated = rotatePoint(localOffset.x, localOffset.y, this.rotation);
+    return {
+      x: this.centerXmm + rotated.x,
+      y: this.centerYmm + rotated.y,
+    };
+  }
+
   get displayedWidthMm() {
-    return this.rotation % 180 === 0 ? this.unrotatedWidthMm : this.unrotatedHeightMm;
+    return this.rotation % 180 === 0
+      ? this.visibleUnrotatedWidthMm
+      : this.visibleUnrotatedHeightMm;
   }
 
   get displayedHeightMm() {
-    return this.rotation % 180 === 0 ? this.unrotatedHeightMm : this.unrotatedWidthMm;
+    return this.rotation % 180 === 0
+      ? this.visibleUnrotatedHeightMm
+      : this.visibleUnrotatedWidthMm;
   }
 
   get bounds() {
+    const center = this.visibleCenter;
     return {
-      minX: this.centerXmm - this.displayedWidthMm / 2,
-      minY: this.centerYmm - this.displayedHeightMm / 2,
-      maxX: this.centerXmm + this.displayedWidthMm / 2,
-      maxY: this.centerYmm + this.displayedHeightMm / 2,
+      minX: center.x - this.displayedWidthMm / 2,
+      minY: center.y - this.displayedHeightMm / 2,
+      maxX: center.x + this.displayedWidthMm / 2,
+      maxY: center.y + this.displayedHeightMm / 2,
       width: this.displayedWidthMm,
       height: this.displayedHeightMm,
     };
@@ -192,7 +247,9 @@ export class ArtworkModel {
       this.centerXmm = bounds.minX + width / 2;
       this.centerYmm = bounds.minY + height / 2;
     } else {
-      this.setScale(targetWidth / this.initialWidthMm);
+      const factor = Math.min(width / this.displayedWidthMm, height / this.displayedHeightMm);
+      this.setScaleX(this.scaleX * factor);
+      this.setScaleY(this.scaleY * factor);
     }
     this.modified = !setInitial;
     return this;
@@ -202,24 +259,18 @@ export class ArtworkModel {
     if (!this.source) return this;
     const width = positiveNumber(bounds.width, 'bounds.width');
     const height = positiveNumber(bounds.height, 'bounds.height');
-    const baseDisplayedWidth = this.rotation % 180 === 0
-      ? this.initialWidthMm
-      : this.initialHeightMm;
-    const baseDisplayedHeight = this.rotation % 180 === 0
-      ? this.initialHeightMm
-      : this.initialWidthMm;
-    const widthScale = width / baseDisplayedWidth;
-    const heightScale = height / baseDisplayedHeight;
-    this.setScale(Math.max(widthScale, heightScale));
+    const factor = Math.max(width / this.displayedWidthMm, height / this.displayedHeightMm);
+    this.setScaleX(this.scaleX * factor);
+    this.setScaleY(this.scaleY * factor);
     this.modified = true;
     return this;
   }
 
   centerOnDieline(bounds) {
-    this.centerXmm = finiteNumber(bounds.minX, 'bounds.minX') + positiveNumber(bounds.width, 'bounds.width') / 2;
-    this.centerYmm = finiteNumber(bounds.minY, 'bounds.minY') + positiveNumber(bounds.height, 'bounds.height') / 2;
-    this.modified = true;
-    return this;
+    return this.setVisibleCenter(
+      finiteNumber(bounds.minX, 'bounds.minX') + positiveNumber(bounds.width, 'bounds.width') / 2,
+      finiteNumber(bounds.minY, 'bounds.minY') + positiveNumber(bounds.height, 'bounds.height') / 2,
+    );
   }
 
   moveBy(deltaXmm, deltaYmm) {
@@ -236,6 +287,14 @@ export class ArtworkModel {
     return this;
   }
 
+  setVisibleCenter(centerXmm, centerYmm) {
+    const current = this.visibleCenter;
+    return this.moveBy(
+      finiteNumber(centerXmm, 'centerXmm') - current.x,
+      finiteNumber(centerYmm, 'centerYmm') - current.y,
+    );
+  }
+
   getReferenceOffset() {
     const fraction = REFERENCE_FRACTIONS[this.referencePoint] || REFERENCE_FRACTIONS.center;
     return {
@@ -245,10 +304,11 @@ export class ArtworkModel {
   }
 
   getReferencePosition() {
+    const center = this.visibleCenter;
     const offset = this.getReferenceOffset();
     return {
-      x: this.centerXmm + offset.x,
-      y: this.centerYmm + offset.y,
+      x: center.x + offset.x,
+      y: center.y + offset.y,
     };
   }
 
@@ -259,11 +319,11 @@ export class ArtworkModel {
   }
 
   setReferencePosition(x, y) {
-    const offset = this.getReferenceOffset();
-    this.centerXmm = finiteNumber(x, 'x') - offset.x;
-    this.centerYmm = finiteNumber(y, 'y') - offset.y;
-    this.modified = true;
-    return this;
+    const current = this.getReferencePosition();
+    return this.moveBy(
+      finiteNumber(x, 'x') - current.x,
+      finiteNumber(y, 'y') - current.y,
+    );
   }
 
   setScale(scale) {
@@ -273,10 +333,13 @@ export class ArtworkModel {
   setScaleX(scale) {
     const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(scale, 'scale')));
     const reference = this.getReferencePosition();
+    const ratio = next / this.scaleX;
     this.scaleX = next;
-    const offset = this.getReferenceOffset();
-    this.centerXmm = reference.x - offset.x;
-    this.centerYmm = reference.y - offset.y;
+    if (this.crop) {
+      this.crop.x *= ratio;
+      this.crop.width *= ratio;
+    }
+    this.setReferencePosition(reference.x, reference.y);
     this.modified = true;
     return this;
   }
@@ -284,22 +347,29 @@ export class ArtworkModel {
   setScaleY(scale) {
     const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, positiveNumber(scale, 'scale')));
     const reference = this.getReferencePosition();
+    const ratio = next / this.scaleY;
     this.scaleY = next;
-    const offset = this.getReferenceOffset();
-    this.centerXmm = reference.x - offset.x;
-    this.centerYmm = reference.y - offset.y;
+    if (this.crop) {
+      this.crop.y *= ratio;
+      this.crop.height *= ratio;
+    }
+    this.setReferencePosition(reference.x, reference.y);
     this.modified = true;
     return this;
   }
 
   setDisplayedWidth(widthMm) {
-    const base = this.rotation % 180 === 0 ? this.initialWidthMm : this.initialHeightMm;
-    return this.setScaleX(positiveNumber(widthMm, 'widthMm') / base);
+    const factor = positiveNumber(widthMm, 'widthMm') / this.displayedWidthMm;
+    return this.rotation % 180 === 0
+      ? this.setScaleX(this.scaleX * factor)
+      : this.setScaleY(this.scaleY * factor);
   }
 
   setDisplayedHeight(heightMm) {
-    const base = this.rotation % 180 === 0 ? this.initialHeightMm : this.initialWidthMm;
-    return this.setScaleY(positiveNumber(heightMm, 'heightMm') / base);
+    const factor = positiveNumber(heightMm, 'heightMm') / this.displayedHeightMm;
+    return this.rotation % 180 === 0
+      ? this.setScaleY(this.scaleY * factor)
+      : this.setScaleX(this.scaleX * factor);
   }
 
   setOpacity(opacity) {
@@ -317,17 +387,41 @@ export class ArtworkModel {
   rotateQuarterTurns(turns) {
     const reference = this.getReferencePosition();
     this.rotation = normalizeQuarterTurn(this.rotation + Number(turns) * 90);
-    const offset = this.getReferenceOffset();
-    this.centerXmm = reference.x - offset.x;
-    this.centerYmm = reference.y - offset.y;
+    this.setReferencePosition(reference.x, reference.y);
+    this.modified = true;
+    return this;
+  }
+
+  applyCrop(value) {
+    const crop = normalizeCropRect(value, this.unrotatedWidthMm, this.unrotatedHeightMm);
+    if (!crop) throw new Error('crop must define a non-empty rectangle inside the artwork.');
+    this.crop = crop;
+    this.initialWidthMm = this.unrotatedWidthMm;
+    this.initialHeightMm = this.unrotatedHeightMm;
+    this.scaleX = 1;
+    this.scaleY = 1;
+    this.modified = true;
+    return this;
+  }
+
+  clearCrop() {
+    if (!this.crop) return this;
+    // Keep the fragment the user was looking at in the same place while the
+    // hidden source area is revealed around it.  The source center is an
+    // internal render anchor; the visible center is the user-facing geometry.
+    const visibleCenter = this.visibleCenter;
+    this.crop = null;
+    this.setVisibleCenter(visibleCenter.x, visibleCenter.y);
     this.modified = true;
     return this;
   }
 
   resetTransform() {
-    this.scaleX = 1;
-    this.scaleY = 1;
+    this.setScaleX(1);
+    this.setScaleY(1);
+    const reference = this.getReferencePosition();
     this.rotation = this.source?.pdfPageRotation || 0;
+    this.setReferencePosition(reference.x, reference.y);
     this.opacity = 1;
     this.bgOpacity = 0.28;
     this.modified = false;
@@ -336,8 +430,11 @@ export class ArtworkModel {
 
   getEffectiveDpi() {
     if (!this.source || this.source.vector) return null;
-    const dpiX = this.source.widthPx / (this.unrotatedWidthMm / 25.4);
-    const dpiY = this.source.heightPx / (this.unrotatedHeightMm / 25.4);
+    const rect = this.visibleLocalRect;
+    const visiblePixelsX = this.source.widthPx * (rect.width / this.unrotatedWidthMm);
+    const visiblePixelsY = this.source.heightPx * (rect.height / this.unrotatedHeightMm);
+    const dpiX = visiblePixelsX / (rect.width / 25.4);
+    const dpiY = visiblePixelsY / (rect.height / 25.4);
     return Math.min(dpiX, dpiY);
   }
 
@@ -393,9 +490,7 @@ export class ArtworkModel {
       this.pdfLayerVisibility = null;
     }
     this.modified = Boolean(state.modified);
-    this.crop = state.crop && state.crop.width > 0 && state.crop.height > 0
-      ? { x: Number(state.crop.x) || 0, y: Number(state.crop.y) || 0, width: Number(state.crop.width), height: Number(state.crop.height) }
-      : null;
+    this.crop = normalizeCropRect(state.crop, this.unrotatedWidthMm, this.unrotatedHeightMm);
     return this;
   }
 }

@@ -113,7 +113,7 @@ function appendCroppedImage(documentRef, parent, artwork, previewUrl, opacity, o
   return image;
 }
 
-function appendCropFrame(documentRef, parent, artwork, crop) {
+function appendCropFrame(documentRef, parent, artwork, crop, handleSize) {
   const cropRect = getCropRect(artwork, crop);
   const group = svgElement(documentRef, 'g', {
     transform: getArtworkRotationTransform(artwork),
@@ -125,9 +125,9 @@ function appendCropFrame(documentRef, parent, artwork, crop) {
     width: cropRect.width,
     height: cropRect.height,
   }));
-  const handleSize = 5;
   const halfHandle = handleSize / 2;
   const corners = getCropCorners(artwork, crop);
+  const cornerKeys = ['nw', 'ne', 'se', 'sw'];
   for (let i = 0; i < corners.length; i++) {
     group.appendChild(svgElement(documentRef, 'rect', {
       class: 'crop-handle',
@@ -136,6 +136,7 @@ function appendCropFrame(documentRef, parent, artwork, crop) {
       width: handleSize,
       height: handleSize,
       'data-crop-corner': i,
+      style: `cursor: ${getScreenCursor(cornerKeys[i], artwork.rotation)};`,
     }));
   }
   parent.appendChild(group);
@@ -176,18 +177,18 @@ function appendSelection(documentRef, parent, artwork, onPointerStart, handleSiz
   const group = svgElement(documentRef, 'g', {
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
   });
-  const x = artwork.centerXmm - artwork.unrotatedWidthMm / 2;
-  const y = artwork.centerYmm - artwork.unrotatedHeightMm / 2;
-  const frameAttrs = { class: 'selection-frame', x, y, width: artwork.unrotatedWidthMm, height: artwork.unrotatedHeightMm };
+  const rect = getCropRect(artwork, artwork.visibleLocalRect);
+  const { x, y, width, height } = rect;
+  const frameAttrs = { class: 'selection-frame', x, y, width, height };
   if (color) frameAttrs.style = `stroke:${color};`;
   group.appendChild(svgElement(documentRef, 'rect', frameAttrs));
 
   const half = handleSize / 2;
   const handles = [
     { key: 'nw', x, y, sx: -1, sy: -1 },
-    { key: 'ne', x: x + artwork.unrotatedWidthMm, y, sx: 1, sy: -1 },
-    { key: 'se', x: x + artwork.unrotatedWidthMm, y: y + artwork.unrotatedHeightMm, sx: 1, sy: 1 },
-    { key: 'sw', x, y: y + artwork.unrotatedHeightMm, sx: -1, sy: 1 },
+    { key: 'ne', x: x + width, y, sx: 1, sy: -1 },
+    { key: 'se', x: x + width, y: y + height, sx: 1, sy: 1 },
+    { key: 'sw', x, y: y + height, sx: -1, sy: 1 },
   ];
   for (const handle of handles) {
     const cursorStyle = getScreenCursor(handle.key, artwork.rotation);
@@ -417,7 +418,13 @@ export class ArtworkRenderer {
         target.appendChild(drGroup);
       }
       if (this.cropFrame && showArtwork) {
-        appendCropFrame(documentRef, target, this.artwork, this.cropFrame);
+        appendCropFrame(
+          documentRef,
+          target,
+          this.artwork,
+          this.cropFrame,
+          HANDLE_SCREEN_PX / this.viewport.zoom,
+        );
       }
       for (const node of target.querySelectorAll('.artwork-image')) {
         node.addEventListener('pointerdown', (event) => this.onPointerStart(event, { type: 'move' }));

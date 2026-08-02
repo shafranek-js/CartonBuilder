@@ -1217,16 +1217,20 @@ export function createArtworkApp({
     selected = true;
     const point = renderer.clientToModel(event.clientX, event.clientY);
     const anchorPos = artwork.getReferencePosition();
+    const visibleCenter = artwork.visibleCenter;
     const startDistFromAnchor = Math.hypot(point.x - anchorPos.x, point.y - anchorPos.y);
-    const startDistFromCenter = Math.hypot(point.x - artwork.centerXmm, point.y - artwork.centerYmm);
+    const startDistFromCenter = Math.hypot(point.x - visibleCenter.x, point.y - visibleCenter.y);
 
     gesture = {
       ...detail,
       pointerId: event.pointerId,
       before: captureEditorState(),
       startPoint: point,
-      startCenter: { x: artwork.centerXmm, y: artwork.centerYmm },
-      startScale: artwork.scaleX,
+      startCenter: visibleCenter,
+      startScaleX: artwork.scaleX,
+      startScaleY: artwork.scaleY,
+      startDisplayedWidth: artwork.displayedWidthMm,
+      startDisplayedHeight: artwork.displayedHeightMm,
       rotation: artwork.rotation,
       anchorPos,
       startDistFromAnchor: Math.max(0.001, startDistFromAnchor),
@@ -1238,10 +1242,12 @@ export function createArtworkApp({
 
   function updateResizeGesture(event, point) {
     const isAlt = event.altKey;
-    const anchor = isAlt ? gesture.startCenter : artwork.getReferencePosition();
+    const anchor = isAlt ? gesture.startCenter : gesture.anchorPos;
     const currentDist = Math.hypot(point.x - anchor.x, point.y - anchor.y);
     const factor = currentDist / (isAlt ? gesture.startDistFromCenter : gesture.startDistFromAnchor);
-    const nextScale = Math.max(0.01, gesture.startScale * factor);
+    const minimumFactor = Math.max(0.01 / gesture.startScaleX, 0.01 / gesture.startScaleY);
+    const maximumFactor = Math.min(20 / gesture.startScaleX, 20 / gesture.startScaleY);
+    const nextFactor = Math.min(maximumFactor, Math.max(minimumFactor, factor));
 
     const fraction = isAlt
       ? { x: 0, y: 0 }
@@ -1249,19 +1255,21 @@ export function createArtworkApp({
         artwork.rotation,
         getReferenceFraction(artwork.referencePoint),
       );
-    const snappedScale = getResizeSnapScale({
-      candidateScale: nextScale,
+    const snappedFactor = getResizeSnapScale({
+      candidateScale: nextFactor,
       anchor,
-      baseW: artwork.initialWidthMm,
-      baseH: artwork.initialHeightMm,
+      baseW: gesture.startDisplayedWidth,
+      baseH: gesture.startDisplayedHeight,
       fraction,
       targets: buildSnapTargets(boxModel),
       threshold: SNAP_SCREEN_PX / viewport.zoom,
+      minScale: minimumFactor,
+      maxScale: maximumFactor,
     });
-    artwork.setScale(snappedScale);
+    artwork.setScaleX(gesture.startScaleX * snappedFactor);
+    artwork.setScaleY(gesture.startScaleY * snappedFactor);
     if (isAlt) {
-      artwork.centerXmm = gesture.startCenter.x;
-      artwork.centerYmm = gesture.startCenter.y;
+      artwork.setVisibleCenter(gesture.startCenter.x, gesture.startCenter.y);
     }
   }
 
@@ -1290,7 +1298,7 @@ export function createArtworkApp({
           y: candidate.y + offset.dy,
         };
       }
-      artwork.setCenter(snapped.x, snapped.y);
+      artwork.setVisibleCenter(snapped.x, snapped.y);
     } else if (gesture.type === 'resize') {
       updateResizeGesture(event, point);
     } else if (gesture.type === 'pan') {
@@ -1555,12 +1563,22 @@ export function createArtworkApp({
   bindNumberControl(controls.x, 'Set artwork X', (value) => artwork.setReferencePosition(value, artwork.getReferencePosition().y));
   bindNumberControl(controls.y, 'Set artwork Y', (value) => artwork.setReferencePosition(artwork.getReferencePosition().x, value));
   bindNumberControl(controls.width, 'Set artwork width', (value) => {
-    artwork.setDisplayedWidth(value);
-    if (constrainProportions) artwork.setScaleY(artwork.scaleX);
+    if (constrainProportions) {
+      const factor = value / artwork.displayedWidthMm;
+      artwork.setScaleX(artwork.scaleX * factor);
+      artwork.setScaleY(artwork.scaleY * factor);
+    } else {
+      artwork.setDisplayedWidth(value);
+    }
   });
   bindNumberControl(controls.height, 'Set artwork height', (value) => {
-    artwork.setDisplayedHeight(value);
-    if (constrainProportions) artwork.setScaleX(artwork.scaleY);
+    if (constrainProportions) {
+      const factor = value / artwork.displayedHeightMm;
+      artwork.setScaleX(artwork.scaleX * factor);
+      artwork.setScaleY(artwork.scaleY * factor);
+    } else {
+      artwork.setDisplayedHeight(value);
+    }
   });
   bindNumberControl(controls.scaleX, 'Set artwork scale X', (value) => {
     artwork.setScaleX(value / 100);
@@ -1673,14 +1691,6 @@ export function createArtworkApp({
     );
   }
 
-  function cropsEqual(left, right) {
-    if (!left || !right) return !left && !right;
-    return left.x === right.x
-      && left.y === right.y
-      && left.width === right.width
-      && left.height === right.height;
-  }
-
   function resetCropInteraction({ updateUi = true } = {}) {
     const pointerId = cropGesture?.pointerId;
     cropMode = null;
@@ -1763,16 +1773,16 @@ export function createArtworkApp({
     }
 
     const before = cropBeforeState || captureEditorState();
-    const previousCrop = before.artworks?.[activeArtworkIndex]?.artwork?.crop || null;
     const nextCrop = {
       x: Number(cropPreview.x),
       y: Number(cropPreview.y),
       width: Number(cropPreview.width),
       height: Number(cropPreview.height),
     };
-    const changed = !cropsEqual(previousCrop, nextCrop);
-    artwork.crop = nextCrop;
-    if (changed) artwork.modified = true;
+    const previousArtwork = before.artworks?.[activeArtworkIndex]?.artwork || null;
+    artwork.applyCrop(nextCrop);
+    const changed = JSON.stringify(previousArtwork) !== JSON.stringify(artwork.toJSON());
+    selected = true;
     resetCropInteraction();
     if (changed) {
       commitChange('Crop artwork', before);
@@ -1786,8 +1796,8 @@ export function createArtworkApp({
     if (!artwork.crop && !cropMode) return;
     const before = captureEditorState();
     const hadCrop = Boolean(artwork.crop);
-    artwork.crop = null;
-    if (hadCrop) artwork.modified = true;
+    artwork.clearCrop();
+    selected = true;
     resetCropInteraction();
     if (hadCrop) {
       commitChange('Clear crop', before);

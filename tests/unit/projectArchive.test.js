@@ -53,7 +53,7 @@ async function createFixture() {
   const first = await createArtworkEntry('top.png');
   const second = await createArtworkEntry('bottom.png');
   const snapshot = {
-      schemaVersion: 4,
+    schemaVersion: 5,
     meta: { name: 'Unit project' },
     workflowStep: 'artwork',
     box: new BoxNetModel().toJSON(),

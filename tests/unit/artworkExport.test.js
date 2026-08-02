@@ -65,6 +65,12 @@ describe('artwork export', () => {
       vector: true,
       pdfPageRotation: 0,
     }, box.getBounds());
+    artwork.applyCrop({
+      x: artwork.unrotatedWidthMm * 0.2,
+      y: artwork.unrotatedHeightMm * 0.15,
+      width: artwork.unrotatedWidthMm * 0.6,
+      height: artwork.unrotatedHeightMm * 0.7,
+    });
 
     const exported = await createPdfExport({
       boxModel: box,

@@ -93,6 +93,16 @@ export async function createPreviewBlob({
       context.globalAlpha = entry.model.opacity;
       context.translate(entry.model.centerXmm, entry.model.centerYmm);
       context.rotate(entry.model.rotation * Math.PI / 180);
+      if (entry.model.crop) {
+        context.beginPath();
+        context.rect(
+          -entry.model.unrotatedWidthMm / 2 + entry.model.crop.x,
+          -entry.model.unrotatedHeightMm / 2 + entry.model.crop.y,
+          entry.model.crop.width,
+          entry.model.crop.height,
+        );
+        context.clip();
+      }
       context.drawImage(
         bitmap,
         -entry.model.unrotatedWidthMm / 2,
@@ -155,6 +165,38 @@ function rotatedOrigin(centerX, centerY, width, height, angleDegrees) {
     x: centerX + x * Math.cos(radians) - y * Math.sin(radians),
     y: centerY + x * Math.sin(radians) + y * Math.cos(radians),
   };
+}
+
+function addArtworkCropClip(page, artwork, bounds) {
+  if (!artwork.crop) return;
+  const radians = artwork.rotation * Math.PI / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const left = -artwork.unrotatedWidthMm / 2 + artwork.crop.x;
+  const top = -artwork.unrotatedHeightMm / 2 + artwork.crop.y;
+  const right = left + artwork.crop.width;
+  const bottom = top + artwork.crop.height;
+  const corners = [
+    [left, top],
+    [right, top],
+    [right, bottom],
+    [left, bottom],
+  ].map(([localX, localY]) => {
+    const worldX = artwork.centerXmm + localX * cosine - localY * sine;
+    const worldY = artwork.centerYmm + localX * sine + localY * cosine;
+    return {
+      x: (worldX - bounds.minX) * POINTS_PER_MM,
+      y: (bounds.maxY - worldY) * POINTS_PER_MM,
+    };
+  });
+  page.pushOperators(
+    moveTo(corners[0].x, corners[0].y),
+    lineTo(corners[1].x, corners[1].y),
+    lineTo(corners[2].x, corners[2].y),
+    lineTo(corners[3].x, corners[3].y),
+    clip(),
+    endPath(),
+  );
 }
 
 function ensureResourceDictionary(page, name) {
@@ -264,6 +306,8 @@ export async function createPdfExport({
     const height = artwork.unrotatedHeightMm * POINTS_PER_MM;
     const pdfRotation = -artwork.rotation;
     const origin = rotatedOrigin(centerX, centerY, width, height, pdfRotation);
+    page.pushOperators(pushGraphicsState());
+    addArtworkCropClip(page, artwork, bounds);
 
     if (artwork.source.mimeType === 'application/pdf') {
       const [embeddedPage] = await pdfDocument.embedPdf(
@@ -291,6 +335,7 @@ export async function createPdfExport({
         opacity: artwork.opacity,
       });
     }
+    page.pushOperators(popGraphicsState());
   }
   page.pushOperators(popGraphicsState());
   addDielineLayer(pdfDocument, page, boxModel, bounds);

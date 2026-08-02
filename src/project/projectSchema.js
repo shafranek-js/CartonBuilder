@@ -4,7 +4,7 @@ import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 4;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 5;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -47,6 +47,58 @@ MIGRATIONS.set(3, (snapshot) => {
   });
   return migrated;
 });
+
+function rebaseCroppedArtworkState(artwork) {
+  if (!artwork?.crop) return artwork;
+  const scaleX = Number(artwork.scaleX ?? artwork.scale ?? 1);
+  const scaleY = Number(artwork.scaleY ?? artwork.scale ?? 1);
+  const initialWidthMm = Number(artwork.initialWidthMm);
+  const initialHeightMm = Number(artwork.initialHeightMm);
+  if (![scaleX, scaleY, initialWidthMm, initialHeightMm].every(Number.isFinite)) return artwork;
+  if (scaleX <= 0 || scaleY <= 0 || initialWidthMm <= 0 || initialHeightMm <= 0) return artwork;
+  return {
+    ...artwork,
+    initialWidthMm: initialWidthMm * scaleX,
+    initialHeightMm: initialHeightMm * scaleY,
+    scaleX: 1,
+    scaleY: 1,
+    scale: 1,
+  };
+}
+
+function rebaseEditorState(state) {
+  if (!state || !Array.isArray(state.artworks)) return state;
+  return {
+    ...state,
+    artworks: state.artworks.map((entry) => ({
+      ...entry,
+      artwork: rebaseCroppedArtworkState(entry.artwork),
+    })),
+  };
+}
+
+function rebaseHistory(history) {
+  if (!history || typeof history !== 'object') return history;
+  const migrateStack = (stack) => (Array.isArray(stack)
+    ? stack.map((entry) => ({
+      ...entry,
+      before: rebaseEditorState(entry.before),
+      after: rebaseEditorState(entry.after),
+    }))
+    : []);
+  return {
+    ...history,
+    undo: migrateStack(history.undo),
+    redo: migrateStack(history.redo),
+  };
+}
+
+MIGRATIONS.set(4, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 5,
+  artworks: rebaseEditorState({ artworks: snapshot.artworks }).artworks,
+  history: rebaseHistory(snapshot.history),
+}));
 
 function clone(value) {
   return structuredClone(value);
