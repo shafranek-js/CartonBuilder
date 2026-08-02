@@ -75,6 +75,10 @@ export function createLazyPreview3DFacade({
     render() {
       controller?.render();
     },
+    refreshArtwork() {
+      if (!controller) return Promise.resolve(false);
+      return controller.refreshArtwork();
+    },
     resume() {
       if (controller?.getState().active) controller.activate();
     },

@@ -42,6 +42,7 @@ async function createArtworkEntry(fileName) {
       scaleY: 1,
       rotation: 0,
       opacity: 1,
+      quality: { preview: 'auto', render: 'auto' },
       modified: false,
     },
     originalBlob,
@@ -53,7 +54,7 @@ async function createFixture() {
   const first = await createArtworkEntry('top.png');
   const second = await createArtworkEntry('bottom.png');
   const snapshot = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     meta: { name: 'Unit project' },
     workflowStep: 'artwork',
     box: new BoxNetModel().toJSON(),

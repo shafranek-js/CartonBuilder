@@ -82,6 +82,8 @@ The detailed runtime contract is in
 [`docs/3. artwork-placement-runtime-specification.md`](docs/3.%20artwork-placement-runtime-specification.md).
 The presentation Render contract is in
 [`docs/9. render-runtime-specification.md`](docs/9.%20render-runtime-specification.md).
+The status-aware index for all project documentation is in
+[`docs/README.md`](docs/README.md).
 
 ## Artwork and projects
 
@@ -92,7 +94,11 @@ The presentation Render contract is in
   preserved; the original PDF remains available for vector-preserving export.
 - The initial placement uses Fit + Center over the complete dieline bounds.
 - Effective raster DPI is calculated from source pixels and actual millimetres.
-  Values below 300 DPI warn but do not block export.
+  Raster artwork is never AI-upscaled: the imported source pixels are the quality
+  ceiling. Vector/PDF artwork has independent `Preview quality` (`Auto`, 150,
+  300, or 600 DPI) and `Render quality` (`Auto`, 150, 300, 600, 1200, or 2400
+  DPI). Interactive Render is capped at 600 DPI; 1200/2400 DPI are used for
+  final raster exports.
 - Autosave stores the project and original asset in IndexedDB.
 - A `.carton` file is a versioned ZIP containing `manifest.json`,
   `project.json`, the original artwork, and its editor preview. Asset checksums
@@ -110,6 +116,13 @@ The presentation Render contract is in
 - `Ctrl+Z`, `Ctrl+Shift+Z`, and `Ctrl+Y` control the 100-entry history.
 - `0` fits the viewport, `Escape` clears the selection, and `Delete` removes
   unlocked artwork after confirmation.
+
+The Transform panel uses one shared coordinate grid. The first two rows expose
+`X`/`Y` position and `W`/`H` size with fixed `mm` unit columns; the Scale row
+shows one group label followed by `X` and `Y` percentages in the same numeric
+columns. All six numeric fields share the same dimensions and right-aligned
+number formatting. The proportions chain is a compact control centered beside
+the `W`/`H` rows and controls both pointer and numeric resizing.
 
 Image Crop is non-destructive. `Crop` edits a frame and `Draw` creates one;
 `Apply` or `Enter` commits it, while `Escape` cancels the preview. After Apply,
@@ -153,13 +166,15 @@ Custom cameras; Uncoated, Matte, and Gloss board profiles; 1:1, 4:3, 16:9, and
 3:4 frames; environment/light/shadow controls; transparent or solid backgrounds;
 and PNG/JPG still export at 2048 or 4096 pixels on the long edge. Export uses a
 fixed offscreen render target and does not depend on `preserveDrawingBuffer`.
+The Render canvas overlays the exact export viewport and reports its pixel
+dimensions whenever Aspect or Long edge changes.
 
 Render effects are enabled with `VITE_ENABLE_RENDER_EFFECTS=true` (the default).
 The optional path-tracing experiment is only exposed with
 `VITE_ENABLE_RENDER_PATH_TRACING=true`; it is not part of the production raster
 pipeline and requires a separately installed compatible addon.
 
-Render settings are part of project schema version 5 and are restored by
+Render settings and per-artwork quality are part of project schema version 6 and are restored by
 IndexedDB autosave and `.carton` archives. GPU resources, progress, and renderer
 diagnostics remain transient. WebGL 2 is required for the presentation scene;
 when unavailable, the 2D editor, technical exports, and project files remain
@@ -167,8 +182,10 @@ usable.
 
 ## Export
 
-- PNG: 300 DPI, transparent outside the panel union.
-- JPG: 300 DPI with a white background.
+- PNG: uses the selected vector Render quality (Auto targets 300 DPI; 1200 and
+  2400 DPI are available for final export), transparent outside the panel union.
+- JPG: uses the selected vector Render quality (Auto targets 300 DPI; 1200 and
+  2400 DPI are available for final export), with a white background.
 - SVG: the existing millimetre-based box-net contract.
 - PDF: exact 1:1 page dimensions; original PDF pages remain vector where
   possible; the dieline is a separate `Dieline` optional-content group; cut
@@ -182,7 +199,7 @@ bleed, or complete print-production validation.
 Preflight warns about low effective DPI, artwork outside the dieline, and panels
 that are not fully covered. Only missing or unreadable artwork blocks the normal
 export flow; browser canvas safety limits can still reject an impractically
-large 300-DPI raster.
+large high-DPI raster.
 
 ## Browser integration
 
@@ -207,7 +224,8 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-current schema v5 project snapshot. Schema v5 normalizes legacy cropped artwork
+current schema v6 project snapshot. Schema v6 stores per-artwork preview/render
+quality and normalizes legacy cropped artwork
 to the same visual-equivalent 100% transform baseline.
 
 The existing events are unchanged:

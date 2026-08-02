@@ -309,7 +309,9 @@ export class ArtworkRenderer {
     this.entries = (entries || []).map((entry, i) => ({
       model: entry.model,
       visible: entry.visible !== false,
-      previewUrl: entry.previewBlob ? URL.createObjectURL(entry.previewBlob) : '',
+      previewUrl: (entry.displayBlob || entry.previewBlob)
+        ? URL.createObjectURL(entry.displayBlob || entry.previewBlob)
+        : '',
       artworkIndex: i,
     }));
   }

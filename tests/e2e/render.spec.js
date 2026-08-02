@@ -17,8 +17,8 @@ async function buildReferenceNet(page) {
   await activate(page, 'Add Right Panel to the right edge of Back Panel');
 }
 
-async function loadArtwork(page) {
-  await page.evaluate(async () => {
+async function loadArtwork(page, fileName = 'render-fixture.png') {
+  await page.evaluate(async (fileName) => {
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 400;
@@ -29,14 +29,14 @@ async function loadArtwork(page) {
     context.font = 'bold 72px sans-serif';
     context.fillText('RENDER', 90, 230);
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    const file = new File([blob], 'render-fixture.png', { type: 'image/png' });
+    const file = new File([blob], fileName, { type: 'image/png' });
     const transfer = new DataTransfer();
     transfer.items.add(file);
     const input = document.getElementById('artworkFileInput');
     input.files = transfer.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  await expect(page.locator('#artworkFileName')).toHaveText('render-fixture.png');
+  }, fileName);
+  await expect(page.locator('#artworkFileName')).toHaveText(fileName);
   await expect(page.locator('#processingOverlay')).toBeHidden();
 }
 
@@ -97,10 +97,10 @@ function getPngPixelSummary(bytes) {
   return { varied, firstPixel };
 }
 
-async function openRender(page) {
+async function openRender(page, fileName) {
   await buildReferenceNet(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await loadArtwork(page);
+  await loadArtwork(page, fileName);
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
@@ -145,6 +145,30 @@ test('keeps Render disabled until a complete box and artwork exist', async ({ pa
   await expect(page.locator('[data-step-target="render"]')).toBeEnabled();
 });
 
+test('shows native raster quality in the editor and per-artwork Render quality controls', async ({ page }) => {
+  await openRender(page, 'Carton Calmdownol 1000 mg 110x70x30 outlined.ai');
+  await expect(page.locator('#renderArtworkQualityList select')).toHaveCount(1);
+  await expect(page.locator('#renderArtworkQualityList select')).toBeDisabled();
+  await expect(page.locator('#renderArtworkQualityList option[value="1200"]')).toHaveCount(1);
+  await expect(page.locator('#renderArtworkQualityList option[value="2400"]')).toHaveCount(1);
+  const artworkName = page.locator('.render-artwork-quality-name').first();
+  await expect(artworkName).toBeVisible();
+  await expect(artworkName).toHaveAttribute('title', 'Carton Calmdownol 1000 mg 110x70x30 outlined.ai');
+  const qualitySelect = page.locator('#renderArtworkQualityList select');
+  await expect(qualitySelect).toBeVisible();
+  expect(await artworkName.evaluate((element) => getComputedStyle(element).textOverflow)).toBe('ellipsis');
+  const nameBox = await artworkName.boundingBox();
+  const selectBox = await qualitySelect.boundingBox();
+  expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(selectBox.x);
+
+  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to edit', exact: true }).click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await expect(page.locator('#artworkPreviewQuality')).toBeDisabled();
+  await expect(page.locator('#artworkRenderQuality')).toBeDisabled();
+  await expect(page.locator('#artworkQualitySummary')).toContainText('Raster source: native pixels');
+});
+
 test('uses a separate closed presentation scene and persists render controls', async ({ page }) => {
   await openRender(page);
   expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().foldProgress)).toBe(0.35);
@@ -170,6 +194,7 @@ test('uses a separate closed presentation scene and persists render controls', a
     background: { mode: 'transparent' },
     shadows: { enabled: false },
   });
+  await expect(page.locator('#renderViewportSummary')).toHaveText('Export viewport: 4096 × 2304px (16:9)');
 
   await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
   await expect(page.locator('#previewStep')).toBeVisible();
@@ -181,6 +206,7 @@ test('uses a separate closed presentation scene and persists render controls', a
     longEdge: 4096,
     background: { mode: 'transparent' },
   });
+  await expect(page.locator('#renderViewportSummary')).toHaveText('Export viewport: 4096 × 2304px (16:9)');
 });
 
 test('exports a PNG with the selected 2048 output dimensions', async ({ page }) => {

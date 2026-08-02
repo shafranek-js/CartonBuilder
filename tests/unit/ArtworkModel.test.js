@@ -15,6 +15,21 @@ const source = {
 };
 
 describe('ArtworkModel', () => {
+  it('stores independent preview and render quality preferences', () => {
+    const model = new ArtworkModel().load(source, bounds);
+
+    expect(model.quality).toEqual({ preview: 'auto', render: 'auto' });
+    model.setPreviewQuality(600).setRenderQuality('2400');
+    expect(model.toJSON().quality).toEqual({ preview: 600, render: 2400 });
+
+    const restored = new ArtworkModel(model.toJSON());
+    expect(restored.quality).toEqual({ preview: 600, render: 2400 });
+    restored.setPreviewQuality(2400);
+    expect(restored.quality.preview).toBe('auto');
+    restored.setQuality({ preview: 999, render: 'unknown' });
+    expect(restored.quality).toEqual({ preview: 'auto', render: 'auto' });
+  });
+
   it('fits and centres artwork inside the dieline', () => {
     const model = new ArtworkModel().load(source, bounds);
 

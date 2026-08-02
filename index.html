@@ -363,6 +363,27 @@
                 </div>
               </div>
               <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
+              <div class="artwork-quality-fields" id="artworkQualityFields">
+                <label class="field"><span data-i18n="previewQuality">Preview quality</span>
+                  <select id="artworkPreviewQuality" aria-label="Preview quality" data-i18n-aria-label="previewQuality">
+                    <option value="auto" data-i18n="qualityAuto">Auto</option>
+                    <option value="150">150 DPI</option>
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
+                  </select>
+                </label>
+                <label class="field"><span data-i18n="renderQuality">Render quality</span>
+                  <select id="artworkRenderQuality" aria-label="Render quality" data-i18n-aria-label="renderQuality">
+                    <option value="auto" data-i18n="qualityAuto">Auto</option>
+                    <option value="150">150 DPI</option>
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
+                    <option value="1200">1200 DPI</option>
+                    <option value="2400">2400 DPI</option>
+                  </select>
+                </label>
+                <p class="quality-summary" id="artworkQualitySummary" role="status"></p>
+              </div>
               <div class="button-grid icon-button-grid">
                 <button type="button" class="tool-icon-btn" id="fitArtworkButton" disabled title="Fit artwork to dieline" data-i18n-title="fitDieline" aria-label="Fit artwork to dieline" data-i18n-aria-label="fitDieline">
                   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -686,6 +707,11 @@
         <div class="render-main-row">
           <div class="render-canvas-wrap" id="renderPanel" aria-busy="false">
             <canvas id="renderCanvas" role="img" tabindex="0" aria-label="Presentation carton render" data-i18n-aria-label="renderCanvasLabel"></canvas>
+            <div class="render-viewport-overlay" id="renderViewportOverlay" aria-hidden="true">
+              <div class="render-viewport-frame" id="renderViewportFrame">
+                <span class="render-viewport-label" id="renderViewportLabel"></span>
+              </div>
+            </div>
             <div class="render-busy" id="renderBusy" role="status" aria-live="polite" hidden>
               <span class="spinner" aria-hidden="true"></span>
               <span data-i18n="rendering">Rendering…</span>
@@ -705,6 +731,12 @@
                 <button type="button" class="render-preset-button" data-render-preset="soft-grey" data-i18n="renderPresetSoftGrey">Soft Grey</button>
                 <button type="button" class="render-preset-button" data-render-preset="transparent" data-i18n="renderPresetTransparent">Transparent</button>
               </div>
+            </section>
+
+            <section class="tool-section render-artwork-quality-section">
+              <h2 data-i18n="renderArtworkQuality">Artwork quality</h2>
+              <p class="quality-help" data-i18n="renderArtworkQualityHelp">Choose the source quality used by Render and raster exports.</p>
+              <div id="renderArtworkQualityList" class="render-artwork-quality-list"></div>
             </section>
 
             <section class="tool-section">
@@ -741,6 +773,7 @@
               <label class="field"><span data-i18n="renderLongEdge">Long edge</span>
                 <select id="renderLongEdge"><option value="2048">2048 px</option><option value="4096">4096 px</option></select>
               </label>
+              <p class="render-viewport-summary" id="renderViewportSummary" role="status"></p>
             </section>
 
             <section class="tool-section">

@@ -2562,6 +2562,35 @@ dialog button {
   flex-shrink: 0;
 }
 
+.artwork-quality-fields {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.artwork-quality-fields .field,
+.render-artwork-quality-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 8px;
+}
+
+.artwork-quality-fields select,
+.render-artwork-quality-row select {
+  width: 96px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.quality-summary,
+.quality-help {
+  margin: 0;
+  color: var(--text-muted, #b5b5b5);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .chain-toggle:hover {
   background: var(--surface, #383838);
 }
@@ -2829,6 +2858,37 @@ dialog input {
   outline: none;
 }
 
+.render-viewport-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.render-viewport-frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid color-mix(in srgb, var(--focus, #b5d63d) 88%, #ffffff);
+  box-shadow: 0 0 0 9999px rgb(20 20 20 / 24%);
+  transition: width 160ms ease, height 160ms ease, left 160ms ease, top 160ms ease;
+}
+
+.render-viewport-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 3px 6px;
+  overflow: hidden;
+  color: #ffffff;
+  background: rgb(20 20 20 / 72%);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .render-sidebar {
   min-width: 0;
   overflow: auto;
@@ -2844,6 +2904,29 @@ dialog input {
 .render-sidebar .field,
 .render-sidebar .light-control {
   margin-bottom: 7px;
+}
+
+.render-artwork-quality-list {
+  display: grid;
+  gap: 6px;
+}
+
+.render-artwork-quality-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text, #fff);
+  font-size: 11px;
+}
+
+.render-viewport-summary {
+  margin: 8px 0 0;
+  color: var(--text-muted, #b5b5b5);
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .preset-store-row {
