@@ -139,6 +139,23 @@ function appendCropFrame(documentRef, parent, artwork, crop, handleSize) {
       style: `cursor: ${getScreenCursor(cornerKeys[i], artwork.rotation)};`,
     }));
   }
+  const sides = [
+    { key: 'n', x: cropRect.x + cropRect.width / 2, y: cropRect.y },
+    { key: 'e', x: cropRect.x + cropRect.width, y: cropRect.y + cropRect.height / 2 },
+    { key: 's', x: cropRect.x + cropRect.width / 2, y: cropRect.y + cropRect.height },
+    { key: 'w', x: cropRect.x, y: cropRect.y + cropRect.height / 2 },
+  ];
+  for (const side of sides) {
+    group.appendChild(svgElement(documentRef, 'rect', {
+      class: 'crop-handle crop-side-handle',
+      x: side.x - halfHandle,
+      y: side.y - halfHandle,
+      width: handleSize,
+      height: handleSize,
+      'data-crop-edge': side.key,
+      style: `cursor: ${getSideCursor(side.key, artwork.rotation)};`,
+    }));
+  }
   parent.appendChild(group);
 }
 
@@ -173,6 +190,15 @@ function getScreenCursor(key, rotation) {
   return (screenCorner === 'nw' || screenCorner === 'se') ? 'nwse-resize' : 'nesw-resize';
 }
 
+function getSideCursor(key, rotation) {
+  const sides = ['n', 'e', 's', 'w'];
+  const baseIndex = sides.indexOf(key);
+  const normalizedRotation = ((Number(rotation) % 360) + 360) % 360;
+  const shift = Math.round(normalizedRotation / 90) % 4;
+  const screenSide = sides[(baseIndex + shift) % 4];
+  return screenSide === 'n' || screenSide === 's' ? 'ns-resize' : 'ew-resize';
+}
+
 function appendSelection(documentRef, parent, artwork, onPointerStart, handleSize, color) {
   const group = svgElement(documentRef, 'g', {
     transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
@@ -203,8 +229,35 @@ function appendSelection(documentRef, parent, artwork, onPointerStart, handleSiz
     });
     node.addEventListener('pointerdown', (event) => onPointerStart(event, {
       type: 'resize',
+      corner: handle.key,
       sx: handle.sx,
       sy: handle.sy,
+    }));
+    group.appendChild(node);
+  }
+
+  const sideHandles = [
+    { key: 'n', x: x + width / 2, y, axis: 'y' },
+    { key: 'e', x: x + width, y: y + height / 2, axis: 'x' },
+    { key: 's', x: x + width / 2, y: y + height, axis: 'y' },
+    { key: 'w', x, y: y + height / 2, axis: 'x' },
+  ];
+  for (const handle of sideHandles) {
+    const cursorStyle = getSideCursor(handle.key, artwork.rotation);
+    const node = svgElement(documentRef, 'rect', {
+      class: 'resize-handle resize-side-handle',
+      x: handle.x - half,
+      y: handle.y - half,
+      width: handleSize,
+      height: handleSize,
+      'data-handle': handle.key,
+      'data-resize-side': handle.key,
+      style: `cursor: ${cursorStyle};${color ? ` stroke-width:2;stroke:${color};` : ''}`,
+    });
+    node.addEventListener('pointerdown', (event) => onPointerStart(event, {
+      type: 'resize',
+      side: handle.key,
+      axis: handle.axis,
     }));
     group.appendChild(node);
   }

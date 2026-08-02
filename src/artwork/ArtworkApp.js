@@ -46,6 +46,53 @@ function rotateVector(vector, degrees) {
   };
 }
 
+function getResizeSideDirection(side, rotation) {
+  const direction = side === 'e'
+    ? { x: 1, y: 0 }
+    : side === 'w'
+      ? { x: -1, y: 0 }
+      : side === 's'
+        ? { x: 0, y: 1 }
+        : { x: 0, y: -1 };
+  return rotateVector(direction, rotation);
+}
+
+function getVisibleEdgeWorldPoint(model, side) {
+  const rect = model.visibleLocalRect;
+  const localX = side === 'e'
+    ? rect.x + rect.width
+    : side === 'w'
+      ? rect.x
+      : rect.x + rect.width / 2;
+  const localY = side === 's'
+    ? rect.y + rect.height
+    : side === 'n'
+      ? rect.y
+      : rect.y + rect.height / 2;
+  const rotated = rotateVector({
+    x: localX - model.unrotatedWidthMm / 2,
+    y: localY - model.unrotatedHeightMm / 2,
+  }, model.rotation);
+  return {
+    x: model.centerXmm + rotated.x,
+    y: model.centerYmm + rotated.y,
+  };
+}
+
+function getVisibleCornerWorldPoint(model, corner) {
+  const rect = model.visibleLocalRect;
+  const localX = corner.includes('e') ? rect.x + rect.width : rect.x;
+  const localY = corner.includes('s') ? rect.y + rect.height : rect.y;
+  const rotated = rotateVector({
+    x: localX - model.unrotatedWidthMm / 2,
+    y: localY - model.unrotatedHeightMm / 2,
+  }, model.rotation);
+  return {
+    x: model.centerXmm + rotated.x,
+    y: model.centerYmm + rotated.y,
+  };
+}
+
 function round(value, digits = 2) {
   return Number(value.toFixed(digits));
 }
@@ -173,6 +220,11 @@ export function createArtworkApp({
     scaleX: documentRef.getElementById('artworkScaleX'),
     scaleY: documentRef.getElementById('artworkScaleY'),
     constrainBtn: documentRef.getElementById('constrainProportionsBtn'),
+    boxWidth: documentRef.getElementById('artworkBoxWidth'),
+    boxHeight: documentRef.getElementById('artworkBoxHeight'),
+    boxDepth: documentRef.getElementById('artworkBoxDepth'),
+    boxConstrainBtn: documentRef.getElementById('boxConstrainProportionsBtn'),
+    boxDimensionsSection: documentRef.getElementById('boxDimensionsSection'),
   };
 
   const layerControls = {
@@ -215,6 +267,7 @@ export function createArtworkApp({
   let cropDrawStart = null;
   let cropBeforeState = null;
   let constrainProportions = true;
+  let boxConstrainProportions = true;
   let artworkGroupCollapsed = false;
   let selectedArtworkIndices = new Set();
   const thumbnailUrlCache = new Map();
@@ -525,6 +578,11 @@ export function createArtworkApp({
     }
     controls.constrainBtn.setAttribute('aria-pressed', String(constrainProportions));
     controls.constrainBtn.textContent = constrainProportions ? '🔗' : '⛓️‍💥';
+    controls.boxWidth.value = round(boxModel.dimensions.width);
+    controls.boxHeight.value = round(boxModel.dimensions.height);
+    controls.boxDepth.value = round(boxModel.dimensions.depth);
+    controls.boxConstrainBtn.setAttribute('aria-pressed', String(boxConstrainProportions));
+    controls.boxConstrainBtn.textContent = boxConstrainProportions ? '🔗' : '⛓️‍💥';
     controls.opacity.value = enabled ? Math.round(artwork.opacity * 100) : 100;
     controls.opacityValue.value = `${controls.opacity.value}%`;
     controls.bgOpacity.value = enabled ? Math.round(artwork.bgOpacity * 100) : 28;
@@ -1220,6 +1278,13 @@ export function createArtworkApp({
     const visibleCenter = artwork.visibleCenter;
     const startDistFromAnchor = Math.hypot(point.x - anchorPos.x, point.y - anchorPos.y);
     const startDistFromCenter = Math.hypot(point.x - visibleCenter.x, point.y - visibleCenter.y);
+    const fixedSideBySide = { n: 's', e: 'w', s: 'n', w: 'e' };
+    const fixedCornerByCorner = { nw: 'se', ne: 'sw', se: 'nw', sw: 'ne' };
+    const resizeAnchorWorld = detail.side
+      ? getVisibleEdgeWorldPoint(artwork, fixedSideBySide[detail.side])
+      : detail.corner
+        ? getVisibleCornerWorldPoint(artwork, fixedCornerByCorner[detail.corner])
+        : null;
 
     gesture = {
       ...detail,
@@ -1231,16 +1296,90 @@ export function createArtworkApp({
       startScaleY: artwork.scaleY,
       startDisplayedWidth: artwork.displayedWidthMm,
       startDisplayedHeight: artwork.displayedHeightMm,
+      startVisibleWidth: artwork.visibleUnrotatedWidthMm,
+      startVisibleHeight: artwork.visibleUnrotatedHeightMm,
       rotation: artwork.rotation,
       anchorPos,
       startDistFromAnchor: Math.max(0.001, startDistFromAnchor),
       startDistFromCenter: Math.max(0.001, startDistFromCenter),
+      resizeAnchorWorld,
+      resizeFixedSide: detail.side ? fixedSideBySide[detail.side] : null,
+      resizeFixedCorner: detail.corner ? fixedCornerByCorner[detail.corner] : null,
     };
     svg.setPointerCapture(event.pointerId);
     render();
   }
 
   function updateResizeGesture(event, point) {
+    if (gesture.corner && !constrainProportions) {
+      const anchor = event.altKey ? gesture.startCenter : gesture.resizeAnchorWorld;
+      const xDirection = rotateVector({ x: gesture.sx, y: 0 }, artwork.rotation);
+      const yDirection = rotateVector({ x: 0, y: gesture.sy }, artwork.rotation);
+      const xProjection = (point.x - anchor.x) * xDirection.x + (point.y - anchor.y) * xDirection.y;
+      const yProjection = (point.x - anchor.x) * yDirection.x + (point.y - anchor.y) * yDirection.y;
+      const xBase = event.altKey ? gesture.startVisibleWidth / 2 : gesture.startVisibleWidth;
+      const yBase = event.altKey ? gesture.startVisibleHeight / 2 : gesture.startVisibleHeight;
+      const xFactor = Math.min(
+        20 / gesture.startScaleX,
+        Math.max(0.01 / gesture.startScaleX, Math.abs(xProjection) / Math.max(0.001, xBase)),
+      );
+      const yFactor = Math.min(
+        20 / gesture.startScaleY,
+        Math.max(0.01 / gesture.startScaleY, Math.abs(yProjection) / Math.max(0.001, yBase)),
+      );
+
+      artwork.setScaleX(gesture.startScaleX * xFactor);
+      artwork.setScaleY(gesture.startScaleY * yFactor);
+      if (event.altKey) {
+        artwork.setVisibleCenter(gesture.startCenter.x, gesture.startCenter.y);
+      } else {
+        const nextAnchor = getVisibleCornerWorldPoint(artwork, gesture.resizeFixedCorner);
+        artwork.moveBy(
+          anchor.x - nextAnchor.x,
+          anchor.y - nextAnchor.y,
+        );
+      }
+      return;
+    }
+
+    if (gesture.side) {
+      const axis = gesture.axis;
+      const direction = getResizeSideDirection(gesture.side, artwork.rotation);
+      const anchor = event.altKey ? gesture.startCenter : gesture.resizeAnchorWorld;
+      const startDimension = axis === 'x' ? gesture.startVisibleWidth : gesture.startVisibleHeight;
+      const startScale = axis === 'x' ? gesture.startScaleX : gesture.startScaleY;
+      const projection = (point.x - anchor.x) * direction.x + (point.y - anchor.y) * direction.y;
+      const baseDimension = event.altKey ? startDimension / 2 : startDimension;
+      const rawFactor = Math.abs(projection) / Math.max(0.001, baseDimension);
+      const minimumFactor = constrainProportions
+        ? Math.max(0.01 / gesture.startScaleX, 0.01 / gesture.startScaleY)
+        : 0.01 / startScale;
+      const maximumFactor = constrainProportions
+        ? Math.min(20 / gesture.startScaleX, 20 / gesture.startScaleY)
+        : 20 / startScale;
+      const nextFactor = Math.min(maximumFactor, Math.max(minimumFactor, rawFactor));
+      const nextScale = startScale * nextFactor;
+
+      if (axis === 'x') {
+        artwork.setScaleX(nextScale);
+        if (constrainProportions) artwork.setScaleY(gesture.startScaleY * nextFactor);
+      } else {
+        artwork.setScaleY(nextScale);
+        if (constrainProportions) artwork.setScaleX(gesture.startScaleX * nextFactor);
+      }
+
+      if (event.altKey) {
+        artwork.setVisibleCenter(gesture.startCenter.x, gesture.startCenter.y);
+      } else {
+        const nextAnchor = getVisibleEdgeWorldPoint(artwork, gesture.resizeFixedSide);
+        artwork.moveBy(
+          anchor.x - nextAnchor.x,
+          anchor.y - nextAnchor.y,
+        );
+      }
+      return;
+    }
+
     const isAlt = event.altKey;
     const anchor = isAlt ? gesture.startCenter : gesture.anchorPos;
     const currentDist = Math.hypot(point.x - anchor.x, point.y - anchor.y);
@@ -1324,8 +1463,11 @@ export function createArtworkApp({
     const pointerId = gesture.pointerId;
     if (gesture.type === 'move' || gesture.type === 'resize') {
       commitChange(gesture.type === 'move' ? 'Move artwork' : 'Resize artwork', gesture.before);
+    } else if (gesture.type === 'pan') {
+      scheduleSave();
     }
     gesture = null;
+    svg.classList.remove('canvas-panning');
     releasePointerCapture(pointerId);
   }
   function finishCropGesture(event) {
@@ -1393,7 +1535,7 @@ export function createArtworkApp({
       initialLocalX: localX,
       initialLocalY: localY,
     };
-    const cornerEl = event.target.closest('.crop-handle');
+    const cornerEl = event.target.closest('[data-crop-corner]');
     if (cornerEl) {
       cropGesture.type = 'resize';
       cropGesture.corner = Number(cornerEl.dataset.cropCorner);
@@ -1402,6 +1544,18 @@ export function createArtworkApp({
         case 1: cropGesture.anchorX = cropPreview.x; cropGesture.anchorY = cropPreview.y + cropPreview.height; break;
         case 2: cropGesture.anchorX = cropPreview.x; cropGesture.anchorY = cropPreview.y; break;
         case 3: cropGesture.anchorX = cropPreview.x + cropPreview.width; cropGesture.anchorY = cropPreview.y; break;
+      }
+    } else {
+      const edgeEl = event.target.closest('.crop-side-handle');
+      if (edgeEl) {
+        cropGesture.type = 'resize';
+        cropGesture.edge = edgeEl.dataset.cropEdge;
+        switch (cropGesture.edge) {
+          case 'n': cropGesture.anchorY = cropPreview.y + cropPreview.height; break;
+          case 'e': cropGesture.anchorX = cropPreview.x; break;
+          case 's': cropGesture.anchorY = cropPreview.y; break;
+          case 'w': cropGesture.anchorX = cropPreview.x + cropPreview.width; break;
+        }
       }
     }
     svg.setPointerCapture(event.pointerId);
@@ -1441,6 +1595,36 @@ export function createArtworkApp({
       newY = Math.max(0, Math.min(maxH - cropPreview.height, newY));
       cropPreview.x = newX;
       cropPreview.y = newY;
+    } else if (cropGesture.edge) {
+      const minDim = 1;
+      switch (cropGesture.edge) {
+        case 'n': {
+          const newY = clamp(localY, 0, cropGesture.anchorY - minDim);
+          cropPreview.y = newY;
+          cropPreview.height = cropGesture.anchorY - newY;
+          break;
+        }
+        case 'e': {
+          const newRight = clamp(localX, cropGesture.anchorX + minDim, maxW);
+          cropPreview.x = cropGesture.anchorX;
+          cropPreview.width = newRight - cropGesture.anchorX;
+          break;
+        }
+        case 's': {
+          const newBottom = clamp(localY, cropGesture.anchorY + minDim, maxH);
+          cropPreview.y = cropGesture.anchorY;
+          cropPreview.height = newBottom - cropGesture.anchorY;
+          break;
+        }
+        case 'w': {
+          const newX = clamp(localX, 0, cropGesture.anchorX - minDim);
+          cropPreview.x = newX;
+          cropPreview.width = cropGesture.anchorX - newX;
+          break;
+        }
+        default:
+          break;
+      }
     } else {
       const { anchorX, anchorY } = cropGesture;
       const minDim = 1;
@@ -1482,6 +1666,19 @@ export function createArtworkApp({
     else if (gesture) finishGesture(event);
   });
   svg.addEventListener('pointerdown', (event) => {
+    if (event.button === 2) {
+      if (event.target !== svg || gesture || cropGesture) return;
+      event.preventDefault();
+      gesture = {
+        type: 'pan',
+        pointerId: event.pointerId,
+        lastClientX: event.clientX,
+        lastClientY: event.clientY,
+      };
+      svg.classList.add('canvas-panning');
+      svg.setPointerCapture(event.pointerId);
+      return;
+    }
     if (event.button !== 0) return;
     if (cropMode === 'draw' && event.target.closest('.artwork-image')) {
       startDrawCrop(event);
@@ -1570,6 +1767,10 @@ export function createArtworkApp({
     } else {
       artwork.setDisplayedWidth(value);
     }
+  });
+
+  svg.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
   });
   bindNumberControl(controls.height, 'Set artwork height', (value) => {
     if (constrainProportions) {
@@ -1716,8 +1917,14 @@ export function createArtworkApp({
     controls.cropDrawBtn.classList.toggle('active', isDraw);
     controls.cropFrameBtn.setAttribute('aria-pressed', String(isFrame));
     controls.cropDrawBtn.setAttribute('aria-pressed', String(isDraw));
+    const frameLabel = isFrame ? t('applyCropTitle') : t('cropFrameTitle');
+    const drawLabel = isDraw ? t('applyCropTitle') : t('cropDrawTitle');
     controls.cropFrameBtn.querySelector('span').textContent = isFrame ? t('applyCrop') : t('cropFrame');
     controls.cropDrawBtn.querySelector('span').textContent = isDraw ? t('applyCrop') : t('cropDraw');
+    controls.cropFrameBtn.title = frameLabel;
+    controls.cropFrameBtn.setAttribute('aria-label', frameLabel);
+    controls.cropDrawBtn.title = drawLabel;
+    controls.cropDrawBtn.setAttribute('aria-label', drawLabel);
   }
 
   function updateCropStatus(idleKey = null) {
@@ -1825,6 +2032,138 @@ export function createArtworkApp({
     controls.constrainBtn.textContent = constrainProportions ? '🔗' : '⛓️‍💥';
     renderControls();
   });
+
+  function readBoxDimensions() {
+    return {
+      width: Number(controls.boxWidth.value),
+      height: Number(controls.boxHeight.value),
+      depth: Number(controls.boxDepth.value),
+    };
+  }
+
+  function applyBoxDimensionChange(nextDims) {
+    try {
+      boxModel.updateDimensions(nextDims);
+      renderer.render();
+      scheduleSave();
+    } catch (err) {
+      showToast(err.message);
+      renderControls();
+      render();
+    }
+  }
+
+  controls.boxConstrainBtn.addEventListener('click', () => {
+    boxConstrainProportions = !boxConstrainProportions;
+    controls.boxConstrainBtn.setAttribute('aria-pressed', String(boxConstrainProportions));
+    controls.boxConstrainBtn.textContent = boxConstrainProportions ? '🔗' : '⛓️‍💥';
+  });
+
+  function handleBoxDimChange(changedKey) {
+    const current = readBoxDimensions();
+    if (!Number.isFinite(current.width) || !Number.isFinite(current.height) || !Number.isFinite(current.depth)) return;
+
+    if (boxConstrainProportions) {
+      const modelDims = boxModel.dimensions;
+      if (changedKey === 'width' && modelDims.width > 0) {
+        const ratio = current.width / modelDims.width;
+        current.height = modelDims.height * ratio;
+        current.depth = modelDims.depth * ratio;
+      } else if (changedKey === 'height' && modelDims.height > 0) {
+        const ratio = current.height / modelDims.height;
+        current.width = modelDims.width * ratio;
+        current.depth = modelDims.depth * ratio;
+      } else if (changedKey === 'depth' && modelDims.depth > 0) {
+        const ratio = current.depth / modelDims.depth;
+        current.width = modelDims.width * ratio;
+        current.height = modelDims.height * ratio;
+      }
+    }
+
+    command('Set box dimensions', () => applyBoxDimensionChange(current));
+  }
+
+  controls.boxWidth.addEventListener('change', () => handleBoxDimChange('width'));
+  controls.boxHeight.addEventListener('change', () => handleBoxDimChange('height'));
+  controls.boxDepth.addEventListener('change', () => handleBoxDimChange('depth'));
+
+  function setupBoxScrubber(iconElement, key, axis) {
+    if (!iconElement) return;
+
+    let startPos = 0;
+    let startVal = 0;
+    let isDragging = false;
+
+    iconElement.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      isDragging = true;
+      try { iconElement.setPointerCapture(event.pointerId); } catch { /* ok */ }
+      iconElement.classList.add('scrubbing');
+
+      const current = readBoxDimensions();
+      startVal = Number.isFinite(current[key]) ? current[key] : boxModel.dimensions[key];
+
+      if (axis === 'horizontal') startPos = event.clientX;
+      else if (axis === 'vertical') startPos = event.clientY;
+      else if (axis === 'diagonal') startPos = event.clientX - event.clientY;
+    });
+
+    iconElement.addEventListener('pointermove', (event) => {
+      if (!isDragging) return;
+
+      let delta = 0;
+      if (axis === 'horizontal') {
+        delta = event.clientX - startPos;
+      } else if (axis === 'vertical') {
+        delta = startPos - event.clientY;
+      } else if (axis === 'diagonal') {
+        delta = (event.clientX - event.clientY - startPos) / Math.SQRT2;
+      }
+
+      let step = 0.1;
+      let decimals = 1;
+      if (event.ctrlKey || event.metaKey) { step = 1; decimals = 0; }
+      else if (event.altKey) { step = 0.01; decimals = 2; }
+
+      const rawNewValue = startVal + delta * step;
+      const factor = Math.pow(10, decimals);
+      const newValue = Math.max(0.1, Math.min(100000, Math.round(rawNewValue * factor) / factor));
+
+      const input = controls[key === 'width' ? 'boxWidth' : key === 'height' ? 'boxHeight' : 'boxDepth'];
+      if (input && Number(input.value) !== newValue) {
+        input.value = round(newValue);
+        try {
+          const dims = readBoxDimensions();
+          boxModel.updateDimensions(dims);
+          renderer.render();
+        } catch { /* silent preview can fail; restore on pointerup */ }
+      }
+    });
+
+    const stopDragging = (event) => {
+      if (!isDragging) return;
+      isDragging = false;
+      try { iconElement.releasePointerCapture(event.pointerId); } catch { /* ok */ }
+      iconElement.classList.remove('scrubbing');
+      command('Set box dimensions', () => {
+        const dims = readBoxDimensions();
+        applyBoxDimensionChange(dims);
+      });
+    };
+
+    iconElement.addEventListener('pointerup', stopDragging);
+    iconElement.addEventListener('pointercancel', stopDragging);
+  }
+
+  const boxScrubbers = {
+    width: documentRef.querySelector('#boxDimensionsSection .dim-scrubber[data-dim="width"]'),
+    height: documentRef.querySelector('#boxDimensionsSection .dim-scrubber[data-dim="height"]'),
+    depth: documentRef.querySelector('#boxDimensionsSection .dim-scrubber[data-dim="depth"]'),
+  };
+  setupBoxScrubber(boxScrubbers.width, 'width', 'horizontal');
+  setupBoxScrubber(boxScrubbers.height, 'height', 'vertical');
+  setupBoxScrubber(boxScrubbers.depth, 'depth', 'diagonal');
 
   controls.choose.addEventListener('click', () => input.click());
   controls.replace.addEventListener('click', () => {

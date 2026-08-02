@@ -1173,6 +1173,10 @@ input[type="checkbox"] {
   box-shadow: inset 0 0 0 3px var(--focus);
 }
 
+#artworkWorkspace.canvas-panning {
+  cursor: grabbing;
+}
+
 .drop-state {
   position: absolute;
   inset: 28px;
@@ -2482,15 +2486,30 @@ dialog button {
 }
 
 /* Crop buttons */
-#cropFrameButton,
-#cropDrawButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+.crop-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
-#cropFrameButton.active,
-#cropDrawButton.active {
+.crop-tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 32px;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.crop-tool-btn svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.crop-tool-btn.active {
   background: var(--accent, #4a9eff);
   color: #fff;
 }
@@ -2856,6 +2875,108 @@ dialog input {
 .render-recovery button {
   width: max-content;
 }
+
+/* Box Dimensions panel */
+.box-dim-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 0 !important;
+}
+
+.box-dim-title .chain-toggle--box {
+  flex: 0 0 24px;
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.box-dim-fields {
+  display: grid;
+  gap: 6px;
+}
+
+.box-dim-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.box-dim-row label {
+  overflow: hidden;
+  color: var(--text, #ffffff);
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.box-dim-control {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.box-dim-control .measure-input {
+  flex: 1 1 88px;
+  width: auto;
+  min-width: 0;
+}
+
+.box-dim-control .measure-input input {
+  box-sizing: border-box;
+}
+
+.box-dim-row .dimension-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  user-select: none;
+  touch-action: none;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.box-dim-row:hover .dimension-icon,
+.box-dim-row .dimension-icon.scrubbing {
+  transform: scale(1.25);
+}
+
+.box-dim-row .dimension-icon.scrubbing {
+  color: var(--focus);
+}
+
+.box-dim-row .dim-scrubber {
+  border-radius: 3px;
+  cursor: grab;
+}
+
+.box-dim-row .dim-scrubber:active,
+.box-dim-row .dim-scrubber.scrubbing {
+  cursor: grabbing;
+}
+
+.box-dim-row .dim-scrubber[data-dim="width"] { cursor: ew-resize; }
+.box-dim-row .dim-scrubber[data-dim="height"] { cursor: ns-resize; }
+.box-dim-row .dim-scrubber[data-dim="depth"] { cursor: nesw-resize; }
+
+.box-dim-row .dimension-icon:hover {
+  color: var(--focus);
+}
+
+/* Keep labels and controls aligned if the sidebar becomes narrow. */
+@media (max-width: 420px) {
+  .box-dim-row {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+
 
 @media (max-width: 900px) {
   .render-main-row {

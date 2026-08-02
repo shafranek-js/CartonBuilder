@@ -72,6 +72,42 @@ test.beforeEach(async ({ page }) => {
 
 test('shows a correctly positioned crop frame and commits it with the active button', async ({ page }) => {
   await openArtwork(page);
+  const cropTools = page.locator('#cropSection .crop-tool-btn');
+  await expect(cropTools).toHaveCount(3);
+  const cropToolBoxes = await cropTools.evaluateAll((nodes) => nodes.map((node) => {
+    const box = node.getBoundingClientRect();
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  }));
+  expect(cropToolBoxes.every((box) => Math.abs(box.y - cropToolBoxes[0].y) < 1)).toBe(true);
+  expect(cropToolBoxes.every((box) => Math.abs(box.width - box.height) < 1)).toBe(true);
+  // The label is intentionally visually hidden but remains available to
+  // assistive technology. Assert the sr-only geometry instead of relying on
+  // Playwright's visibility heuristic for clipped 1px elements.
+  await expect(cropTools.nth(0).locator('span')).toHaveCSS('position', 'absolute');
+  await expect(cropTools.nth(0).locator('span')).toHaveCSS('width', '1px');
+  await expect(cropTools.nth(0).locator('svg')).toBeVisible();
+  await expect(cropTools.nth(0)).toHaveAttribute('aria-label', 'Crop by adjusting frame handles');
+  await expect(cropTools.nth(2)).toHaveAttribute('aria-label', 'Clear crop mask');
+  const boxRows = page.locator('#boxDimensionsSection .box-dim-row');
+  await expect(boxRows).toHaveCount(3);
+  const boxRowLayout = await boxRows.evaluateAll((rows) => rows.map((row) => {
+    const rowRect = row.getBoundingClientRect();
+    const controlRect = row.querySelector('.box-dim-control').getBoundingClientRect();
+    const icon = row.querySelector('.dimension-icon');
+    return {
+      y: rowRect.y,
+      controlX: controlRect.x,
+      iconClass: icon.className.baseVal,
+    };
+  }));
+  expect(boxRowLayout.every((row, index) => index === 0 || row.y > boxRowLayout[index - 1].y)).toBe(true);
+  expect(boxRowLayout.every((row) => row.controlX === boxRowLayout[0].controlX)).toBe(true);
+  expect(boxRowLayout.map((row) => row.iconClass)).toEqual([
+    'dimension-icon dim-scrubber width-icon',
+    'dimension-icon dim-scrubber height-icon',
+    'dimension-icon dim-scrubber depth-icon',
+  ]);
+  await expect(page.locator('#boxDimensionsSection .box-dim-title #boxConstrainProportionsBtn')).toHaveCount(1);
   const before = await page.evaluate(() => {
     const model = window.cartonBuilderApp.artwork.artwork;
     return {
@@ -87,6 +123,8 @@ test('shows a correctly positioned crop frame and commits it with the active but
   await expect(page.locator('#cropFrameButton span')).toHaveText('Apply');
   await expect(page.locator('#cropDrawButton span')).toHaveText('Draw');
   await expect(page.locator('.crop-frame')).toHaveCount(1);
+  await expect(page.locator('.crop-handle')).toHaveCount(8);
+  await expect(page.locator('.crop-side-handle')).toHaveCount(4);
   const cropHandleBox = await page.locator('.crop-handle').first().boundingBox();
   expect(cropHandleBox?.width).toBeGreaterThanOrEqual(4);
   expect(cropHandleBox?.width).toBeLessThanOrEqual(6);
@@ -117,6 +155,119 @@ test('shows a correctly positioned crop frame and commits it with the active but
   await expect(page.locator('.selection-frame')).toHaveCount(1);
   const resizeHandleBox = await page.locator('.resize-handle').first().boundingBox();
   expect(resizeHandleBox?.width).toBeCloseTo(cropHandleBox.width, 0);
+});
+
+test('shows side handles on the artwork selection and resizes from an edge', async ({ page }) => {
+  await openArtwork(page);
+  await expect(page.locator('.selection-frame')).toHaveCount(1);
+  await expect(page.locator('.resize-handle')).toHaveCount(8);
+  await expect(page.locator('.resize-side-handle')).toHaveCount(4);
+
+  const before = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return { width: model.displayedWidthMm, height: model.displayedHeightMm };
+  });
+  await page.locator('#constrainProportionsBtn').click();
+  const eastHandle = page.locator('.resize-side-handle[data-resize-side="e"]');
+  const eastBox = await eastHandle.boundingBox();
+  if (!eastBox) throw new Error('East artwork resize handle has no screen bounds');
+  await page.mouse.move(eastBox.x + eastBox.width / 2, eastBox.y + eastBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(eastBox.x + eastBox.width / 2 - 20, eastBox.y + eastBox.height / 2);
+  await page.mouse.up();
+
+  const after = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return { width: model.displayedWidthMm, height: model.displayedHeightMm };
+  });
+  expect(after.width).toBeLessThan(before.width);
+  expect(after.height).toBeCloseTo(before.height, 5);
+});
+
+test('allows non-proportional corner resize when proportions are unconstrained', async ({ page }) => {
+  await openArtwork(page);
+  const before = await page.evaluate(() => ({
+    width: window.cartonBuilderApp.artwork.artwork.displayedWidthMm,
+    height: window.cartonBuilderApp.artwork.artwork.displayedHeightMm,
+  }));
+  await page.locator('#constrainProportionsBtn').click();
+
+  const handle = page.locator('.resize-handle[data-handle="se"]');
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error('Southeast artwork resize handle has no screen bounds');
+  const startX = handleBox.x + handleBox.width / 2;
+  const startY = handleBox.y + handleBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 70, startY + 6);
+  await page.mouse.up();
+
+  const after = await page.evaluate(() => ({
+    width: window.cartonBuilderApp.artwork.artwork.displayedWidthMm,
+    height: window.cartonBuilderApp.artwork.artwork.displayedHeightMm,
+    scaleX: window.cartonBuilderApp.artwork.artwork.scaleX,
+    scaleY: window.cartonBuilderApp.artwork.artwork.scaleY,
+  }));
+  expect(after.width).toBeGreaterThan(before.width);
+  expect(after.height).toBeGreaterThan(before.height);
+  expect(after.width / before.width).not.toBeCloseTo(after.height / before.height, 2);
+  expect(after.scaleX).not.toBeCloseTo(after.scaleY, 2);
+});
+
+test('resizes the crop frame with a side handle while keeping the opposite edge fixed', async ({ page }) => {
+  await openArtwork(page);
+  await page.locator('#cropFrameButton').click();
+  const frame = page.locator('.crop-frame');
+  const before = {
+    x: Number(await frame.getAttribute('x')),
+    width: Number(await frame.getAttribute('width')),
+  };
+  const eastHandle = page.locator('.crop-side-handle[data-crop-edge="e"]');
+  const eastBox = await eastHandle.boundingBox();
+  if (!eastBox) throw new Error('East crop handle has no screen bounds');
+  await page.mouse.move(eastBox.x + eastBox.width / 2, eastBox.y + eastBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(eastBox.x + eastBox.width / 2 - 20, eastBox.y + eastBox.height / 2);
+  await page.mouse.up();
+
+  expect(Number(await frame.getAttribute('x'))).toBeCloseTo(before.x, 5);
+  expect(Number(await frame.getAttribute('width'))).toBeLessThan(before.width);
+});
+
+test('pans the empty artwork canvas with a right-button drag', async ({ page }) => {
+  await openArtwork(page);
+  const blankPoint = await page.evaluate(() => {
+    const svg = document.getElementById('artworkWorkspace');
+    const rect = svg.getBoundingClientRect();
+    for (let y = 8; y < rect.height - 8; y += 8) {
+      for (let x = 8; x < rect.width - 8; x += 8) {
+        const target = document.elementFromPoint(rect.left + x, rect.top + y);
+        if (target === svg) return { x: rect.left + x, y: rect.top + y };
+      }
+    }
+    return null;
+  });
+  if (!blankPoint) throw new Error('Could not find an empty canvas point');
+
+  const before = await page.evaluate(() => ({
+    view: window.cartonBuilderApp.getState().view,
+    centerX: window.cartonBuilderApp.artwork.artwork.centerXmm,
+    centerY: window.cartonBuilderApp.artwork.artwork.centerYmm,
+  }));
+  await page.mouse.move(blankPoint.x, blankPoint.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(blankPoint.x + 40, blankPoint.y - 25, { steps: 3 });
+  await page.mouse.up({ button: 'right' });
+
+  const after = await page.evaluate(() => ({
+    view: window.cartonBuilderApp.getState().view,
+    centerX: window.cartonBuilderApp.artwork.artwork.centerXmm,
+    centerY: window.cartonBuilderApp.artwork.artwork.centerYmm,
+  }));
+  expect(after.view.panX).toBeCloseTo(before.view.panX + 40, 5);
+  expect(after.view.panY).toBeCloseTo(before.view.panY - 25, 5);
+  expect(after.centerX).toBe(before.centerX);
+  expect(after.centerY).toBe(before.centerY);
 });
 
 test('draws a crop area on the artwork, applies with Enter, and supports Escape cancellation', async ({ page }) => {

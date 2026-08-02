@@ -213,6 +213,40 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   await expect(page.locator('#artworkFileName')).toHaveText('sample-artwork.png');
 });
 
+test('updates artwork-step box dimensions without fitting the active artwork', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page);
+
+  const beforeArtwork = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return {
+      centerXmm: model.centerXmm,
+      centerYmm: model.centerYmm,
+      scaleX: model.scaleX,
+      scaleY: model.scaleY,
+      initialWidthMm: model.initialWidthMm,
+      initialHeightMm: model.initialHeightMm,
+    };
+  });
+  const beforeWidth = await page.evaluate(() => window.boxNetApp.getState().dimensions.width);
+  const widthInput = page.locator('#artworkBoxWidth');
+  await widthInput.fill(String(beforeWidth + 10));
+  await widthInput.dispatchEvent('change');
+
+  await expect.poll(() => page.evaluate(() => window.boxNetApp.getState().dimensions.width)).toBe(beforeWidth + 10);
+  await expect.poll(() => page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return {
+      centerXmm: model.centerXmm,
+      centerYmm: model.centerYmm,
+      scaleX: model.scaleX,
+      scaleY: model.scaleY,
+      initialWidthMm: model.initialWidthMm,
+      initialHeightMm: model.initialHeightMm,
+    };
+  })).toEqual(beforeArtwork);
+});
+
 test('validates dimensions, warns once for modified artwork and preserves compatibility events', async ({ page }) => {
   await activate(page, 'Add Base Panel to the bottom edge of Front Panel', ' ');
   await expect(page.locator('#announcer')).toHaveText('Base Panel added. 2 of 6 panels placed.');
