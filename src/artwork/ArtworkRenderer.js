@@ -181,6 +181,25 @@ function appendDieline(documentRef, parent, model) {
   }
 }
 
+function appendSnapGuides(documentRef, parent, guides) {
+  const seen = new Set();
+  for (const guide of guides || []) {
+    const segment = guide?.segment;
+    if (!segment || seen.has(segment.id)) continue;
+    seen.add(segment.id);
+    parent.appendChild(svgElement(documentRef, 'line', {
+      class: `snap-guide snap-guide-${segment.kind}`,
+      x1: segment.start.x,
+      y1: segment.start.y,
+      x2: segment.end.x,
+      y2: segment.end.y,
+      'data-snap-axis': segment.axis,
+      'data-snap-kind': segment.kind,
+      'pointer-events': 'none',
+    }));
+  }
+}
+
 function getScreenCursor(key, rotation) {
   const corners = ['nw', 'ne', 'se', 'sw'];
   const baseIndex = corners.indexOf(key);
@@ -285,12 +304,17 @@ export class ArtworkRenderer {
     this.selected = false;
     this._cropFrame = null;
     this._drawRect = null;
+    this.snapGuides = [];
   }
 
   get cropFrame() { return this._cropFrame; }
   set cropFrame(v) { this._cropFrame = v || null; }
   get drawRect() { return this._drawRect; }
   set drawRect(v) { this._drawRect = v || null; }
+
+  setSnapGuides(guides) {
+    this.snapGuides = Array.isArray(guides) ? guides.filter(Boolean) : [];
+  }
 
   setPreviewBlob(blob) {
     if (this.legacyPreviewUrl) URL.revokeObjectURL(this.legacyPreviewUrl);
@@ -431,6 +455,8 @@ export class ArtworkRenderer {
     }
 
     if (showDieline) appendDieline(documentRef, target, this.model);
+
+    if (!preview && this.snapGuides.length) appendSnapGuides(documentRef, target, this.snapGuides);
 
     if (showNames) {
       for (const panel of this.model.getPanels()) {

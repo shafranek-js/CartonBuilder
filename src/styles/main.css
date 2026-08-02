@@ -2534,6 +2534,19 @@ dialog button {
   vector-effect: non-scaling-stroke;
 }
 
+.snap-guide {
+  fill: none;
+  stroke: #e6c84f;
+  stroke-width: 2.5px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px rgb(0 0 0 / 42%));
+}
+
+.snap-guide-fold {
+  stroke-dasharray: 7 4;
+}
+
 /* Crop frame */
 .crop-frame {
   fill: rgba(49, 87, 213, 0.08);

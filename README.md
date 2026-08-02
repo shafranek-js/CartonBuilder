@@ -109,6 +109,11 @@ The status-aware index for all project documentation is in
 - Drag artwork to move it.
 - Drag a corner to scale with the opposite corner anchored.
 - `Alt` + corner drag scales from the centre.
+- Artwork resize handles snap to every CutContour and Fold dieline line;
+  constrained and unconstrained corner/side resizing both support snapping.
+- Hold `Ctrl`/`Cmd` while resizing to bypass snapping. The active dieline
+  target is highlighted while the pointer is captured; the highlight clears on
+  release. Crop frame corner and side handles use the same snapping behavior.
 - Mouse wheel zooms the canvas; `Ctrl` + wheel scales the artwork.
 - Middle-mouse drag or `Space` + drag pans the canvas.
 - Arrow keys move by 0.1 mm; `Shift` changes the step to 1 mm; `Ctrl` changes it
