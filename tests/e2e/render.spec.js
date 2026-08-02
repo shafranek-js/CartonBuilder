@@ -237,8 +237,24 @@ test('restores Render settings and workflow step through autosave', async ({ pag
   await openRender(page);
   await page.locator('#renderAspect').selectOption('portrait');
   await page.locator('#renderLongEdge').selectOption('4096');
+  await page.locator('#renderProjection').selectOption('orthographic');
+  await page.locator('#renderFov').fill('52');
+  await page.locator('#renderMaterialProfile').selectOption('gloss');
   await page.locator('#renderEnvironment').selectOption('cool');
   await page.locator('#renderBackgroundMode').selectOption('transparent');
+  await page.locator('#renderBoardThickness').fill('0.8');
+  await page.locator('#renderBoardBevel').fill('0.2');
+  await page.locator('#renderBoardInteriorColor').fill('#abcdef');
+  await page.locator('#renderBoardEdgeColor').fill('#123456');
+  await page.locator('#renderEffectsGtao').uncheck();
+  await page.locator('#renderEffectsDof').check();
+
+  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await page.locator('#previewExportHtmlQuality').selectOption('2400');
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderStep')).toBeVisible();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
   await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
 
   await page.reload();
@@ -247,7 +263,17 @@ test('restores Render settings and workflow step through autosave', async ({ pag
   await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState())).toMatchObject({
     aspect: 'portrait',
     longEdge: 4096,
+    camera: { projection: 'orthographic', fov: 52 },
+    material: { profile: 'gloss' },
     lighting: { environment: 'cool' },
     background: { mode: 'transparent' },
+    quality: { html: 2400 },
+    effects: { gtao: { enabled: false }, dof: { enabled: true } },
+  });
+  expect(await page.evaluate(() => window.cartonBuilderApp.render.getBoardAppearance())).toMatchObject({
+    thicknessMm: 0.8,
+    bevelRadiusMm: 0.2,
+    interiorColor: '#abcdef',
+    edgeColor: '#123456',
   });
 });

@@ -7,6 +7,7 @@ import {
   readProjectArchive,
 } from '../../src/project/projectArchive.js';
 import { DEFAULT_RENDER_SETTINGS } from '../../src/render/RenderSettings.js';
+import { DEFAULT_BOARD_APPEARANCE } from '../../src/render/BoardAppearance.js';
 
 async function createArtworkEntry(fileName) {
   const originalBlob = new Blob([
@@ -69,6 +70,11 @@ async function createFixture() {
       longEdge: 4096,
       background: { mode: 'transparent', color: '#112233' },
       lighting: { ...structuredClone(DEFAULT_RENDER_SETTINGS.lighting), environment: 'cool' },
+    },
+    renderAppearance: {
+      ...structuredClone(DEFAULT_BOARD_APPEARANCE),
+      thicknessMm: 0.8,
+      edgeColor: '#aabbcc',
     },
     view: {},
     history: { undo: [], redo: [] },

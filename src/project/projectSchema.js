@@ -8,6 +8,7 @@ import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
+import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 6;
 
@@ -197,6 +198,9 @@ export function migrateProjectSnapshot(input) {
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
   snapshot.render = sanitizeRenderSettings(snapshot.render);
+  if (Object.hasOwn(snapshot, 'renderAppearance')) {
+    snapshot.renderAppearance = sanitizeBoardAppearance(snapshot.renderAppearance);
+  }
 
   if (!Array.isArray(snapshot.artworks)) {
     throw new AppError('projectIncomplete');

@@ -17,6 +17,10 @@ import {
   sanitizeBoardAppearance,
 } from './BoardAppearance.js';
 import {
+  readRenderSettings,
+  writeRenderSettings,
+} from './renderSettingsStorage.js';
+import {
   deleteRenderPreset,
   getActiveRenderPresetId,
   getRenderPresets,
@@ -33,6 +37,14 @@ async function loadRendererModule() {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function getStorage(windowRef) {
+  try {
+    return windowRef?.localStorage || null;
+  } catch {
+    return null;
+  }
 }
 
 function setRangeProgress(element, value) {
@@ -74,6 +86,8 @@ export function createRenderApp({
   documentRef = document,
   windowRef = window,
   initialState = DEFAULT_RENDER_SETTINGS,
+  initialBoardAppearance = null,
+  restorePersistedSettings = true,
   onStateChange = () => {},
   setArtworkQuality = () => false,
   onBackToPreview = () => {},
@@ -148,8 +162,14 @@ export function createRenderApp({
     presetButtons: [...documentRef.querySelectorAll('[data-render-preset]')],
   };
 
-  let state = sanitizeRenderSettings(initialState);
-  let boardAppearance = sanitizeBoardAppearance();
+  const storage = getStorage(windowRef);
+  const storedSettings = restorePersistedSettings
+    ? readRenderSettings(storage)
+    : null;
+  let state = sanitizeRenderSettings(storedSettings?.renderSettings || initialState);
+  let boardAppearance = sanitizeBoardAppearance(
+    storedSettings?.boardAppearance || initialBoardAppearance,
+  );
   let namedPresets = [];
   let activeNamedPresetId = '';
   let pathTracingService = null;
@@ -172,7 +192,15 @@ export function createRenderApp({
 
   function notifyStateChange() {
     state = sanitizeRenderSettings(getState());
+    persistSettings();
     onStateChange(getState());
+  }
+
+  function persistSettings() {
+    writeRenderSettings({
+      renderSettings: getState(),
+      boardAppearance,
+    }, storage);
   }
 
   function setBusy(value) {
@@ -517,9 +545,14 @@ export function createRenderApp({
     syncController = null;
   }
 
-  function restoreState(next) {
+  function restoreState(next, nextBoardAppearance = undefined) {
     exportController?.abort();
     state = sanitizeRenderSettings(next);
+    if (nextBoardAppearance !== undefined) {
+      boardAppearance = sanitizeBoardAppearance(nextBoardAppearance);
+      renderer?.setBoardAppearance?.(boardAppearance);
+    }
+    persistSettings();
     updateControls();
     if (active) syncScene({ force: true });
   }
@@ -539,6 +572,7 @@ export function createRenderApp({
       if (activePreset) {
         boardAppearance = sanitizeBoardAppearance(activePreset.boardAppearance);
         renderer?.setBoardAppearance?.(boardAppearance);
+        persistSettings();
       } else if (activeNamedPresetId) {
         activeNamedPresetId = '';
         setActiveRenderPresetId('');
@@ -557,7 +591,10 @@ export function createRenderApp({
     renderer?.markInteraction?.();
     renderer?.render?.();
     updateControls();
-    if (notify) onStateChange(getState());
+    if (notify) {
+      persistSettings();
+      onStateChange(getState());
+    }
   }
 
   async function saveNamedPreset() {
@@ -584,6 +621,8 @@ export function createRenderApp({
     boardAppearance = sanitizeBoardAppearance(preset.boardAppearance);
     updateState(preset.renderSettings);
     renderer?.setBoardAppearance?.(boardAppearance);
+    persistSettings();
+    onStateChange(getState());
     updateControls();
     return true;
   }

@@ -18,6 +18,7 @@ import { loadArtworkFile, renderPdfWithLayers } from './fileLoader.js';
 import { getSnapOffset, buildSnapTargets, getResizeSnapScale, getDisplayedReferenceFraction } from './snap.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
+import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { getArtworkRasterSignature, rasterizeArtwork, resolveArtworkDpi } from './artworkRasterizer.js';
 
 const SNAP_SCREEN_PX = 6;
@@ -146,6 +147,7 @@ export function createArtworkApp({
   onProjectLoaded,
   getWorkflowStep = () => 'artwork',
   getRenderState = () => DEFAULT_RENDER_SETTINGS,
+  getRenderBoardAppearance = () => null,
   onRenderStateChanged = () => {},
   onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
@@ -572,6 +574,7 @@ export function createArtworkApp({
       })),
       activeArtworkIndex,
       render: sanitizeRenderSettings(getRenderState()),
+      renderAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
       view: {
         ...viewport.toJSON(),
         layers: { ...layers },
