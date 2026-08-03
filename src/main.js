@@ -151,6 +151,7 @@ if (fileMenuTriggerBtn && fileMenuPopover) {
     onSaveProject: handleSaveProject,
     onPlaceArtwork: handlePlaceArtwork,
     onExport: (type) => artworkApp?.exportDeliverable?.(type),
+    onRenderExport: (kind) => renderApp?.openExportDialog?.('png', kind),
     onOpen: () => {
       editMenu?.togglePopover(false);
       contactsMenu?.togglePopover(false);
@@ -346,8 +347,9 @@ artworkApp = createArtworkApp({
     showStep('preview');
   },
   onBackToEditor: () => showStep('artwork'),
-  onProjectLoaded: (snapshot) => {
+  onProjectLoaded: (snapshot, project = null) => {
     preview3dFacade?.resetForProject();
+    renderApp?.restoreRenderAssets?.(project?.renderAssets || []);
     renderApp?.restoreState(snapshot.render, snapshot.renderAppearance);
     const hasArtwork = Boolean(snapshot.artworks?.length);
     let targetStep = 'box';
@@ -368,6 +370,7 @@ artworkApp = createArtworkApp({
   getWorkflowStep: () => currentStep,
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
+  getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
   onArtworkQualityChanged: async ({ kind } = {}) => {
     const refreshes = [];

@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { BlobReader, ZipReader } from '@zip.js/zip.js';
+import { validateBytes } from 'gltf-validator';
 import { inflateSync } from 'node:zlib';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
@@ -135,6 +137,13 @@ function getPngPixelSummary(bytes) {
   return { varied, firstPixel };
 }
 
+async function readDownload(download) {
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 async function openRender(page, fileName) {
   await buildReferenceNet(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -152,7 +161,7 @@ async function openRender(page, fileName) {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const request = indexedDB.open('carton-builder', 1);
+    const request = indexedDB.open('carton-builder', 6);
     await new Promise((resolve) => {
       request.onsuccess = () => {
         const db = request.result;
@@ -292,20 +301,73 @@ test('exports a PNG with the selected 2048 output dimensions', async ({ page }) 
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
   });
 
+  await page.locator('#renderPngButton').click();
+  await expect(page.locator('#renderExportDialog')).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 30_000 }),
-    page.locator('#renderPngButton').click(),
+    page.locator('#renderExportForm button[value="confirm"]').click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/carton-render-.*-2048\.png$/);
-  const buffer = await download.createReadStream();
-  const chunks = [];
-  for await (const chunk of buffer) chunks.push(chunk);
-  const bytes = Buffer.concat(chunks);
+  const bytes = await readDownload(download);
   expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   expect(bytes.readUInt32BE(16)).toBe(2048);
   expect(bytes.readUInt32BE(20)).toBe(1536);
   expect(bytes.length).toBeGreaterThan(10_000);
   expect(getPngPixelSummary(bytes)).toMatchObject({ varied: true });
+});
+
+test('exports a valid self-contained static GLB with the selected material profile', async ({ page }) => {
+  await openRender(page);
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
+  });
+  await page.locator('#renderPngButton').click();
+  await expect(page.locator('#renderExportDialog')).toBeVisible();
+  await page.locator('#renderExportKind').selectOption('glb');
+  await page.locator('#renderExportGlbTextureSize').selectOption('1024');
+  await page.locator('#renderExportGlbMaterialMode').selectOption('basic-compatibility');
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 60_000 }),
+    page.locator('#renderExportForm button[value="confirm"]').click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/carton-.*-matte\.glb$/);
+  const bytes = await readDownload(download);
+  expect(bytes.subarray(0, 4).toString('ascii')).toBe('glTF');
+  expect(bytes.readUInt32LE(4)).toBe(2);
+  expect(bytes.length).toBeGreaterThan(512);
+  const report = await validateBytes(new Uint8Array(bytes), { format: 'glb' });
+  expect(report.issues.numErrors).toBe(0);
+  expect(report.info.generator).toContain('THREE.GLTFExporter');
+});
+
+test('exports a numbered turntable ZIP and restores the live Render camera', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openRender(page);
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
+  });
+  const before = await page.evaluate(() => window.cartonBuilderApp.render.getState().camera);
+  await page.locator('#renderPngButton').click();
+  await expect(page.locator('#renderExportDialog')).toBeVisible();
+  await page.locator('#renderExportKind').selectOption('sequence');
+  await page.locator('#renderExportSequenceFrames').selectOption('24');
+  await page.locator('#renderExportSequenceLongEdge').selectOption('512');
+  await page.locator('#renderExportSequenceFormat').selectOption('jpg');
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 120_000 }),
+    page.locator('#renderExportForm button[value="confirm"]').click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('carton-turntable-24f-512px.zip');
+  const bytes = await readDownload(download);
+  expect(bytes.subarray(0, 2).toString('ascii')).toBe('PK');
+  const zip = new ZipReader(new BlobReader(new Blob([bytes], { type: 'application/zip' })));
+  const entries = await zip.getEntries();
+  await zip.close();
+  expect(entries.map((entry) => entry.filename)).toEqual(Array.from({ length: 24 }, (_, index) => (
+    `frame-${String(index + 1).padStart(3, '0')}.jpg`
+  )));
+  const after = await page.evaluate(() => window.cartonBuilderApp.render.getState().camera);
+  expect(after).toMatchObject({ heading: before.heading, elevation: before.elevation, cameraDistance: before.cameraDistance });
 });
 
 test('restores Render settings and workflow step through autosave', async ({ page }) => {

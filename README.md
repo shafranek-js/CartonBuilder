@@ -180,17 +180,32 @@ source of artwork or box geometry. The artwork is composited in flat-net space,
 so crop, rotation, opacity, PDF-layer visibility, and layer order remain aligned
 with the 2D editor and Preview.
 
-The first raster release provides Clean Studio, Catalogue, Soft Grey, and
-Transparent presets; Front, Front-right, Front-left, Top-front, Isometric, and
-Custom cameras; Uncoated, Matte, and Gloss board profiles; 1:1, 4:3, 16:9, and
-3:4 frames; environment/light/shadow controls; transparent or solid backgrounds;
-and PNG/JPG still export at 2048 or 4096 pixels on the long edge. Export uses a
-fixed offscreen render target and does not depend on `preserveDrawingBuffer`.
-The Render canvas overlays the exact export viewport and reports its pixel
-dimensions whenever Aspect or Long edge changes.
+The current raster release provides Clean Studio, Catalogue, Soft Grey,
+Transparent, Glossy Product, and Warm Retail Render presets. Built-in camera
+views include Front, Back, Left, Right, Top, Bottom, Front-left, Front-right,
+Top-front, and Isometric. Fit/Reset, 35/50/85 mm lens presets, derived FOV,
+orthographic framing, and perspective vertical correction are available in the
+Camera section. Global View Presets can be saved, duplicated, applied, and
+deleted independently of full Render Presets. Artwork quality is intentionally
+excluded from both preset types.
 
-Render uses the same three-column layout: output settings (presets, artwork
-quality, camera, frame, material and board appearance) are on the left, while
+Render also provides Uncoated, Matte, and Gloss board profiles; 1:1, 4:3,
+16:9, and 3:4 frames; environment/light/shadow controls; embedded image,
+solid or transparent backgrounds; optional floor reflection/shadow controls;
+and PNG/JPG still export at preset, custom pixel, or print sizes (cm/in + PPI).
+The unified Render export dialog also creates a closed, self-contained binary
+glTF (`.glb`) with embedded artwork textures and either Full PBR or Basic
+Compatibility materials, plus a bounded 24/36/72-frame turntable ZIP at
+512/1024/2048 px. GLB export is static and intentionally excludes floor,
+background, shadow catcher, environment and post-processing effects; turntable
+frames preserve the active Render settings and restore the live camera.
+Export uses a fixed offscreen render target and does not depend on
+`preserveDrawingBuffer`. The Render canvas overlays the exact export viewport
+and reports its pixel dimensions for the selected output size.
+
+Render uses the same three-column layout: output settings (Render/View preset
+galleries, artwork quality, camera, frame, material and board appearance) are
+on the left, while
 lighting, background, shadows, effects and diagnostics are on the right. Both
 panels scroll independently and stack responsively on narrow screens.
 
@@ -199,11 +214,12 @@ The optional path-tracing experiment is only exposed with
 `VITE_ENABLE_RENDER_PATH_TRACING=true`; it is not part of the production raster
 pipeline and requires a separately installed compatible addon.
 
-All Render controls, including Board appearance and HTML texture quality, are
-saved immediately in browser storage and included in the current project
-snapshot. They are restored after a page reload, IndexedDB autosave restore,
-or `.carton` import. GPU resources, progress, and renderer diagnostics remain
-transient. WebGL 2 is required for the presentation scene;
+All Render controls, including Board appearance, output sizing and background
+assets, are saved immediately in browser storage and included in the current
+project snapshot. Embedded background images are packed into `.carton` archives
+and restored without external file links. They are restored after a page reload,
+IndexedDB autosave restore, or `.carton` import. GPU resources, progress, and
+renderer diagnostics remain transient. WebGL 2 is required for the presentation scene;
 when unavailable, the 2D editor, technical exports, and project files remain
 usable.
 
@@ -217,6 +233,10 @@ usable.
 - PDF: exact 1:1 page dimensions; original PDF pages remain vector where
   possible; the dieline is a separate `Dieline` optional-content group; cut
   lines use the `CutContour` spot color and fold lines are dashed.
+- Binary glTF: a static closed carton in Y-up metres with embedded lossless
+  artwork textures, current camera metadata, and a selectable PBR compatibility
+  profile. Turntable ZIP exports use `frame-001` naming without a duplicated
+  final frame and are protected by a 160-megapixel browser budget.
 
 The PDF is a technical proof, not a certified production PDF/X deliverable.
 It must be checked with the intended printer before production. CartonBuilder
@@ -251,9 +271,11 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-current schema v6 project snapshot. Schema v6 stores per-artwork preview/render
-quality and normalizes legacy cropped artwork
-to the same visual-equivalent 100% transform baseline.
+current schema v9 project snapshot. Schema v9 adds the unified output kind,
+turntable options and GLB options while retaining camera framing, vertical
+correction, global View Preset references and per-artwork preview/render
+quality. Legacy cropped artwork is normalized to the same visual-equivalent
+100% transform baseline.
 
 The existing events are unchanged:
 

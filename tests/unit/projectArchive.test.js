@@ -94,7 +94,17 @@ describe('.carton project archive', () => {
     const archive = await createProjectArchive({ snapshot, artworkBlobs });
     const restored = await readProjectArchive(archive);
 
-    expect(restored.snapshot).toEqual(snapshot);
+    expect(restored.snapshot).toMatchObject({
+      ...snapshot,
+      schemaVersion: 7,
+      render: {
+        ...snapshot.render,
+        background: {
+          mode: 'transparent',
+          color: '#112233',
+        },
+      },
+    });
     expect(restored.snapshot.artworks).toHaveLength(2);
     expect(restored.artworkBlobs).toHaveLength(2);
     for (let index = 0; index < artworkBlobs.length; index += 1) {
@@ -105,6 +115,44 @@ describe('.carton project archive', () => {
         new Uint8Array(await artworkBlobs[index].previewBlob.arrayBuffer()),
       );
     }
+  });
+
+  it('embeds and restores a render background asset with the project', async () => {
+    const { snapshot, artworkBlobs } = await createFixture();
+    const backgroundBlob = new Blob([
+      Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9]),
+    ], { type: 'image/png' });
+    const backgroundHash = await sha256(backgroundBlob);
+    const renderAsset = {
+      assetId: backgroundHash,
+      sha256: backgroundHash,
+      fileName: 'studio-background.png',
+      mimeType: 'image/png',
+      width: 1920,
+      height: 1080,
+      blob: backgroundBlob,
+    };
+    snapshot.render.background = {
+      ...snapshot.render.background,
+      mode: 'image',
+      image: {
+        ...structuredClone(DEFAULT_RENDER_SETTINGS.background.image),
+        assetId: backgroundHash,
+        fileName: renderAsset.fileName,
+        mimeType: renderAsset.mimeType,
+        width: renderAsset.width,
+        height: renderAsset.height,
+      },
+    };
+
+    const archive = await createProjectArchive({ snapshot, artworkBlobs, renderAssets: [renderAsset] });
+    const restored = await readProjectArchive(archive);
+
+    expect(restored.renderAssets).toHaveLength(1);
+    expect(restored.snapshot.render.background.image.assetId).toBe(backgroundHash);
+    expect(new Uint8Array(await restored.renderAssets[0].blob.arrayBuffer())).toEqual(
+      new Uint8Array(await backgroundBlob.arrayBuffer()),
+    );
   });
 
   it('rejects non-project ZIP data', async () => {

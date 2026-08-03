@@ -73,6 +73,9 @@ export async function renderStill({
     includeShadow: renderSettings.shadows.enabled
       && (renderSettings.background.mode !== 'transparent'
         || renderSettings.shadows.includeInTransparentExport),
+    includeReflection: renderSettings.floor.reflection.enabled
+      && (renderSettings.background.mode !== 'transparent'
+        || renderSettings.floor.reflection.includeInTransparentExport),
     signal,
   });
   assertNotAborted(signal);
@@ -88,5 +91,9 @@ export async function renderStill({
     outputContext.fillRect(0, 0, result.width, result.height);
   }
   outputContext.drawImage(pixelCanvas, 0, 0);
-  return canvasToBlob(outputCanvas, mimeType, normalizedFormat === 'jpeg' ? 0.94 : undefined);
+  return canvasToBlob(
+    outputCanvas,
+    mimeType,
+    normalizedFormat === 'jpeg' ? renderSettings.output.jpegQuality : undefined,
+  );
 }

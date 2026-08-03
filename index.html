@@ -774,11 +774,24 @@
           <aside class="render-sidebar render-settings-panel render-settings-panel-left" aria-label="Render output settings" data-i18n-aria-label="renderSettingsLabel">
             <section class="tool-section">
               <h2 data-i18n="renderPresets">Presets</h2>
-              <div class="render-preset-grid">
-                <button type="button" class="render-preset-button" data-render-preset="clean-studio" data-i18n="renderPresetCleanStudio">Clean Studio</button>
-                <button type="button" class="render-preset-button" data-render-preset="catalogue" data-i18n="renderPresetCatalogue">Catalogue</button>
-                <button type="button" class="render-preset-button" data-render-preset="soft-grey" data-i18n="renderPresetSoftGrey">Soft Grey</button>
-                <button type="button" class="render-preset-button" data-render-preset="transparent" data-i18n="renderPresetTransparent">Transparent</button>
+              <div class="render-preset-grid render-preset-gallery">
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="clean-studio"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-clean" aria-hidden="true"></span><span data-i18n="renderPresetCleanStudio">Clean Studio</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="catalogue"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-catalogue" aria-hidden="true"></span><span data-i18n="renderPresetCatalogue">Catalogue</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="soft-grey"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-soft-grey" aria-hidden="true"></span><span data-i18n="renderPresetSoftGrey">Soft Grey</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="transparent"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-transparent" aria-hidden="true"></span><span data-i18n="renderPresetTransparent">Transparent</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="glossy-product"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-glossy" aria-hidden="true"></span><span data-i18n="renderPresetGlossyProduct">Glossy Product</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="warm-retail"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-warm" aria-hidden="true"></span><span data-i18n="renderPresetWarmRetail">Warm Retail</span></button>
+              </div>
+              <div class="render-view-preset-store">
+                <h3 data-i18n="renderViewPresets">View presets</h3>
+                <div id="renderViewPresetList" class="render-preset-grid render-view-preset-list"></div>
+                <div class="field preset-store-row">
+                  <select id="renderViewPreset" aria-label="View preset"><option value="" data-i18n="renderViewPresetPlaceholder">View preset…</option></select>
+                  <button id="saveRenderViewPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                  <button id="duplicateRenderViewPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
+                  <button id="deleteRenderViewPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+                  <button id="undoRenderViewPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                </div>
               </div>
             </section>
 
@@ -792,7 +805,12 @@
               <h2 data-i18n="renderCamera">Camera</h2>
               <label class="field"><span data-i18n="renderCameraPreset">View</span>
                 <select id="renderCameraPreset">
+                  <option value="back" data-i18n="renderCameraBack">Back</option>
                   <option value="front" data-i18n="renderCameraFront">Front</option>
+                  <option value="left" data-i18n="renderCameraLeft">Left</option>
+                  <option value="right" data-i18n="renderCameraRight">Right</option>
+                  <option value="top" data-i18n="renderCameraTop">Top</option>
+                  <option value="bottom" data-i18n="renderCameraBottom">Bottom</option>
                   <option value="front-right" data-i18n="renderCameraFrontRight">Front-right</option>
                   <option value="front-left" data-i18n="renderCameraFrontLeft">Front-left</option>
                   <option value="top-front" data-i18n="renderCameraTopFront">Top-front</option>
@@ -807,6 +825,18 @@
                 </select>
               </label>
               <div class="light-control"><span data-i18n="cameraFov3d">FOV</span><input id="renderFov" type="range" min="10" max="120" step="1" value="35"><output id="renderFovValue">35°</output></div>
+              <label class="field"><span data-i18n="renderCameraLens">Lens</span><select id="renderCameraLens"><option value="35">35 mm</option><option value="50">50 mm</option><option value="85">85 mm</option><option value="custom" data-i18n="renderCameraLensCustom">Custom</option></select></label>
+              <output id="renderCameraLensValue" class="camera-derived-value">35.0 mm · 35°</output>
+              <details class="render-camera-advanced"><summary data-i18n="renderCameraAdvanced">Advanced camera</summary>
+                <label class="field"><span data-i18n="renderCameraHeading">Heading</span><input id="renderCameraHeading" type="number" min="-360" max="360" step="1"></label>
+                <label class="field"><span data-i18n="renderCameraElevation">Elevation</span><input id="renderCameraElevation" type="number" min="-89" max="89" step="1"></label>
+                <label class="field"><span data-i18n="renderCameraPanX">Horizontal pan</span><input id="renderCameraPanX" type="number" step="0.1"></label>
+                <label class="field"><span data-i18n="renderCameraPanY">Vertical pan</span><input id="renderCameraPanY" type="number" step="0.1"></label>
+                <label class="field"><span data-i18n="renderCameraDistance">Camera distance</span><input id="renderCameraDistance" type="number" min="0.01" step="0.1"></label>
+                <label class="field"><span data-i18n="renderCameraFrameHeight">Frame height</span><input id="renderCameraFrameHeight" type="number" min="0.01" step="0.1"></label>
+              </details>
+              <label class="field"><span data-i18n="renderKeepVerticalsParallel">Keep verticals parallel</span><input id="renderKeepVerticalsParallel" type="checkbox"></label>
+              <div class="button-row"><button id="renderFitCameraButton" type="button" data-i18n="renderFitCamera">Fit</button><button id="renderResetCameraButton" type="button" data-i18n="resetView3d">Reset</button></div>
             </section>
 
             <section class="tool-section">
@@ -845,8 +875,12 @@
               <div class="field preset-store-row">
                 <select id="renderNamedPreset" aria-label="Named Render preset" data-i18n-aria-label="renderNamedPresetLabel"><option value="" data-i18n="renderNamedPresetPlaceholder">Named preset…</option></select>
                 <button id="saveRenderPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                <button id="updateRenderPresetButton" type="button" data-i18n="renderUpdatePreset">Update</button>
+                <button id="duplicateRenderPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
                 <button id="deleteRenderPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+                <button id="undoRenderPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
               </div>
+              <div id="renderNamedPresetList" class="render-preset-grid render-user-preset-list" aria-label="My render presets"></div>
             </section>
           </aside>
 
@@ -875,9 +909,18 @@
             <section class="tool-section">
               <h2 data-i18n="renderBackground">Background</h2>
               <label class="field"><span data-i18n="renderBackgroundMode">Mode</span>
-                <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
+                <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="image" data-i18n="renderBackgroundImage">Image</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
               </label>
               <label class="field"><span data-i18n="backgroundColor3d">Color</span><input id="renderBackgroundColor" type="color" value="#d9dcde"></label>
+              <label class="field"><span data-i18n="renderBackgroundImageFile">Image file</span><input id="renderBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"></label>
+              <p class="quality-help" id="renderBackgroundFileName" data-i18n="renderBackgroundNoImage">No image selected.</p>
+              <div class="button-row"><button id="renderClearBackgroundButton" type="button" data-i18n="renderBackgroundClear">Clear image</button></div>
+              <label class="field"><span data-i18n="renderBackgroundFit">Fit</span><select id="renderBackgroundFit"><option value="cover" data-i18n="renderBackgroundCover">Cover</option><option value="contain" data-i18n="renderBackgroundContain">Contain</option></select></label>
+              <div class="light-control"><span data-i18n="renderBackgroundPositionX">Position X</span><input id="renderBackgroundPositionX" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderBackgroundPositionXValue">50%</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundPositionY">Position Y</span><input id="renderBackgroundPositionY" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderBackgroundPositionYValue">50%</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundZoom">Zoom</span><input id="renderBackgroundZoom" type="range" min="0.1" max="4" step="0.05" value="1"><output id="renderBackgroundZoomValue">1.00×</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundBrightness">Brightness</span><input id="renderBackgroundBrightness" type="range" min="0" max="2" step="0.05" value="1"><output id="renderBackgroundBrightnessValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundOverlay">Overlay</span><input id="renderBackgroundOverlayOpacity" type="range" min="0" max="1" step="0.01" value="0"><output id="renderBackgroundOverlayOpacityValue">0%</output></div>
             </section>
 
             <section class="tool-section">
@@ -886,6 +929,15 @@
               <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.34"><output id="renderShadowIntensityValue">0.34</output></div>
               <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="2"><output id="renderShadowBlurValue">2.0</output></div>
               <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
+            </section>
+
+            <section class="tool-section">
+              <h2 data-i18n="renderFloorEffects">Floor effects</h2>
+              <label class="field"><span data-i18n="renderFloorReflection">Reflection</span><input id="renderFloorReflectionEnabled" type="checkbox"></label>
+              <div class="light-control"><span data-i18n="renderReflectionStrength">Strength</span><input id="renderFloorReflectionStrength" type="range" min="0" max="1" step="0.01" value="0.08"><output id="renderFloorReflectionStrengthValue">0.08</output></div>
+              <div class="light-control"><span data-i18n="renderReflectionBlur">Softness</span><input id="renderFloorReflectionBlur" type="range" min="0" max="1" step="0.01" value="0.65"><output id="renderFloorReflectionBlurValue">0.65</output></div>
+              <div class="light-control"><span data-i18n="renderReflectionFade">Fade distance</span><input id="renderFloorReflectionFade" type="range" min="0.05" max="5" step="0.05" value="0.65"><output id="renderFloorReflectionFadeValue">0.65</output></div>
+              <label class="field"><span data-i18n="renderTransparentReflection">Reflection in transparent PNG</span><input id="renderTransparentReflection" type="checkbox"></label>
             </section>
 
             <section class="tool-section">
@@ -938,6 +990,40 @@
             <button type="button" id="cancelNewProjectBtn" data-i18n="cancel">Cancel</button>
             <button type="button" class="primary-action" id="saveAndNewProjectBtn" data-i18n="save">Save</button>
           </div>
+        </form>
+      </dialog>
+
+      <dialog id="renderExportDialog" aria-labelledby="renderExportDialogTitle">
+        <form method="dialog" id="renderExportForm">
+          <h2 id="renderExportDialogTitle" data-i18n="renderExportDialogTitle">Export render</h2>
+          <label class="field"><span data-i18n="renderExportKind">Export type</span><select id="renderExportKind"><option value="image" data-i18n="renderExportKindImage">Image</option><option value="sequence" data-i18n="renderExportKindSequence">Turntable sequence</option><option value="glb" data-i18n="renderExportKindGlb">Binary glTF (.glb)</option></select></label>
+          <div id="renderExportImageOptions">
+            <label class="field"><span data-i18n="renderExportFormat">Format</span><select id="renderExportFormat"><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
+            <label class="field"><span data-i18n="renderExportSizing">Sizing</span><select id="renderExportSizing"><option value="preset" data-i18n="renderExportSizingPreset">Preset</option><option value="pixels" data-i18n="renderExportSizingPixels">Pixels</option><option value="print" data-i18n="renderExportSizingPrint">Print size</option></select></label>
+            <div class="render-export-pixels"><label class="field"><span data-i18n="renderExportWidth">Width</span><input id="renderExportWidth" type="number" min="256" max="4096" step="1"></label><label class="field"><span data-i18n="renderExportHeight">Height</span><input id="renderExportHeight" type="number" min="256" max="4096" step="1"></label></div>
+            <div class="render-export-print"><label class="field"><span data-i18n="renderExportUnit">Unit</span><select id="renderExportUnit"><option value="cm">cm</option><option value="in">in</option></select></label><label class="field"><span data-i18n="renderExportWidth">Width</span><input id="renderExportPrintWidth" type="number" min="1" max="200" step="0.1"></label><label class="field"><span data-i18n="renderExportHeight">Height</span><input id="renderExportPrintHeight" type="number" min="1" max="200" step="0.1"></label><label class="field"><span data-i18n="renderExportPpi">PPI</span><input id="renderExportPpi" type="number" min="30" max="1200" step="1"></label></div>
+            <label class="field"><span data-i18n="renderJpegQuality">JPG quality</span><input id="renderJpegQuality" type="range" min="0.5" max="1" step="0.01" value="0.94"><output id="renderJpegQualityValue">94%</output></label>
+          </div>
+          <div id="renderExportSequenceOptions" hidden>
+            <label class="field"><span data-i18n="renderTurntableFrames">Frames</span><select id="renderExportSequenceFrames"><option value="24">24</option><option value="36">36</option><option value="72">72</option></select></label>
+            <label class="field"><span data-i18n="renderTurntableResolution">Long edge</span><select id="renderExportSequenceLongEdge"><option value="512">512 px</option><option value="1024">1024 px</option><option value="2048">2048 px</option></select></label>
+            <label class="field"><span data-i18n="renderExportFormat">Format</span><select id="renderExportSequenceFormat"><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
+          </div>
+          <div id="renderExportGlbOptions" hidden>
+            <label class="field"><span data-i18n="renderGlbTextureSize">Texture size</span><select id="renderExportGlbTextureSize"><option value="auto" data-i18n="renderExportAuto">Auto</option><option value="1024">1024 px</option><option value="2048">2048 px</option><option value="4096">4096 px</option></select></label>
+            <label class="field"><span data-i18n="renderGlbMaterialMode">Materials</span><select id="renderExportGlbMaterialMode"><option value="full-pbr" data-i18n="renderGlbFullPbr">Full PBR</option><option value="basic-compatibility" data-i18n="renderGlbCompatibility">Basic compatibility</option></select></label>
+            <label class="field"><span data-i18n="renderGlbIncludeCamera">Include current camera</span><input id="renderExportGlbIncludeCamera" type="checkbox" checked></label>
+          </div>
+          <p class="render-export-summary" id="renderExportSummary"></p>
+          <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Cancel</button><button class="primary-action" value="confirm" data-i18n="renderExportAction">Export</button></div>
+        </form>
+      </dialog>
+
+      <dialog id="renderPresetNameDialog" aria-labelledby="renderPresetNameDialogTitle">
+        <form method="dialog" id="renderPresetNameForm">
+          <h2 id="renderPresetNameDialogTitle" data-i18n="renderPresetNameDialogTitle">Name preset</h2>
+          <label class="field"><span data-i18n="renderPresetNameLabel">Name</span><input id="renderPresetNameInput" type="text" maxlength="64" required></label>
+          <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Cancel</button><button class="primary-action" value="confirm" data-i18n="save">Save</button></div>
         </form>
       </dialog>
 

@@ -12,6 +12,7 @@ export class WebGLCartonRenderer {
     textureCanvas,
     renderSettings,
     boardAppearance,
+    backgroundAsset = null,
     windowRef = window,
     onContextLost = () => {},
     onContextRestored = () => {},
@@ -19,6 +20,7 @@ export class WebGLCartonRenderer {
   }) {
     this.sceneModel = sceneModel;
     this.windowRef = windowRef;
+    this.backgroundAsset = backgroundAsset || null;
     this.qualityState = 'interactive';
     this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
     this.effects = structuredClone(renderSettings.effects);
@@ -43,8 +45,18 @@ export class WebGLCartonRenderer {
       environmentIntensity: renderSettings.lighting.environmentIntensity,
       cameraPreset: renderSettings.camera.preset === 'custom' ? 'isometric' : renderSettings.camera.preset,
       cameraFov: renderSettings.camera.fov,
+      cameraFocalLength: renderSettings.camera.focalLength,
+      cameraHeading: renderSettings.camera.heading,
+      cameraElevation: renderSettings.camera.elevation,
+      cameraHorizontalPan: renderSettings.camera.horizontalPan,
+      cameraVerticalPan: renderSettings.camera.verticalPan,
+      orthographicHeight: renderSettings.camera.orthographicHeight,
+      verticalCorrection: renderSettings.camera.verticalCorrection,
       backgroundColor: renderSettings.background.color,
       backgroundMode: renderSettings.background.mode,
+      backgroundImage: renderSettings.background.image,
+      floorReflection: renderSettings.floor.reflection,
+      backgroundAsset,
       alpha: true,
       materialProfile: renderSettings.material.profile,
       geometryMode: 'solid',
@@ -115,14 +127,22 @@ export class WebGLCartonRenderer {
       this.scene.setBackgroundMode(settings.background.mode, settings.background.color, { render: false });
       this.postProcessing.setTransparent(settings.background.mode === 'transparent');
     }
-    if (!previous || previous.lighting.exposure !== settings.lighting.exposure) this.scene.setExposure(settings.lighting.exposure);
-    if (!previous || previous.camera.preset !== settings.camera.preset) {
-      if (settings.camera.preset !== 'custom') this.scene.setCameraPreset(settings.camera.preset);
+    if (!previous || JSON.stringify(previous.background.image) !== JSON.stringify(settings.background.image)) {
+      this.scene.setBackgroundImage(settings.background.image);
     }
-    if (!previous || previous.camera.projection !== settings.camera.projection) this.scene.setCameraProjection(settings.camera.projection);
-    if (!previous || previous.camera.fov !== settings.camera.fov) this.scene.setFov(settings.camera.fov);
-    if (settings.camera.preset === 'custom' && (!previous || JSON.stringify(previous.camera) !== JSON.stringify(settings.camera))) {
-      this.scene.setCameraState(settings.camera);
+    if (!previous || JSON.stringify(previous.floor.reflection) !== JSON.stringify(settings.floor.reflection)) {
+      this.scene.setFloorReflection(settings.floor.reflection, { render: false });
+    }
+    if (!previous || previous.lighting.exposure !== settings.lighting.exposure) this.scene.setExposure(settings.lighting.exposure);
+    const cameraChanged = !previous || JSON.stringify(previous.camera) !== JSON.stringify(settings.camera);
+    if (cameraChanged) {
+      const presetChanged = settings.camera.preset !== 'custom' && settings.camera.preset !== previous?.camera?.preset;
+      if (presetChanged) {
+        this.scene.setCameraPreset(settings.camera.preset);
+      }
+      this.scene.setCameraState(presetChanged
+        ? { ...settings.camera, position: undefined, target: undefined }
+        : settings.camera);
     }
     this.currentSettings = structuredClone(settings);
     if (!previous || JSON.stringify(previous.effects) !== JSON.stringify(settings.effects)) {
@@ -152,6 +172,18 @@ export class WebGLCartonRenderer {
     return this.scene.getCameraState();
   }
 
+  createPortableScene(options = {}) {
+    return this.scene.createPortableScene(options);
+  }
+
+  fitCameraToFrame(options = {}) {
+    return this.scene.fitCameraToFrame(options);
+  }
+
+  resetView(options = {}) {
+    return this.scene.resetView(options);
+  }
+
   replaceArtwork(textureCanvas) {
     this.scene.replaceTexture(textureCanvas);
   }
@@ -159,6 +191,15 @@ export class WebGLCartonRenderer {
   setBoardAppearance(boardAppearance) {
     this.boardAppearance = cloneBoardAppearance(boardAppearance);
     this.scene.setBoardAppearance(this.boardAppearance);
+  }
+
+  setBackgroundAsset(asset) {
+    const nextAsset = asset || null;
+    const previousId = this.backgroundAsset?.assetId || '';
+    const nextId = nextAsset?.assetId || '';
+    if (previousId === nextId) return Promise.resolve(Boolean(nextAsset));
+    this.backgroundAsset = nextAsset;
+    return this.scene.setBackgroundAsset(nextAsset, { render: true });
   }
 
   setEffects(effects) {
