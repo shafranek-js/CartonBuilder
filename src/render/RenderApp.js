@@ -73,6 +73,16 @@ function getRenderTextureDpi(boxModel, dimensions) {
   );
 }
 
+function getInteractiveArtworkTextureDpi(artworks, requiredDpi) {
+  return (artworks || []).reduce((dpi, entry) => Math.max(
+    dpi,
+    resolveArtworkDpi(entry?.model?.quality?.render, {
+      purpose: 'render-screen',
+      requiredDpi,
+    }),
+  ), requiredDpi);
+}
+
 const RENDER_ASPECT_LABELS = Object.freeze({
   square: '1:1',
   landscape: '4:3',
@@ -467,10 +477,14 @@ export function createRenderApp({
     hideRecovery();
 
     try {
-      const textureDpi = targetDpi || getRenderTextureDpi(boxModel, {
+      const requiredTextureDpi = getRenderTextureDpi(boxModel, {
         width: Math.max(1, elements.canvas?.clientWidth || 1),
         height: Math.max(1, elements.canvas?.clientHeight || 1),
       });
+      const textureDpi = targetDpi || getInteractiveArtworkTextureDpi(
+        signatures.sceneModel.artworks,
+        requiredTextureDpi,
+      );
       const composed = await composeArtworkTexture({
         boxModel,
         artworks: signatures.sceneModel.artworks,

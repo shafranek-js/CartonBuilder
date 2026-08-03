@@ -165,9 +165,19 @@ export async function composeArtworkTexture({
     for (const entry of entries) {
       let renderBlob = entry.renderBlob || entry.previewBlob || entry.originalBlob;
       if (rasterize && (entry.originalBlob || entry.model?.source?.vector) && !entry.renderBlob) {
-        const entryTargetDpi = typeof getEntryTargetDpi === 'function'
+        const requestedEntryTargetDpi = typeof getEntryTargetDpi === 'function'
           ? getEntryTargetDpi(entry, pixelsPerMm * 25.4)
           : pixelsPerMm * 25.4;
+        // The interactive texture cannot preserve detail beyond its own pixel
+        // density. Rasterizing a large PDF above that density only creates
+        // several oversized intermediate canvases and can exhaust the browser's
+        // graphics memory while changing Render artwork quality.
+        const entryTargetDpi = purpose === 'preview' || purpose === 'render-screen'
+          ? Math.min(
+            finitePositive(requestedEntryTargetDpi, pixelsPerMm * 25.4),
+            pixelsPerMm * 25.4,
+          )
+          : requestedEntryTargetDpi;
         const rendered = await rasterize({
           entry,
           purpose,

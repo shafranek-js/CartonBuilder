@@ -269,6 +269,19 @@ input[type="checkbox"] {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
+.contacts-menu-popover {
+  right: 0;
+  left: auto;
+  min-width: 250px;
+}
+
+.contacts-menu-item {
+  justify-content: flex-start;
+  color: var(--text, #ffffff);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .file-menu-popover[hidden] {
   display: none;
 }
