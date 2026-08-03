@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { inflateSync } from 'node:zlib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 test.setTimeout(90_000);
 
@@ -38,6 +39,42 @@ async function loadArtwork(page, fileName = 'render-fixture.png') {
   }, fileName);
   await expect(page.locator('#artworkFileName')).toHaveText(fileName);
   await expect(page.locator('#processingOverlay')).toBeHidden();
+}
+
+async function loadVectorArtwork(page, fileName = 'render-vector-fixture.pdf') {
+  const source = await PDFDocument.create();
+  const pdfPage = source.addPage([1200, 800]);
+  pdfPage.drawRectangle({ x: 0, y: 0, width: 1200, height: 800, color: rgb(0.96, 0.96, 0.96) });
+  for (let index = 0; index < 480; index += 1) {
+    const x = 14 + index * 2.45;
+    pdfPage.drawLine({
+      start: { x, y: 18 },
+      end: { x, y: 782 },
+      thickness: index % 2 === 0 ? 0.35 : 1.15,
+      color: index % 3 === 0 ? rgb(0.08, 0.24, 0.58) : rgb(0.78, 0.18, 0.08),
+    });
+  }
+  const font = await source.embedFont(StandardFonts.Helvetica);
+  for (let index = 0; index < 160; index += 1) {
+    pdfPage.drawText(`Q${index % 10}`, {
+      x: 24 + (index % 20) * 58,
+      y: 46 + Math.floor(index / 20) * 88,
+      size: 3.5,
+      font,
+      color: rgb(0.02, 0.02, 0.02),
+    });
+  }
+  const sourceBytes = await source.save();
+  await page.locator('#artworkFileInput').setInputFiles({
+    name: fileName,
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(sourceBytes),
+  });
+  await expect(page.locator('#artworkFileName')).toHaveText(fileName);
+  await expect(page.locator('#processingOverlay')).toBeHidden({ timeout: 30_000 });
+  await expect.poll(() => page.evaluate(() => (
+    window.cartonBuilderApp.artwork.getArtworks()[0]?.model?.source?.vector === true
+  ))).toBe(true);
 }
 
 function getPngPixelSummary(bytes) {
@@ -167,6 +204,34 @@ test('shows native raster quality in the editor and per-artwork Render quality c
   await expect(page.locator('#artworkPreviewQuality')).toBeDisabled();
   await expect(page.locator('#artworkRenderQuality')).toBeDisabled();
   await expect(page.locator('#artworkQualitySummary')).toContainText('Raster source: native pixels');
+});
+
+test('re-renders the 3D canvas when Render artwork quality changes', async ({ page }) => {
+  await buildReferenceNet(page);
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await loadVectorArtwork(page);
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderStep')).toBeVisible();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+
+  const qualitySelect = page.locator('#renderArtworkQualityList select');
+  await expect(qualitySelect).toBeEnabled();
+  await qualitySelect.selectOption('600');
+  await expect(qualitySelect).toBeDisabled();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+  await expect(qualitySelect).toBeEnabled();
+  const highQualityCanvas = await page.locator('#renderCanvas').screenshot();
+
+  await qualitySelect.selectOption('150');
+  await expect(qualitySelect).toBeDisabled();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+  await expect(qualitySelect).toBeEnabled();
+  const lowQualityCanvas = await page.locator('#renderCanvas').screenshot();
+
+  expect(lowQualityCanvas.equals(highQualityCanvas)).toBe(false);
 });
 
 test('uses a separate closed presentation scene and persists render controls', async ({ page }) => {

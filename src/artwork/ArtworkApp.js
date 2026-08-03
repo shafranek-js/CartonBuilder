@@ -2134,7 +2134,7 @@ export function createArtworkApp({
   bindSliderControl(controls.opacity, 'Set artwork opacity', (value) => artwork.setOpacity(value / 100));
   bindSliderControl(controls.bgOpacity, 'Set background opacity', (value) => artwork.setBgOpacity(value / 100));
 
-  function setArtworkQuality(kind, value, index = activeArtworkIndex) {
+  async function setArtworkQuality(kind, value, index = activeArtworkIndex) {
     const entry = artworks[index];
     if (!entry?.model?.hasArtwork || !['preview', 'render'].includes(kind)) return false;
     const before = captureEditorState();
@@ -2142,9 +2142,9 @@ export function createArtworkApp({
     else entry.model.setRenderQuality(value);
     commitChange(`Set artwork ${kind} quality`, before);
     if (kind === 'preview') {
-      refreshPreviewResources({ force: true });
+      await refreshPreviewResources({ force: true });
     }
-    onArtworkQualityChanged({ kind, index, value: entry.model.quality[kind] });
+    await onArtworkQualityChanged({ kind, index, value: entry.model.quality[kind] });
     return true;
   }
 

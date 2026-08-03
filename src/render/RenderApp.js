@@ -271,9 +271,16 @@ export function createRenderApp({
         select.disabled = true;
         select.title = t('qualityNativePixels');
       }
-      select.addEventListener('change', () => {
-        setArtworkQuality('render', select.value, index);
-        updateArtworkQualityList();
+      select.addEventListener('change', async () => {
+        const value = select.value;
+        select.disabled = true;
+        try {
+          await setArtworkQuality('render', value, index);
+        } finally {
+          // Rebuild after the async texture replacement has settled so the
+          // control reflects the model that is now displayed in the canvas.
+          updateArtworkQualityList();
+        }
       });
       row.append(name, select);
       elements.artworkQualityList.appendChild(row);

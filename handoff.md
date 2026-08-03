@@ -1,6 +1,6 @@
 # CartonBuilder — Handoff для следующего разработчика
 
-Дата handoff: 2026-08-02
+Дата handoff: 2026-08-03
 
 Этот документ описывает фактическое состояние приложения и безопасную точку
 продолжения разработки. Нормативные runtime-поведения должны сверяться с
@@ -11,11 +11,12 @@
 
 - Рабочая директория: `C:\Projects\CartonBuilder`.
 - Текущая ветка: `master`.
-- Последний коммит на момент handoff: `b4ea923 Align Transform controls on shared grid`.
-- Рабочее дерево содержит незакоммиченные изменения в `README.md` и
-  `docs/3. artwork-placement-runtime-specification.md`. Это предыдущие
-  обновления документации; не удалять и не перезаписывать их без проверки.
-- Unit-тесты на момент handoff проходят: 35 test files, 164 tests.
+- Последний коммит на момент handoff: `1c2e6f4 split render settings across side panels`.
+- Ветка `master` синхронизирована с `origin/master`; рабочее дерево чистое.
+- GitHub Pages опубликован из этого коммита после успешного workflow `Deploy to
+  GitHub Pages` (run `30767937814`).
+- Unit-тесты на момент handoff проходят: 39 test files, 188 tests. Render E2E:
+  5 passed; Preview 3D E2E: 7 passed.
 
 Перед началом работы проверить:
 
@@ -33,9 +34,12 @@ git log -5 --oneline
 2. **Place Artwork** — загрузка и размещение одного или нескольких artwork
    sublayers в millimetre-native координатах.
 3. **Preview / Export** — технический 2D proof, интерактивный folded Preview,
-   PNG/JPG/SVG/PDF и self-contained 3D HTML export.
+   PNG/JPG/SVG/PDF и self-contained 3D HTML export. Настройки разделены на левую
+   панель Scene/Export и правую панель Camera/Lighting/Model; обе панели имеют
+   независимую прокрутку.
 4. **Render** — отдельная presentation-сцена полностью закрытой коробки и
-   PNG/JPG still export на 2048/4096 px по длинной стороне.
+   PNG/JPG still export на 2048/4096 px по длинной стороне. Настройки разделены
+   на левую панель Output и правую панель Lighting/Effects вокруг viewport.
 
 Step 3 и Step 4 намеренно разделены. Preview остаётся техническим и быстрым;
 Render владеет presentation-сценой и тяжёлыми эффектами.
@@ -123,6 +127,10 @@ Preview загружает Three.js лениво после входа на ша
 - пользовательские scene presets (Save/Apply/Delete);
 - WebGL2 recovery surface без потери 2D/export workflow.
 
+UI Preview использует три колонки: слева сцена и экспорт, в центре viewport,
+справа камера, свет, тени и модель. При узком viewport панели складываются под
+центральной областью и прокручиваются независимо.
+
 Preview не должен использовать Render-only GTAO, TAA, DOF, solid presentation
 geometry или path tracing.
 
@@ -148,6 +156,10 @@ Render активен только при полной коробке и нал�
 - offscreen PNG/JPG export without `preserveDrawingBuffer: true`;
 - transparent PNG with optional shadow catcher; JPG всегда opaque.
 
+UI Render использует три колонки: слева output-настройки, в центре экспортный
+viewport, справа lighting/background/shadows/effects и diagnostics. На узких
+экранах viewport остаётся первым, а панели располагаются вертикально.
+
 Feature flags:
 
 - `VITE_ENABLE_RENDER_EFFECTS=true` — raster effects enabled by default;
@@ -158,9 +170,11 @@ WebGPU, CMYK/ICC/Pantone/overprint и print-proof validation находятся 
 
 ## 8. Persistence и версии
 
-- Current project schema: **v5** (`src/project/projectSchema.js`).
+- Current project schema: **v6** (`src/project/projectSchema.js`).
 - v4 → v5 migration rebases legacy cropped artwork and corresponding history
   states to the visual-equivalent 100% baseline.
+- v5 → v6 migration adds per-artwork Preview/Render quality preferences and
+  normalizes legacy cropped artwork to the same visual-equivalent baseline.
 - `.carton` archive manifest export version: **2**.
 - Legacy manifest version 1 поддерживается на import.
 - Current archive stores arrays of `assets/artwork-{index}.*` and
@@ -220,14 +234,14 @@ runtime-документы:
 
 Перед выпуском документации нужно исправить следующие расхождения:
 
-1. Убрать утверждение о единственном artwork asset.
-2. Исправить `Aspect ratio is always locked`.
-3. Описать archive manifest v2 и multi-asset paths.
-4. Разделить фиксированные системные layers и динамические artwork sublayers.
-5. Добавить right-button canvas pan и side crop handles.
-6. Описать различие Box Dimensions на Create Box и Artwork steps.
-7. Добавить Settings, File/Edit menus, Box Presets, scene presets и diagnostics.
-8. Устранить противоречие README о material thickness.
+1. Исправить `Aspect ratio is always locked` в оставшихся historical/runtime
+   формулировках.
+2. Описать archive manifest v2 и multi-asset paths.
+3. Разделить фиксированные системные layers и динамические artwork sublayers.
+4. Добавить right-button canvas pan и side crop handles.
+5. Описать различие Box Dimensions на Create Box и Artwork steps.
+6. Добавить Settings, File/Edit menus, Box Presets, scene presets и diagnostics.
+7. Устранить противоречие README о material thickness.
 
 `docs/0`, `docs/1`, `docs/2`, `docs/3` answers, `docs/5`, `docs/5a`, `docs/6`,
 `docs/7` и `docs/8` содержат исходные требования, research или roadmap. Их нужно

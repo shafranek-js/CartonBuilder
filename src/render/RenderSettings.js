@@ -32,20 +32,20 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   }),
   background: Object.freeze({
     mode: 'solid',
-    color: '#e8eaeb',
+    color: '#d9dcde',
   }),
   lighting: Object.freeze({
     azimuth: 63,
     elevation: 48,
-    intensity: 2.6,
+    intensity: 1.7,
     environment: 'studio',
-    environmentIntensity: 0.65,
-    exposure: 1,
+    environmentIntensity: 0.4,
+    exposure: 0.85,
   }),
   shadows: Object.freeze({
     enabled: true,
-    intensity: 0.25,
-    blur: 1.5,
+    intensity: 0.34,
+    blur: 2,
     mapSize: 1024,
     includeInTransparentExport: true,
   }),
@@ -60,8 +60,8 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   effects: Object.freeze({
     gtao: Object.freeze({
       enabled: true,
-      intensity: 0.45,
-      radius: 0.22,
+      intensity: 0.5,
+      radius: 0.18,
       resolution: 'half',
     }),
     antialiasing: Object.freeze({

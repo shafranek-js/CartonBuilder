@@ -1,7 +1,7 @@
 # CartonBuilder
 
 CartonBuilder is a local-first browser application for building a six-panel
-rectangular-box net, placing one artwork asset on it in exact millimetre
+rectangular-box net, placing one or more artwork assets on it in exact millimetre
 coordinates, previewing the clipped result, and exporting proof and technically
 structured files.
 
@@ -88,8 +88,9 @@ The status-aware index for all project documentation is in
 ## Artwork and projects
 
 - Supported artwork: PNG, JPG/JPEG, PDF; maximum 100 MB.
-- One artwork asset per project. `Replace` requires confirmation; dropping files
-  is disabled after an asset has loaded.
+- One or more artwork assets per project. A normal file drop adds an artwork
+  entry; `Replace` requires confirmation and replaces the active entry. Each load
+  operation accepts one file.
 - Multipage PDFs use an explicit page picker. Page `/Rotate` and `MediaBox` are
   preserved; the original PDF remains available for vector-preserving export.
 - The initial placement uses Fit + Center over the complete dieline bounds.
@@ -101,7 +102,7 @@ The status-aware index for all project documentation is in
   final raster exports.
 - Autosave stores the project and original asset in IndexedDB.
 - A `.carton` file is a versioned ZIP containing `manifest.json`,
-  `project.json`, the original artwork, and its editor preview. Asset checksums
+  `project.json`, the original assets, and their editor previews. Asset checksums
   and bounded entry sizes are validated when opening it.
 
 ## Editor controls
@@ -166,6 +167,11 @@ texture quality can be set to Auto, 600, 1200, or 2400 DPI; Auto follows the
 highest artwork Render quality while raster sources remain capped by native
 pixels.
 
+Preview settings are split into two independently scrollable panels around the
+viewport: the left panel contains scene presets, export quality, style and
+environment controls; the right panel contains camera, lighting, shadows and
+model controls. On narrow screens the panels stack below the viewport.
+
 ## Presentation Render
 
 Render is intentionally separate from the technical Preview. It always starts
@@ -182,6 +188,11 @@ and PNG/JPG still export at 2048 or 4096 pixels on the long edge. Export uses a
 fixed offscreen render target and does not depend on `preserveDrawingBuffer`.
 The Render canvas overlays the exact export viewport and reports its pixel
 dimensions whenever Aspect or Long edge changes.
+
+Render uses the same three-column layout: output settings (presets, artwork
+quality, camera, frame, material and board appearance) are on the left, while
+lighting, background, shadows, effects and diagnostics are on the right. Both
+panels scroll independently and stack responsively on narrow screens.
 
 Render effects are enabled with `VITE_ENABLE_RENDER_EFFECTS=true` (the default).
 The optional path-tracing experiment is only exposed with
@@ -263,7 +274,8 @@ The existing events are unchanged:
   technical. WebGPU, WebP, CMYK/ICC print proof, collision simulation, and
   production path tracing remain out of scope; the path-tracing button is a
   disabled-by-default gated experiment.
-- One artwork asset is supported; replacement is not part of undo history.
+- Artwork replacement is not part of undo history; artwork entries can be added,
+  reordered, renamed, hidden, locked and removed independently.
 - Touch workflows are out of scope. The target is desktop Chrome at
   approximately 1024×720 or larger, including 4K displays. WebGL 1 and
   WebGPU-only rendering are not supported.
