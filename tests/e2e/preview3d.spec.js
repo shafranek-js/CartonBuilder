@@ -3,6 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
 
+test.setTimeout(process.env.CI ? 180_000 : 30_000);
+const previewDownloadTimeout = process.env.CI ? 120_000 : 30_000;
+
 async function activate(page, label) {
   const action = page.getByRole('button', { name: label, exact: true });
   await action.focus();
@@ -339,7 +342,7 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
   });
 
   const [download] = await Promise.all([
-    page.waitForEvent('download'),
+    page.waitForEvent('download', { timeout: previewDownloadTimeout }),
     page.locator('#export3dHtmlButton').click(),
   ]);
   expect(download.suggestedFilename()).toBe('carton-3d.html');

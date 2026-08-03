@@ -4,7 +4,10 @@ import { validateBytes } from 'gltf-validator';
 import { inflateSync } from 'node:zlib';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
-test.setTimeout(90_000);
+test.setTimeout(process.env.CI ? 180_000 : 90_000);
+
+const exportDownloadTimeout = process.env.CI ? 180_000 : 30_000;
+const sequenceDownloadTimeout = process.env.CI ? 300_000 : 120_000;
 
 async function activate(page, label) {
   const action = page.getByRole('button', { name: label, exact: true });
@@ -396,7 +399,7 @@ test('exports a PNG with the selected 2048 output dimensions', async ({ page }) 
   await page.locator('#renderPngButton').click();
   await expect(page.locator('#renderExportDialog')).toBeVisible();
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 30_000 }),
+    page.waitForEvent('download', { timeout: exportDownloadTimeout }),
     page.locator('#renderExportForm button[value="confirm"]').click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/carton-render-.*-2048\.png$/);
@@ -433,7 +436,7 @@ test('exports a valid self-contained static GLB with the selected material profi
   await page.locator('#renderExportGlbTextureSize').selectOption('1024');
   await page.locator('#renderExportGlbMaterialMode').selectOption('basic-compatibility');
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 60_000 }),
+    page.waitForEvent('download', { timeout: exportDownloadTimeout }),
     page.locator('#renderExportForm button[value="confirm"]').click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/carton-.*-matte\.glb$/);
@@ -447,7 +450,7 @@ test('exports a valid self-contained static GLB with the selected material profi
 });
 
 test('exports a numbered turntable ZIP and restores the live Render camera', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(process.env.CI ? 360_000 : 240_000);
   await openRender(page);
   await page.evaluate(() => {
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
@@ -460,7 +463,7 @@ test('exports a numbered turntable ZIP and restores the live Render camera', asy
   await page.locator('#renderExportSequenceLongEdge').selectOption('512');
   await page.locator('#renderExportSequenceFormat').selectOption('jpg');
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 120_000 }),
+    page.waitForEvent('download', { timeout: sequenceDownloadTimeout }),
     page.locator('#renderExportForm button[value="confirm"]').click(),
   ]);
   expect(download.suggestedFilename()).toBe('carton-turntable-24f-512px.zip');

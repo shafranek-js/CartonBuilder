@@ -5,6 +5,9 @@ export default defineConfig({
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   fullyParallel: false,
   reporter: 'line',
+  // Hosted SwiftShader renders are slower than local GPU-backed runs. Keep
+  // CI assertions patient without changing the local feedback loop.
+  expect: { timeout: process.env.CI ? 30_000 : 5_000 },
   use: {
     baseURL: 'http://127.0.0.1:4173',
     browserName: 'chromium',
