@@ -347,9 +347,15 @@ artworkApp = createArtworkApp({
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
-  onArtworkQualityChanged: ({ kind } = {}) => {
-    if (kind === 'preview') preview3dFacade?.refreshArtwork?.();
-    renderApp?.refreshArtwork?.();
+  onArtworkQualityChanged: async ({ kind } = {}) => {
+    const refreshes = [];
+    if (kind === 'preview') {
+      const previewRefresh = preview3dFacade?.refreshArtwork?.();
+      if (previewRefresh && typeof previewRefresh.then === 'function') refreshes.push(previewRefresh);
+    }
+    const renderRefresh = renderApp?.refreshArtwork?.();
+    if (renderRefresh && typeof renderRefresh.then === 'function') refreshes.push(renderRefresh);
+    await Promise.all(refreshes);
   },
   onStateChanged: () => updateStepNavigationStates(),
 });
