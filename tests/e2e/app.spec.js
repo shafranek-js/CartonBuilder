@@ -34,6 +34,18 @@ async function openMenuExport(page, group, buttonSelector) {
   return page.locator(buttonSelector);
 }
 
+async function openFileAction(page, buttonSelector) {
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await expect(page.locator('#fileMenuPopover')).toBeVisible();
+  return page.locator(buttonSelector);
+}
+
+async function openEditAction(page, buttonSelector) {
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#editMenuPopover')).toBeVisible();
+  return page.locator(buttonSelector);
+}
+
 async function openArtworkStep(page) {
   await buildReferenceNet(page);
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -67,6 +79,15 @@ async function loadGeneratedPng(page, fileName = 'sample-artwork.png') {
 }
 
 test.beforeEach(async ({ page }) => {
+  // Headless Chromium exposes the native picker API, which does not emit a
+  // Playwright download event. The browser fallback is the deterministic
+  // contract exercised by these export tests.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: undefined,
+    });
+  });
   await page.goto('/');
   await page.evaluate(async () => {
     const request = indexedDB.open('carton-builder', 6);
@@ -172,13 +193,13 @@ test('completes the three-step artwork workflow and exports every deliverable', 
 
   await page.getByRole('button', { name: 'Rotate +90°' }).click();
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.rotation)).toBe(90);
-  await page.getByRole('button', { name: 'Undo' }).click();
+  await (await openEditAction(page, '#menuUndoBtn')).click();
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.rotation)).toBe(0);
-  await page.getByRole('button', { name: 'Redo' }).click();
+  await (await openEditAction(page, '#menuRedoBtn')).click();
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.rotation)).toBe(90);
 
   const projectDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Save Project' }).click();
+  await (await openFileAction(page, '#menuSaveProjectBtn')).click();
   const project = await projectDownload;
   expect(project.suggestedFilename()).toBe('carton-project.carton');
   const projectPath = await project.path();
@@ -216,7 +237,7 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   expect(JSON.stringify(diagnostics)).not.toContain('sample-artwork.png');
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Remove' }).click();
+  await (await openEditAction(page, '#menuRemoveArtworkBtn')).click();
   await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
   await page.locator('#projectFileInput').setInputFiles(projectPath);
   await expect(page.locator('#artworkFileName')).toHaveText('sample-artwork.png');
@@ -265,19 +286,13 @@ test('updates artwork-step box dimensions without fitting the active artwork', a
   })).toEqual(beforeArtwork);
 });
 
-test('validates dimensions, warns once for modified artwork and preserves compatibility events', async ({ page }) => {
+test('validates dimensions, preserves the current net and emits compatibility events', async ({ page }) => {
   await activate(page, 'Add Base Panel to the bottom edge of Front Panel', ' ');
   await expect(page.locator('#announcer')).toHaveText('Base Panel added. 2 of 6 panels placed.');
 
-  page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toBe(
-      'Changing the box dimensions will reset the current panel layout. Continue?',
-    );
-    await dialog.accept();
-  });
   await page.locator('#boxWidth').fill('200');
   await page.locator('#boxWidth').press('Enter');
-  await expect(page.locator('#panelCount')).toHaveText('1/6');
+  await expect(page.locator('#panelCount')).toHaveText('2/6');
   await expect.poll(() => page.evaluate(() => window.boxNetApp.getState().dimensions.width)).toBe(200);
 
   await page.locator('#boxDepth').fill('0');
@@ -285,25 +300,19 @@ test('validates dimensions, warns once for modified artwork and preserves compat
   await expect(page.locator('#boxDepth')).toHaveValue('40');
   await expect(page.locator('#toast')).toHaveText('Enter valid positive dimensions.');
 
-  await buildReferenceNet(page);
+  await activate(page, 'Add Top Panel to the top edge of Front Panel');
+  await activate(page, 'Add Back Panel to the top edge of Top Panel');
+  await activate(page, 'Add Left Panel to the left edge of Front Panel');
+  await activate(page, 'Add Right Panel to the right edge of Back Panel');
   await page.getByRole('button', { name: 'Continue' }).click();
   await loadGeneratedPng(page);
   await page.locator('#artworkWorkspace').focus();
   await page.keyboard.press('Shift+ArrowRight');
   await page.getByRole('button', { name: 'Back' }).click();
 
-  let dialogCount = 0;
-  page.once('dialog', async (dialog) => {
-    dialogCount += 1;
-    expect(dialog.message()).toBe(
-      'Changing the box dimensions will reset the panel layout and artwork placement. Continue?',
-    );
-    await dialog.accept();
-  });
   await page.locator('#boxHeight').fill('100');
   await page.locator('#boxHeight').press('Enter');
-  await expect(page.locator('#panelCount')).toHaveText('1/6');
-  expect(dialogCount).toBe(1);
+  await expect(page.locator('#panelCount')).toHaveText('6/6');
 
   await page.evaluate(() => {
     window.__cancelled = 0;
@@ -311,7 +320,6 @@ test('validates dimensions, warns once for modified artwork and preserves compat
       window.__cancelled += 1;
     });
   });
-  await activate(page, 'Add Top Panel to the top edge of Front Panel');
   page.once('dialog', (dialog) => dialog.accept());
   await page.locator('#cancelButton').click();
   await expect.poll(() => page.evaluate(() => window.__cancelled)).toBe(1);
@@ -538,7 +546,6 @@ test('cancels worker processing and revokes superseded preview URLs', async ({ p
 
 test('allows opening a .carton project directly from Step 1 (Create Box)', async ({ page }) => {
   await expect(page.locator('#boxStep')).toBeVisible();
-  await expect(page.locator('#loadProjectButtonStep1')).toBeVisible();
 
   const boxModel = new BoxNetModel({ width: 200, height: 100, depth: 50 });
   boxModel.addPanel('Front', 'bottom', 'Base');
@@ -590,9 +597,13 @@ test('allows opening a .carton project directly from Step 1 (Create Box)', async
     history: { undo: [], redo: [] },
   };
 
-  const archiveBlob = await createProjectArchive({ snapshot, originalBlob, previewBlob });
+  const archiveBlob = await createProjectArchive({
+    snapshot,
+    artworkBlobs: [{ originalBlob, previewBlob }],
+  });
   const buffer = Buffer.from(await archiveBlob.arrayBuffer());
 
+  await (await openFileAction(page, '#menuOpenProjectBtn')).click();
   await page.locator('#projectFileInput').setInputFiles({
     name: 'direct-test.carton',
     mimeType: 'application/zip',
@@ -627,9 +638,8 @@ test('persists box net after removing artwork and reloading without showing an e
   await openArtworkStep(page);
   await loadGeneratedPng(page);
   await expect(page.locator('#artworkFileName')).toHaveText('sample-artwork.png');
-
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Remove' }).click();
+  await (await openEditAction(page, '#menuRemoveArtworkBtn')).click();
   await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
 
   await page.getByRole('button', { name: 'Back' }).click();
@@ -754,8 +764,8 @@ test('reference point selector swaps X/Y without moving artwork and anchors tran
   })).toBe(true);
 
   const anchor = await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.getReferencePosition());
-  await page.locator('#artworkScale').fill('150');
-  await page.locator('#artworkScale').dispatchEvent('change');
+  await page.locator('#artworkScaleX').fill('150');
+  await page.locator('#artworkScaleX').dispatchEvent('change');
   await expect.poll(() => page.evaluate(() => (
     Math.round(window.cartonBuilderApp.artwork.artwork.scaleX * 100) === 150
   ))).toBe(true);

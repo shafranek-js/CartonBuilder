@@ -409,6 +409,7 @@ function createAreaLightMaterial( intensity ) {
   document.addEventListener('fullscreenchange', syncFullscreenState);
   setPanelOpen(false);
   syncFullscreenState();
+  document.documentElement.dataset.viewerReady = 'true';
 
   const nodes = new Map(DATA.nodes.map((node) => [node.id, node]));
 

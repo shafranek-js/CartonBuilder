@@ -117,20 +117,18 @@ Canonical for: <scope, or "not canonical">
 
 ## Текущий backlog документации
 
-Перед следующим release нужно синхронизировать Implemented-документы с уже
-реализованным кодом:
+Перед следующим release нужно повторно сверить Implemented-документы с кодом и
+тестами Wave 6:
 
-- динамические artwork sublayers и их add/reorder/rename/visibility/lock semantics;
-- возможность отключить `Constrain proportions`;
-- archive manifest version 2 и массивы assets/previews;
-- distinction между системными слоями и artwork sublayers;
-- side crop handles и right-button pan пустого 2D canvas;
-- разное поведение Box Dimensions на Create Box и Artwork steps;
-- Settings, File/Edit menus, Box Presets, scene presets и diagnostics;
-- противоречие README о Render-only thickness/bevel.
+- динамические artwork sublayers, Scale X/Y и независимый `Constrain proportions`;
+- archive manifest version 3, массивы assets/previews и импорт v1/v2;
+- сохранение раскладки при изменении Box Dimensions и отдельный Reset Box;
+- File/Edit menus, Contacts, Box Presets, scene presets и diagnostics;
+- Render preflight, Floor Reflection strength/softness/fade и PNG/JPG export UI;
+- DPR 1/2, Chrome/Edge matrix и stress-test evidence.
 
-Пока этот backlog не закрыт, нельзя считать документацию полностью
-синхронизированной с приложением.
+Этот список является release-проверкой фактов, а не основанием считать
+непроверенную функцию Implemented.
 
 ## Минимальная release-проверка документации
 

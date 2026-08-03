@@ -984,7 +984,10 @@ export function createArtworkApp({
   }
 
   function showDeleteConfirmation() {
-    const toRemove = [...selectedArtworkIndices]
+    const selected = selectedArtworkIndices.size
+      ? [...selectedArtworkIndices]
+      : (activeArtworkIndex >= 0 ? [activeArtworkIndex] : []);
+    const toRemove = selected
       .filter((i) => i >= 0 && i < artworks.length);
     if (!toRemove.length) return;
     const confirmMsg = toRemove.length > 1
@@ -1404,6 +1407,9 @@ export function createArtworkApp({
         activeArtworkIndex = 0;
       }
       setActiveArtwork(activeArtworkIndex);
+      // A newly loaded artwork is the active selection. Keep the selection
+      // model in sync so Edit -> Remove Artwork and Delete act on it too.
+      selectedArtworkIndices = new Set([activeArtworkIndex]);
       renderer.setArtworks(artworks);
       history.clear();
       selected = true;
@@ -3096,6 +3102,9 @@ export function createArtworkApp({
     get previewBlob() { return previewBlob; },
     getArtworks,
     getArtworksJson,
+    removeSelectedArtwork() {
+      showDeleteConfirmation();
+    },
     setArtworkQuality,
     updateArtworkFinish,
     refreshPreviewResources,

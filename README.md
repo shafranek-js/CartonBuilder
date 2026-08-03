@@ -45,6 +45,9 @@ Tests:
 npm run test:unit
 npm run test:e2e
 npm run test:e2e:ci
+npm run test:e2e:smoke
+npm run test:e2e:full
+npm run test:e2e:stress
 npm run test:visual
 npm run test:all
 ```
@@ -55,7 +58,10 @@ input, transforms, layer locking, undo/redo, autosave, `.carton` round-trips,
 localization, responsive resizing, integration events, and all export buttons.
 It also covers all reachable fold trees, net-space UV continuity, lazy 3D
 loading, both camera projections, scene presets, WebGL recovery, Render
-preflight, deterministic Render screenshots and repeated texture replacement.
+preflight, deterministic Render screenshots, Floor Reflection controls, DPR 1/2
+and repeated texture replacement. `test:e2e:smoke` is the fast release gate;
+`test:e2e:stress` runs the 20-cycle resource checks. The scheduled Windows
+release job also runs `npm run test:e2e:edge` against Microsoft Edge.
 
 ## Architecture
 

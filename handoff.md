@@ -10,12 +10,13 @@
 ## 1. Состояние репозитория
 
 - Рабочая директория: `C:\Projects\CartonBuilder`.
-- Текущая ветка: `codex/wave4-packaging-finishes`.
-- Базовый коммит: `0ec0f0b Merge production 3D export workflow`.
-- Рабочее дерево содержит незакоммиченные изменения Wave 4 и Wave 5; их нельзя
-  смешивать с посторонними пользовательскими изменениями.
-- Wave 5 добавляет Render preflight, health diagnostics, settled lifecycle API,
-  PMREM cleanup, deterministic screenshots и CI quality workflow.
+- Текущая ветка и commit должны определяться командами проверки ниже; этот файл
+  намеренно не содержит быстро устаревающий hard-coded base commit.
+- Wave 1–5 уже слиты в `master`; Wave 6 закрывает release hardening и технический
+  долг: актуальные legacy E2E, корректные Floor Reflection uniforms, export
+  fallback, DPR/GPU matrix и release CI artifacts.
+- Рабочее дерево перед началом работы должно быть чистым либо изменения должны
+  быть явно перечислены владельцем задачи.
 
 Перед началом работы проверить:
 
@@ -24,6 +25,20 @@ git status --short
 git branch --show-current
 git log -5 --oneline
 ```
+
+Обязательные проверки Wave 6:
+
+```bash
+npm run test:unit
+npm run build
+npm run test:e2e:smoke
+npm run test:e2e:full
+npm run test:e2e:stress
+```
+
+Microsoft Edge запускается отдельным Windows release job через
+`npm run test:e2e:edge`. Playwright artifacts (HTML report, trace, screenshot и
+video) сохраняются при падении CI.
 
 ## 2. Продуктовый workflow
 
@@ -223,7 +238,7 @@ transformations, side handles при zoom, non-proportional resize, dimensions �
 fit artwork, Preview → Render isolation, Export preflight, Diagnostics health,
 transparent PNG alpha и повторные 2K/4K exports.
 
-## 10. Известное состояние документации
+## 10. Состояние документации и release checklist
 
 Статусная карта и правила поддержки находятся в
 [`docs/README.md`](<C:/Projects/CartonBuilder/docs/README.md>). Канонические
@@ -233,17 +248,20 @@ runtime-документы:
 - `docs/3. artwork-placement-runtime-specification.md` — 2D/Preview runtime;
 - `docs/9. render-runtime-specification.md` — Render runtime.
 
-Перед выпуском документации нужно исправить следующие расхождения:
+Волна 6 синхронизировала следующие ранее обнаруженные расхождения:
 
-1. Исправить `Aspect ratio is always locked` в оставшихся historical/runtime
-   формулировках.
-2. Описать archive manifest v2 и multi-asset paths.
-3. Разделить фиксированные системные layers и динамические artwork sublayers.
-4. Добавить right-button canvas pan и side crop handles.
-5. Описать различие Box Dimensions на Create Box и Artwork steps.
-6. Уточнить в Implemented-документах Settings, File/Edit menus, Box Presets,
-   scene presets, Render preflight и diagnostics.
-7. Устранить противоречие README о material thickness.
+1. Runtime-документы описывают фактическую unlocked aspect-ratio модель и
+   различие Box Dimensions на Create Box и Artwork steps.
+2. Archive manifest v3, multi-asset paths и импорт v1/v2 отражены в runtime
+   документации и compatibility tests.
+3. Dynamic artwork sublayers, Scale X/Y, crop handles, right-button pan,
+   menus/presets, Render preflight и diagnostics отражены как Implemented.
+4. README и Render specification синхронизированы с текущими material/effect
+   ограничениями и Wave 6 quality gates.
+
+Перед merge/release повторно выполнить unit, build, smoke, full и stress
+команды из раздела 1; при изменении документации проверить этот индекс и
+обновить дату handoff.
 
 `docs/0`, `docs/1`, `docs/2`, `docs/3` answers, `docs/5`, `docs/5a`, `docs/6`,
 `docs/7` и `docs/8` содержат исходные требования, research или roadmap. Их нужно
@@ -252,16 +270,15 @@ runtime-документы:
 
 ## 11. Рекомендуемый порядок следующей работы
 
-1. Не начинать с новой функциональности, пока не сохранены незакоммиченные
-   изменения README/runtime spec.
-2. Привести README и две runtime-спецификации к фактическому состоянию,
-   начиная с multi-artwork, schema/archive и transform semantics.
+1. Следующая Planned-фаза — HDR environment maps: каталог, загрузка,
+   intensity/rotation, fallback на процедурный studio light и безопасное
+   сохранение только пользовательских настроек.
+2. Перед HDR implementation зафиксировать UX-контракт в Planned-документе и
+   добавить его в `docs/README.md`; не смешивать HDR assets с project snapshot.
 3. Поддерживать `docs/README.md` в том же PR, что и изменения функциональности;
    новый документ добавлять туда с одним статусом и владельцем.
-4. Запустить unit, build и полный E2E; отдельно выполнить browser smoke-check.
-5. После подтверждения текущего состояния выбрать следующий feature milestone.
-6. Любое изменение canonical model сопровождать schema/history/archive tests и
-   проверкой 2D Preview Render export parity.
+4. Любое изменение canonical model сопровождать schema/history/archive tests и
+   проверкой 2D Preview/Render export parity.
 
 ## 12. Правила безопасной разработки
 

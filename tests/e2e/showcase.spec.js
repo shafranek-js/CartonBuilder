@@ -29,10 +29,16 @@ test('serves the showcase and lazy-loads the interactive viewer', async ({ page 
   await expect(page.locator('#cartonViewer')).toBeVisible();
   const viewer = page.frameLocator('#cartonViewer');
   await expect(viewer.locator('canvas#viewer')).toHaveCount(1, { timeout: 30_000 });
+  await expect(viewer.locator('html')).toHaveAttribute('data-viewer-ready', 'true', { timeout: 30_000 });
   await expect(viewer.locator('#panel')).toBeHidden();
   await expect(viewer.locator('#panelToggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(viewer.locator('#fullscreenToggle')).toHaveAttribute('aria-pressed', 'false');
-  await page.locator('#cartonViewer').scrollIntoViewIfNeeded();
+  await page.locator('#cartonViewer').evaluate((element) => {
+    const header = document.querySelector('header');
+    const headerHeight = header?.getBoundingClientRect().height ?? 0;
+    const top = element.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: Math.max(0, top - headerHeight - 12), behavior: 'instant' });
+  });
   await viewer.locator('#panelToggle').dispatchEvent('click');
   await expect(viewer.locator('#panel')).toBeVisible();
   await expect(viewer.locator('#panelToggle')).toHaveAttribute('aria-expanded', 'true');
