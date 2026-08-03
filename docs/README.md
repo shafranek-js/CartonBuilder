@@ -120,14 +120,13 @@ Canonical for: <scope, or "not canonical">
 Перед следующим release нужно синхронизировать Implemented-документы с уже
 реализованным кодом:
 
-- несколько artwork entries и динамические artwork sublayers;
+- динамические artwork sublayers и их add/reorder/rename/visibility/lock semantics;
 - возможность отключить `Constrain proportions`;
 - archive manifest version 2 и массивы assets/previews;
 - distinction между системными слоями и artwork sublayers;
 - side crop handles и right-button pan пустого 2D canvas;
 - разное поведение Box Dimensions на Create Box и Artwork steps;
 - Settings, File/Edit menus, Box Presets, scene presets и diagnostics;
-- Render board appearance/named presets и актуальная schema v5 wording;
 - противоречие README о Render-only thickness/bevel.
 
 Пока этот backlog не закрыт, нельзя считать документацию полностью

@@ -845,7 +845,7 @@
               <h2 data-i18n="renderLighting">Lighting</h2>
               <div class="light-control"><span data-i18n="lightAzimuth3d">Horizontal</span><input id="renderLightAzimuth" type="range" min="0" max="360" step="1" value="63"><output id="renderLightAzimuthValue">63°</output></div>
               <div class="light-control"><span data-i18n="lightElevation3d">Vertical</span><input id="renderLightElevation" type="range" min="5" max="85" step="1" value="48"><output id="renderLightElevationValue">48°</output></div>
-              <div class="light-control"><span data-i18n="lightIntensity3d">Brightness</span><input id="renderLightIntensity" type="range" min="0" max="10" step="0.1" value="2.6"><output id="renderLightIntensityValue">2.6</output></div>
+              <div class="light-control"><span data-i18n="lightIntensity3d">Brightness</span><input id="renderLightIntensity" type="range" min="0" max="10" step="0.1" value="1.7"><output id="renderLightIntensityValue">1.7</output></div>
               <label class="field"><span data-i18n="renderEnvironment">Environment</span>
                 <select id="renderEnvironment">
                   <option value="none" data-i18n="renderEnvironmentNone">None</option>
@@ -857,8 +857,8 @@
                   <option value="night" data-i18n="renderEnvironmentNight">Night</option>
                 </select>
               </label>
-              <div class="light-control"><span data-i18n="environmentIntensity3d">Ambient</span><input id="renderEnvironmentIntensity" type="range" min="0" max="5" step="0.05" value="0.65"><output id="renderEnvironmentIntensityValue">0.65</output></div>
-              <div class="light-control"><span data-i18n="renderExposure">Exposure</span><input id="renderExposure" type="range" min="0.1" max="3" step="0.05" value="1"><output id="renderExposureValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="environmentIntensity3d">Ambient</span><input id="renderEnvironmentIntensity" type="range" min="0" max="5" step="0.05" value="0.4"><output id="renderEnvironmentIntensityValue">0.40</output></div>
+              <div class="light-control"><span data-i18n="renderExposure">Exposure</span><input id="renderExposure" type="range" min="0.1" max="3" step="0.05" value="0.85"><output id="renderExposureValue">0.85</output></div>
             </section>
 
             <section class="tool-section">
@@ -866,22 +866,22 @@
               <label class="field"><span data-i18n="renderBackgroundMode">Mode</span>
                 <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
               </label>
-              <label class="field"><span data-i18n="backgroundColor3d">Color</span><input id="renderBackgroundColor" type="color" value="#e8eaeb"></label>
+              <label class="field"><span data-i18n="backgroundColor3d">Color</span><input id="renderBackgroundColor" type="color" value="#d9dcde"></label>
             </section>
 
             <section class="tool-section">
               <h2 data-i18n="shadows3d">Shadows</h2>
               <label class="field"><span data-i18n="shadowsEnabled3d">Enabled</span><input id="renderShadowEnabled" type="checkbox" checked></label>
-              <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.25"><output id="renderShadowIntensityValue">0.25</output></div>
-              <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="1.5"><output id="renderShadowBlurValue">1.5</output></div>
+              <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.34"><output id="renderShadowIntensityValue">0.34</output></div>
+              <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="2"><output id="renderShadowBlurValue">2.0</output></div>
               <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
             </section>
 
             <section class="tool-section">
               <h2 data-i18n="renderEffects">Effects</h2>
               <label class="field"><span data-i18n="renderGtao">GTAO</span><input id="renderEffectsGtao" type="checkbox" checked></label>
-              <div class="light-control"><span data-i18n="renderGtaoIntensity">AO intensity</span><input id="renderGtaoIntensity" type="range" min="0" max="1" step="0.01" value="0.45"><output id="renderGtaoIntensityValue">0.45</output></div>
-              <div class="light-control"><span data-i18n="renderGtaoRadius">AO radius</span><input id="renderGtaoRadius" type="range" min="0.01" max="2" step="0.01" value="0.22"><output id="renderGtaoRadiusValue">0.22</output></div>
+              <div class="light-control"><span data-i18n="renderGtaoIntensity">AO intensity</span><input id="renderGtaoIntensity" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderGtaoIntensityValue">0.50</output></div>
+              <div class="light-control"><span data-i18n="renderGtaoRadius">AO radius</span><input id="renderGtaoRadius" type="range" min="0.01" max="2" step="0.01" value="0.18"><output id="renderGtaoRadiusValue">0.18</output></div>
               <label class="field"><span data-i18n="renderGtaoResolution">AO resolution</span><select id="renderGtaoResolution"><option value="half">Half</option><option value="full">Full</option></select></label>
               <label class="field"><span data-i18n="renderDof">Depth of field</span><input id="renderEffectsDof" type="checkbox"></label>
               <label class="field"><span data-i18n="renderDofFocusMode">Focus</span><select id="renderDofFocusMode"><option value="carton-center">Carton center</option><option value="custom">Custom</option></select></label>
