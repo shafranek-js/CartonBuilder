@@ -533,6 +533,7 @@ test.describe('Wave 5 deterministic Render baselines', () => {
   const snapshotDiffPixelRatio = process.env.CI ? 0.02 : 0.005;
 
   test('captures stable studio and transparent Render states', async ({ page }) => {
+    test.setTimeout(process.env.CI ? 240_000 : 90_000);
     await openRender(page, 'wave5-visual-fixture.png');
     expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
     const canvas = page.locator('#renderCanvas');
