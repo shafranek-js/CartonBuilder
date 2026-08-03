@@ -52,7 +52,7 @@ README не заменяет runtime specification. Research и roadmap не я�
 | Historical/Research | [`6. 3D Rendering Strategy and Best Practices for CartonBuilder Research.md`](6.%203D%20Rendering%20Strategy%20and%20Best%20Practices%20for%20CartonBuilder%20Research.md) | Исследование стратегии качества и renderer choices | maintainer Render; предложения требуют отдельного решения |
 | Planned | [`7. CartonBuilder 3D Rendering Research and Implementation Roadmap.md`](7.%20CartonBuilder%203D%20Rendering%20Research%20and%20Implementation%20Roadmap.md) | Roadmap дальнейших Render milestones и path tracing gate | maintainer Render |
 | Historical/Research | [`8. 3D and HTML Inside PDF Research.md`](8.%203D%20and%20HTML%20Inside%20PDF%20Research.md) | Исследование PDF/HTML packaging и export boundaries | maintainer export; только контекст |
-| Implemented | [`9. render-runtime-specification.md`](9.%20render-runtime-specification.md) | Нормативный контракт Presentation Render, effects и still export | maintainer `src/render` |
+| Implemented | [`9. render-runtime-specification.md`](9.%20render-runtime-specification.md) | Нормативный контракт Presentation Render, effects и image/3D export | maintainer `src/render` |
 | Implemented | [`../handoff.md`](../handoff.md) | Точка передачи текущего состояния и backlog документации | текущий maintainer; обновлять при handoff |
 
 ## Правило «что считать Implemented»

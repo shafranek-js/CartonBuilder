@@ -4,6 +4,14 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 test('opens the bundled example on the first application visit only', async ({ page }) => {
   await page.goto('/');
+  await page.evaluate(async () => {
+    localStorage.clear();
+    await new Promise((resolve) => {
+      const request = indexedDB.deleteDatabase('carton-builder');
+      request.onsuccess = request.onerror = request.onblocked = resolve;
+    });
+  });
+  await page.reload();
 
   await expect(page.locator('#artworkStep')).toBeVisible();
   await expect(page.locator('#artworkFileName')).toHaveText(
@@ -12,7 +20,7 @@ test('opens the bundled example on the first application visit only', async ({ p
   await expect(page.locator('#panelCount')).toHaveText('6/6');
 
   await page.evaluate(async () => {
-    const request = indexedDB.open('carton-builder', 4);
+    const request = indexedDB.open('carton-builder', 6);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

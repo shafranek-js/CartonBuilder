@@ -9,8 +9,9 @@ import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
+import { validateRenderAssets } from '../render/renderAssets.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 6;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 9;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -160,6 +161,42 @@ MIGRATIONS.set(5, (snapshot) => ({
   history: migrateHistoryArtworkQuality(snapshot.history),
 }));
 
+MIGRATIONS.set(6, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 7,
+  render: sanitizeRenderSettings(snapshot.render),
+}));
+
+MIGRATIONS.set(7, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 8,
+  render: sanitizeRenderSettings({
+    ...snapshot.render,
+    activeViewPresetId: snapshot.render?.activeViewPresetId || '',
+    viewPresetBaseId: snapshot.render?.viewPresetBaseId || '',
+    camera: {
+      ...snapshot.render?.camera,
+      orthographicHeight: snapshot.render?.camera?.orthographicHeight,
+      verticalCorrection: snapshot.render?.camera?.verticalCorrection === true,
+      keepVerticalsParallel: snapshot.render?.camera?.verticalCorrection === true,
+    },
+  }),
+}));
+
+MIGRATIONS.set(8, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 9,
+  render: sanitizeRenderSettings({
+    ...snapshot.render,
+    output: {
+      ...snapshot.render?.output,
+      kind: snapshot.render?.output?.kind || 'image',
+      sequence: snapshot.render?.output?.sequence,
+      glb: snapshot.render?.output?.glb,
+    },
+  }),
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -240,10 +277,16 @@ export async function validateProjectBundle({
   artworkBlobs,
   originalBlob,
   previewBlob,
+  renderAssets = [],
 }) {
   const snapshot = migrateProjectSnapshot(inputSnapshot);
+  const validatedRenderAssets = await validateRenderAssets(renderAssets);
+  const backgroundAssetId = snapshot.render?.background?.image?.assetId;
+  if (backgroundAssetId && !validatedRenderAssets.some((asset) => asset.assetId === backgroundAssetId)) {
+    throw new AppError('projectRenderAssetMissing');
+  }
   if (!snapshot.artworks.length) {
-    return { snapshot, artworkBlobs: [] };
+    return { snapshot, artworkBlobs: [], renderAssets: validatedRenderAssets };
   }
 
   let blobs;
@@ -296,7 +339,7 @@ export async function validateProjectBundle({
     });
   }
 
-  return { snapshot, artworkBlobs: validated };
+  return { snapshot, artworkBlobs: validated, renderAssets: validatedRenderAssets };
 }
 
 export const PROJECT_PREVIEW_LIMITS = Object.freeze({

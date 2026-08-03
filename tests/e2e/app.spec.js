@@ -69,7 +69,7 @@ async function loadGeneratedPng(page, fileName = 'sample-artwork.png') {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const request = indexedDB.open('carton-builder', 1);
+    const request = indexedDB.open('carton-builder', 6);
     await new Promise((resolve) => {
       request.onsuccess = () => {
         const db = request.result;

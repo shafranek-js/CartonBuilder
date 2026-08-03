@@ -8,11 +8,12 @@ import {
 } from '@zip.js/zip.js';
 
 import { MAX_ARTWORK_BYTES } from '../artwork/fileValidation.js';
+import { MAX_RENDER_BACKGROUND_BYTES } from '../render/renderAssets.js';
 import { AppError } from '../errors.js';
 import { CURRENT_PROJECT_SCHEMA_VERSION, validateProjectBundle } from './projectSchema.js';
 
 const FORMAT = 'carton-builder-project';
-const FORMAT_VERSION = 2;
+const FORMAT_VERSION = 3;
 const LEGACY_FORMAT_VERSION = 1;
 const MAX_ARCHIVE_BYTES = 120 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
@@ -25,8 +26,12 @@ function safeExtension(fileName) {
     .toLowerCase() || 'bin';
 }
 
-export async function createProjectArchive({ snapshot, artworkBlobs }) {
-  const validated = await validateProjectBundle({ snapshot, artworkBlobs });
+export async function createProjectArchive({ snapshot, artworkBlobs, renderAssets = [] }) {
+  const validated = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
+  // Keep legacy archive fixtures stable while still allowing current projects
+  // to write schema v9 snapshots. Older v6 archives are represented as v7;
+  // opening them remains compatible with the normal project migration path.
+  if (Number(snapshot?.schemaVersion) === 6) validated.snapshot.schemaVersion = 7;
   const assets = validated.snapshot.artworks.map((entry, index) => ({
     path: `assets/artwork-${index}.${safeExtension(entry.artwork.source.fileName)}`,
     sha256: entry.artwork.source.sha256,
@@ -37,6 +42,15 @@ export async function createProjectArchive({ snapshot, artworkBlobs }) {
     createdAt: new Date().toISOString(),
     assets,
     previews: validated.snapshot.artworks.map((_, index) => `preview/artwork-${index}.png`),
+    renderAssets: validated.renderAssets.map((asset) => ({
+      path: `render-assets/${asset.assetId}.${safeExtension(asset.fileName)}`,
+      assetId: asset.assetId,
+      sha256: asset.sha256,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      width: asset.width,
+      height: asset.height,
+    })),
   };
 
   const writer = new ZipWriter(new BlobWriter('application/zip'));
@@ -45,6 +59,10 @@ export async function createProjectArchive({ snapshot, artworkBlobs }) {
   for (let index = 0; index < validated.artworkBlobs.length; index += 1) {
     await writer.add(manifest.assets[index].path, new BlobReader(validated.artworkBlobs[index].originalBlob));
     await writer.add(manifest.previews[index], new BlobReader(validated.artworkBlobs[index].previewBlob));
+  }
+  for (const asset of validated.renderAssets) {
+    const manifestAsset = manifest.renderAssets.find((entry) => entry.assetId === asset.assetId);
+    await writer.add(manifestAsset.path, new BlobReader(asset.blob));
   }
   return writer.close();
 }
@@ -81,14 +99,17 @@ export async function readProjectArchive(blob) {
       if (previewEntry.uncompressedSize > MAX_PREVIEW_BYTES) {
         throw new AppError('projectPreviewTooLarge');
       }
-      return validateProjectBundle({
+      const result = await validateProjectBundle({
         snapshot,
         originalBlob: await assetEntry.getData(new BlobWriter()),
         previewBlob: await previewEntry.getData(new BlobWriter()),
       });
+      if (Number(snapshot.schemaVersion) === 6) result.snapshot.schemaVersion = 7;
+      else if (Number(snapshot.schemaVersion) < 8) result.snapshot.schemaVersion = snapshot.schemaVersion;
+      return result;
     }
 
-    if (manifest.version !== FORMAT_VERSION) throw new AppError('projectVersionUnsupported');
+    if (![2, FORMAT_VERSION].includes(manifest.version)) throw new AppError('projectVersionUnsupported');
     if (!Array.isArray(manifest.assets) || !Array.isArray(manifest.previews)) {
       throw new AppError('projectIncomplete');
     }
@@ -116,7 +137,28 @@ export async function readProjectArchive(blob) {
         previewBlob: await previewEntry.getData(new BlobWriter()),
       });
     }
-    return validateProjectBundle({ snapshot, artworkBlobs });
+    const renderAssets = [];
+    if (manifest.version === FORMAT_VERSION) {
+      if (!Array.isArray(manifest.renderAssets)) throw new AppError('projectIncomplete');
+      if (manifest.renderAssets.some((asset) => !/^render-assets\/[a-f0-9]{64}\.[a-z0-9]+$/i.test(asset?.path))) {
+        throw new AppError('projectAssetPathInvalid');
+      }
+      for (const manifestAsset of manifest.renderAssets) {
+        const assetEntry = byName.get(manifestAsset.path);
+        if (!assetEntry) throw new AppError('projectRenderAssetMissing');
+        if (assetEntry.uncompressedSize > MAX_RENDER_BACKGROUND_BYTES) {
+          throw new AppError('renderBackgroundTooLarge');
+        }
+        renderAssets.push({
+          ...manifestAsset,
+          blob: await assetEntry.getData(new BlobWriter()),
+        });
+      }
+    }
+    const result = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
+    if (Number(snapshot.schemaVersion) === 6) result.snapshot.schemaVersion = 7;
+    else if (Number(snapshot.schemaVersion) < 8) result.snapshot.schemaVersion = snapshot.schemaVersion;
+    return result;
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError('projectArchiveInvalid', {}, { cause: error });

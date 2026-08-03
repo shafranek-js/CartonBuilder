@@ -11,6 +11,11 @@ import {
 } from './RenderSettings.js';
 import { applyRenderPreset } from './renderPresets.js';
 import { renderStill } from './StillRenderService.js';
+import {
+  getTurntableDimensions,
+  isTurntableWithinPixelBudget,
+  sanitizeTurntableOptions,
+} from './turntableOptions.js';
 import { isPathTracingEnabled, PathTracingRenderService } from './PathTracingRenderService.js';
 import {
   cloneBoardAppearance,
@@ -26,7 +31,25 @@ import {
   getRenderPresets,
   saveRenderPreset,
   setActiveRenderPresetId,
+  undoDeleteRenderPreset,
 } from './RenderPresetStore.js';
+import { getRenderAsset, saveRenderAsset } from './RenderAssetStore.js';
+import { normalizeRenderAsset, validateRenderBackground } from './renderAssets.js';
+import { generateNeutralRenderThumbnail } from './PresetThumbnailService.js';
+import {
+  cameraPositionFromHeading,
+  normalizeCameraPresetState,
+} from './cameraState.js';
+import {
+  deleteRenderViewPreset,
+  duplicateRenderViewPreset,
+  getActiveRenderViewPresetId,
+  getRenderViewPresets,
+  renameRenderViewPreset,
+  saveRenderViewPreset,
+  setActiveRenderViewPresetId,
+  undoDeleteRenderViewPreset,
+} from './RenderViewPresetStore.js';
 
 let rendererModulePromise = null;
 
@@ -60,9 +83,10 @@ function formatOutputName(dimensions, presetId, longEdge, extension) {
 }
 
 function createSaveTypes(format) {
-  return format === 'png'
-    ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
-    : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
+  if (format === 'png') return [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }];
+  if (format === 'jpg') return [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
+  if (format === 'glb') return [{ description: 'Binary glTF (*.glb)', accept: { 'model/gltf-binary': ['.glb'] } }];
+  return [{ description: 'ZIP archive (*.zip)', accept: { 'application/zip': ['.zip'] } }];
 }
 
 function getRenderTextureDpi(boxModel, dimensions) {
@@ -97,6 +121,7 @@ export function createRenderApp({
   windowRef = window,
   initialState = DEFAULT_RENDER_SETTINGS,
   initialBoardAppearance = null,
+  initialRenderAssets = [],
   restorePersistedSettings = true,
   onStateChange = () => {},
   setArtworkQuality = () => false,
@@ -117,6 +142,23 @@ export function createRenderApp({
     projection: documentRef.getElementById('renderProjection'),
     fov: documentRef.getElementById('renderFov'),
     fovValue: documentRef.getElementById('renderFovValue'),
+    lens: documentRef.getElementById('renderCameraLens'),
+    lensValue: documentRef.getElementById('renderCameraLensValue'),
+    heading: documentRef.getElementById('renderCameraHeading'),
+    cameraElevation: documentRef.getElementById('renderCameraElevation'),
+    panX: documentRef.getElementById('renderCameraPanX'),
+    panY: documentRef.getElementById('renderCameraPanY'),
+    cameraDistance: documentRef.getElementById('renderCameraDistance'),
+    frameHeight: documentRef.getElementById('renderCameraFrameHeight'),
+    verticalCorrection: documentRef.getElementById('renderKeepVerticalsParallel'),
+    fitCamera: documentRef.getElementById('renderFitCameraButton'),
+    resetCamera: documentRef.getElementById('renderResetCameraButton'),
+    viewPreset: documentRef.getElementById('renderViewPreset'),
+    viewPresetList: documentRef.getElementById('renderViewPresetList'),
+    saveViewPreset: documentRef.getElementById('saveRenderViewPresetButton'),
+    deleteViewPreset: documentRef.getElementById('deleteRenderViewPresetButton'),
+    undoViewPreset: documentRef.getElementById('undoRenderViewPresetButton'),
+    duplicateViewPreset: documentRef.getElementById('duplicateRenderViewPresetButton'),
     aspect: documentRef.getElementById('renderAspect'),
     longEdge: documentRef.getElementById('renderLongEdge'),
     material: documentRef.getElementById('renderMaterialProfile'),
@@ -133,12 +175,34 @@ export function createRenderApp({
     exposureValue: documentRef.getElementById('renderExposureValue'),
     backgroundMode: documentRef.getElementById('renderBackgroundMode'),
     backgroundColor: documentRef.getElementById('renderBackgroundColor'),
+    backgroundFile: documentRef.getElementById('renderBackgroundFile'),
+    backgroundFileName: documentRef.getElementById('renderBackgroundFileName'),
+    clearBackground: documentRef.getElementById('renderClearBackgroundButton'),
+    backgroundFit: documentRef.getElementById('renderBackgroundFit'),
+    backgroundPositionX: documentRef.getElementById('renderBackgroundPositionX'),
+    backgroundPositionXValue: documentRef.getElementById('renderBackgroundPositionXValue'),
+    backgroundPositionY: documentRef.getElementById('renderBackgroundPositionY'),
+    backgroundPositionYValue: documentRef.getElementById('renderBackgroundPositionYValue'),
+    backgroundZoom: documentRef.getElementById('renderBackgroundZoom'),
+    backgroundZoomValue: documentRef.getElementById('renderBackgroundZoomValue'),
+    backgroundBrightness: documentRef.getElementById('renderBackgroundBrightness'),
+    backgroundBrightnessValue: documentRef.getElementById('renderBackgroundBrightnessValue'),
+    backgroundOverlayOpacity: documentRef.getElementById('renderBackgroundOverlayOpacity'),
+    backgroundOverlayOpacityValue: documentRef.getElementById('renderBackgroundOverlayOpacityValue'),
     shadowEnabled: documentRef.getElementById('renderShadowEnabled'),
     shadowIntensity: documentRef.getElementById('renderShadowIntensity'),
     shadowIntensityValue: documentRef.getElementById('renderShadowIntensityValue'),
     shadowBlur: documentRef.getElementById('renderShadowBlur'),
     shadowBlurValue: documentRef.getElementById('renderShadowBlurValue'),
     transparentShadow: documentRef.getElementById('renderTransparentShadow'),
+    floorReflectionEnabled: documentRef.getElementById('renderFloorReflectionEnabled'),
+    floorReflectionStrength: documentRef.getElementById('renderFloorReflectionStrength'),
+    floorReflectionStrengthValue: documentRef.getElementById('renderFloorReflectionStrengthValue'),
+    floorReflectionBlur: documentRef.getElementById('renderFloorReflectionBlur'),
+    floorReflectionBlurValue: documentRef.getElementById('renderFloorReflectionBlurValue'),
+    floorReflectionFade: documentRef.getElementById('renderFloorReflectionFade'),
+    floorReflectionFadeValue: documentRef.getElementById('renderFloorReflectionFadeValue'),
+    transparentReflection: documentRef.getElementById('renderTransparentReflection'),
     boardThickness: documentRef.getElementById('renderBoardThickness'),
     boardThicknessValue: documentRef.getElementById('renderBoardThicknessValue'),
     boardBevel: documentRef.getElementById('renderBoardBevel'),
@@ -160,8 +224,12 @@ export function createRenderApp({
     effectsDofMaxBlur: documentRef.getElementById('renderDofMaxBlur'),
     effectsDofMaxBlurValue: documentRef.getElementById('renderDofMaxBlurValue'),
     namedPreset: documentRef.getElementById('renderNamedPreset'),
+    namedPresetList: documentRef.getElementById('renderNamedPresetList'),
     saveNamedPreset: documentRef.getElementById('saveRenderPresetButton'),
+    updateNamedPreset: documentRef.getElementById('updateRenderPresetButton'),
+    duplicateNamedPreset: documentRef.getElementById('duplicateRenderPresetButton'),
     deleteNamedPreset: documentRef.getElementById('deleteRenderPresetButton'),
+    undoNamedPreset: documentRef.getElementById('undoRenderPresetButton'),
     experimentalPathTracing: documentRef.getElementById('experimentalPathTracingButton'),
     diagnosticsOutput: documentRef.getElementById('renderDiagnosticsOutput'),
     artworkQualityList: documentRef.getElementById('renderArtworkQualityList'),
@@ -170,9 +238,49 @@ export function createRenderApp({
     viewportLabel: documentRef.getElementById('renderViewportLabel'),
     viewportSummary: documentRef.getElementById('renderViewportSummary'),
     presetButtons: [...documentRef.querySelectorAll('[data-render-preset]')],
+  exportDialog: documentRef.getElementById('renderExportDialog'),
+    exportForm: documentRef.getElementById('renderExportForm'),
+    exportKind: documentRef.getElementById('renderExportKind'),
+    exportFormat: documentRef.getElementById('renderExportFormat'),
+    exportSizing: documentRef.getElementById('renderExportSizing'),
+    exportWidth: documentRef.getElementById('renderExportWidth'),
+    exportHeight: documentRef.getElementById('renderExportHeight'),
+    exportUnit: documentRef.getElementById('renderExportUnit'),
+    exportPrintWidth: documentRef.getElementById('renderExportPrintWidth'),
+    exportPrintHeight: documentRef.getElementById('renderExportPrintHeight'),
+    exportPpi: documentRef.getElementById('renderExportPpi'),
+    exportJpegQuality: documentRef.getElementById('renderJpegQuality'),
+    exportJpegQualityValue: documentRef.getElementById('renderJpegQualityValue'),
+    exportSequenceFrames: documentRef.getElementById('renderExportSequenceFrames'),
+    exportSequenceLongEdge: documentRef.getElementById('renderExportSequenceLongEdge'),
+    exportSequenceFormat: documentRef.getElementById('renderExportSequenceFormat'),
+    exportGlbTextureSize: documentRef.getElementById('renderExportGlbTextureSize'),
+    exportGlbMaterialMode: documentRef.getElementById('renderExportGlbMaterialMode'),
+    exportGlbIncludeCamera: documentRef.getElementById('renderExportGlbIncludeCamera'),
+    exportImageOptions: documentRef.getElementById('renderExportImageOptions'),
+    exportSequenceOptions: documentRef.getElementById('renderExportSequenceOptions'),
+    exportGlbOptions: documentRef.getElementById('renderExportGlbOptions'),
+    exportSummary: documentRef.getElementById('renderExportSummary'),
+    presetNameDialog: documentRef.getElementById('renderPresetNameDialog'),
+    presetNameForm: documentRef.getElementById('renderPresetNameForm'),
+    presetNameInput: documentRef.getElementById('renderPresetNameInput'),
   };
 
   const storage = getStorage(windowRef);
+
+  function requestPresetName(defaultName = 'My Preset') {
+    if (!elements.presetNameDialog?.showModal) return Promise.resolve(defaultName);
+    elements.presetNameInput.value = defaultName;
+    elements.presetNameInput.focus();
+    elements.presetNameDialog.showModal();
+    return new Promise((resolve) => {
+      elements.presetNameDialog.addEventListener('close', () => {
+        resolve(elements.presetNameDialog.returnValue === 'confirm'
+          ? elements.presetNameInput.value.trim().slice(0, 64)
+          : '');
+      }, { once: true });
+    });
+  }
   const storedSettings = restorePersistedSettings
     ? readRenderSettings(storage)
     : null;
@@ -182,6 +290,14 @@ export function createRenderApp({
   );
   let namedPresets = [];
   let activeNamedPresetId = '';
+  let viewPresets = [];
+  let activeViewPresetId = getActiveRenderViewPresetId();
+  let viewUndoTimer = null;
+  let renderUndoTimer = null;
+  let backgroundAsset = null;
+  let availableRenderAssets = Array.isArray(initialRenderAssets)
+    ? initialRenderAssets.map(normalizeRenderAsset).filter(Boolean)
+    : [];
   let pathTracingService = null;
   let renderer = null;
   let active = false;
@@ -191,6 +307,71 @@ export function createRenderApp({
   let syncGeneration = 0;
   let structureSignature = '';
   let artworkSignature = '';
+
+  function restoreRenderAssets(assets = []) {
+    const entries = Array.isArray(assets) ? assets.map(normalizeRenderAsset).filter(Boolean) : [];
+    availableRenderAssets = entries.length ? entries : availableRenderAssets;
+    const assetId = state.background?.image?.assetId;
+    backgroundAsset = availableRenderAssets.find((asset) => asset.assetId === assetId) || null;
+    return Boolean(backgroundAsset);
+  }
+
+  restoreRenderAssets(initialRenderAssets);
+
+  function getRenderAssets() {
+    return backgroundAsset ? [backgroundAsset] : [];
+  }
+
+  async function ensureBackgroundAsset() {
+    const assetId = state.background?.image?.assetId;
+    if (!assetId || backgroundAsset?.assetId === assetId) return backgroundAsset;
+    backgroundAsset = availableRenderAssets.find((asset) => asset.assetId === assetId) || null;
+    if (backgroundAsset) return backgroundAsset;
+    try {
+      backgroundAsset = await getRenderAsset(assetId);
+    } catch {
+      backgroundAsset = null;
+    }
+    if (backgroundAsset) availableRenderAssets = [
+      ...availableRenderAssets.filter((asset) => asset.assetId !== backgroundAsset.assetId),
+      backgroundAsset,
+    ];
+    return backgroundAsset;
+  }
+
+  async function setBackgroundImage(file) {
+    const asset = await validateRenderBackground(file);
+    try {
+      await saveRenderAsset(asset);
+    } catch {
+      // Keep the in-memory asset usable when IndexedDB is unavailable.
+    }
+    backgroundAsset = asset;
+    availableRenderAssets = [
+      ...availableRenderAssets.filter((entry) => entry.assetId !== asset.assetId),
+      asset,
+    ];
+    const next = clone(state);
+    next.background.mode = 'image';
+    next.background.image = {
+      ...next.background.image,
+      assetId: asset.assetId,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      width: asset.width,
+      height: asset.height,
+    };
+    updateState(next);
+    return clone(asset);
+  }
+
+  function clearBackgroundImage() {
+    backgroundAsset = null;
+    const next = clone(state);
+    next.background.mode = 'solid';
+    next.background.image = { ...DEFAULT_RENDER_SETTINGS.background.image };
+    updateState(next);
+  }
 
   function getState() {
     const camera = renderer?.getCameraState();
@@ -251,6 +432,45 @@ export function createRenderApp({
       elements.namedPreset.append(option);
     }
     elements.namedPreset.value = namedPresets.some((preset) => preset.id === selected) ? selected : '';
+    if (elements.namedPresetList) {
+      elements.namedPresetList.replaceChildren();
+      for (const preset of namedPresets) {
+        const card = documentRef.createElement('button');
+        card.type = 'button';
+        card.className = 'render-preset-card';
+        card.classList.toggle('active', preset.id === selected);
+        card.dataset.namedPreset = preset.id;
+        const thumb = documentRef.createElement('span');
+        thumb.className = 'render-preset-thumbnail';
+        thumb.setAttribute('aria-hidden', 'true');
+        const label = documentRef.createElement('span');
+        label.className = 'render-preset-card-label';
+        label.textContent = preset.name;
+        card.append(thumb, label);
+        card.addEventListener('click', () => {
+          if (elements.namedPreset) elements.namedPreset.value = preset.id;
+          applyNamedPreset();
+        });
+        elements.namedPresetList.append(card);
+      }
+    }
+  }
+
+  async function loadPresetThumbnails() {
+    for (const button of elements.presetButtons) {
+      const presetId = button.dataset.renderPreset;
+      const thumbnail = button.querySelector('[data-preset-thumbnail]') || button.querySelector('.render-preset-thumbnail');
+      if (!thumbnail) continue;
+      try {
+        const dataUrl = await generateNeutralRenderThumbnail({ presetId, documentRef, windowRef });
+        if (dataUrl) {
+          thumbnail.style.backgroundImage = `url(${dataUrl})`;
+          thumbnail.classList.add('has-real-thumbnail');
+        }
+      } catch (error) {
+        console.warn('Could not generate preset thumbnail', presetId, error);
+      }
+    }
   }
 
   function updateArtworkQualityList() {
@@ -324,11 +544,228 @@ export function createRenderApp({
     elements.viewportFrame.style.top = `${Math.max(0, Math.floor((availableHeight - frameHeight) / 2))}px`;
   }
 
+  function updateViewPresetOptions() {
+    const selected = activeViewPresetId || state.activeViewPresetId || '';
+    if (elements.viewPreset) {
+      elements.viewPreset.replaceChildren();
+      const placeholder = documentRef.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = t('renderViewPresetPlaceholder');
+      elements.viewPreset.append(placeholder);
+      for (const preset of viewPresets) {
+        const option = documentRef.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.name;
+        elements.viewPreset.append(option);
+      }
+      elements.viewPreset.value = viewPresets.some((entry) => entry.id === selected) ? selected : '';
+    }
+    if (!elements.viewPresetList) return;
+    elements.viewPresetList.replaceChildren();
+    for (const preset of viewPresets) {
+      const card = documentRef.createElement('button');
+      card.type = 'button';
+      card.className = 'render-preset-card render-view-preset-card';
+      card.dataset.viewPreset = preset.id;
+      card.classList.toggle('active', preset.id === selected);
+      const thumb = documentRef.createElement('span');
+      thumb.className = 'render-preset-thumbnail render-view-preset-thumbnail';
+      thumb.setAttribute('aria-hidden', 'true');
+      const label = documentRef.createElement('span');
+      label.className = 'render-preset-card-label';
+      label.textContent = preset.name;
+      card.append(thumb, label);
+      card.addEventListener('click', () => applyViewPreset(preset.id));
+      elements.viewPresetList.append(card);
+    }
+  }
+
+  function markRenderPresetModified() {
+    if (!activeNamedPresetId) return;
+    const active = namedPresets.find((entry) => entry.id === activeNamedPresetId);
+    if (!active) return;
+    elements.namedPreset?.setAttribute('data-modified', 'true');
+  }
+
+  function getBoxCenterRadius() {
+    const dimensions = boxModel.dimensions || {};
+    const width = Number(dimensions.width || 1);
+    const height = Number(dimensions.height || 1);
+    const depth = Number(dimensions.depth || 1);
+    const center = [0, height / 2, 0];
+    const radius = Math.max(0.001, Math.hypot(width / 2, height / 2, depth / 2));
+    return { center, radius };
+  }
+
+  function getNormalizedViewCamera(camera = renderer?.getCameraState?.() || state.camera) {
+    const { radius } = getBoxCenterRadius();
+    return normalizeCameraPresetState({
+      ...camera,
+      distanceFactor: Number(camera.cameraDistance || 0) / radius,
+      frameHeightFactor: Number(camera.orthographicHeight || camera.frameHeight || 0) / radius,
+    }, { radius });
+  }
+
+  function applyViewCamera(camera) {
+    const { center, radius } = getBoxCenterRadius();
+    const normalized = normalizeCameraPresetState(camera, { radius });
+    const position = cameraPositionFromHeading({
+      heading: normalized.heading,
+      elevation: normalized.elevation,
+      distance: Math.max(radius, normalized.distanceFactor * radius),
+      target: center,
+    });
+    const next = clone(state);
+    next.camera = {
+      ...next.camera,
+      preset: 'custom',
+      projection: normalized.projection,
+      fov: normalized.fov,
+      position,
+      target: center,
+      orthographicHeight: Math.max(0.01, normalized.frameHeightFactor * radius),
+      verticalCorrection: normalized.verticalCorrection,
+      keepVerticalsParallel: normalized.verticalCorrection,
+      heading: normalized.heading,
+      elevation: normalized.elevation,
+      cameraDistance: normalized.distanceFactor * radius,
+    };
+    next.activeViewPresetId = activeViewPresetId;
+    next.viewPresetBaseId = activeViewPresetId;
+    updateState(next);
+  }
+
+  function applyViewPreset(id) {
+    const preset = viewPresets.find((entry) => entry.id === id);
+    if (!preset) return false;
+    activeViewPresetId = preset.id;
+    setActiveRenderViewPresetId(activeViewPresetId);
+    applyViewCamera(preset.camera);
+    return true;
+  }
+
+  async function saveCurrentViewPreset() {
+    const name = await requestPresetName('My View');
+    if (!String(name).trim()) return false;
+    const preset = await saveRenderViewPreset({ name, camera: getNormalizedViewCamera() });
+    viewPresets = [preset, ...viewPresets.filter((entry) => entry.id !== preset.id)];
+    activeViewPresetId = preset.id;
+    const next = clone(state);
+    next.activeViewPresetId = preset.id;
+    next.viewPresetBaseId = preset.id;
+    state = sanitizeRenderSettings(next);
+    updateControls();
+    notifyStateChange();
+    return true;
+  }
+
+  async function removeCurrentViewPreset() {
+    const id = elements.viewPreset?.value || activeViewPresetId;
+    if (!id) return false;
+    await deleteRenderViewPreset(id);
+    viewPresets = viewPresets.filter((entry) => entry.id !== id);
+    activeViewPresetId = '';
+    const next = clone(state);
+    next.activeViewPresetId = '';
+    state = sanitizeRenderSettings(next);
+    if (elements.undoViewPreset) elements.undoViewPreset.hidden = false;
+    windowRef.clearTimeout(viewUndoTimer);
+    viewUndoTimer = windowRef.setTimeout(() => {
+      if (elements.undoViewPreset) elements.undoViewPreset.hidden = true;
+    }, 10_000);
+    updateControls();
+    return true;
+  }
+
+  async function undoCurrentViewPresetDelete() {
+    const restored = await undoDeleteRenderViewPreset();
+    if (!restored) return false;
+    viewPresets = [restored, ...viewPresets.filter((entry) => entry.id !== restored.id)];
+    activeViewPresetId = restored.id;
+    if (elements.undoViewPreset) elements.undoViewPreset.hidden = true;
+    updateControls();
+    return true;
+  }
+
+  function updateExportDialog() {
+    const output = state.output;
+    if (!elements.exportFormat) return;
+    if (elements.exportKind) elements.exportKind.value = output.kind;
+    elements.exportFormat.value = output.format;
+    elements.exportSizing.value = output.sizingMode;
+    elements.exportWidth.value = String(output.widthPx);
+    elements.exportHeight.value = String(output.heightPx);
+    elements.exportUnit.value = output.printUnit;
+    elements.exportPrintWidth.value = String(output.printWidth);
+    elements.exportPrintHeight.value = String(output.printHeight);
+    elements.exportPpi.value = String(output.ppi);
+    elements.exportJpegQuality.value = String(output.jpegQuality);
+    elements.exportJpegQualityValue.value = `${Math.round(output.jpegQuality * 100)}%`;
+    if (elements.exportSequenceFrames) elements.exportSequenceFrames.value = String(output.sequence.frames);
+    if (elements.exportSequenceLongEdge) elements.exportSequenceLongEdge.value = String(output.sequence.longEdge);
+    if (elements.exportSequenceFormat) elements.exportSequenceFormat.value = output.sequence.format;
+    if (elements.exportGlbTextureSize) elements.exportGlbTextureSize.value = String(output.glb.textureSize);
+    if (elements.exportGlbMaterialMode) elements.exportGlbMaterialMode.value = output.glb.materialMode;
+    if (elements.exportGlbIncludeCamera) elements.exportGlbIncludeCamera.checked = output.glb.includeCamera;
+    const kind = output.kind;
+    if (elements.exportImageOptions) elements.exportImageOptions.hidden = kind !== 'image';
+    if (elements.exportSequenceOptions) elements.exportSequenceOptions.hidden = kind !== 'sequence';
+    if (elements.exportGlbOptions) elements.exportGlbOptions.hidden = kind !== 'glb';
+    const printVisible = output.sizingMode === 'print';
+    const pixelsVisible = output.sizingMode === 'pixels';
+    const printGroup = elements.exportPrintWidth?.closest('.render-export-print');
+    const pixelsGroup = elements.exportWidth?.closest('.render-export-pixels');
+    if (printGroup) printGroup.hidden = kind !== 'image' || !printVisible;
+    if (pixelsGroup) pixelsGroup.hidden = kind !== 'image' || !pixelsVisible;
+    if (elements.exportSummary) {
+      if (kind === 'sequence') {
+        const dimensions = getTurntableDimensions(state, output.sequence.longEdge);
+        const allowed = isTurntableWithinPixelBudget({ ...output.sequence, ...dimensions });
+        elements.exportSummary.textContent = t('renderTurntableSummary', {
+          frames: output.sequence.frames,
+          width: dimensions.width,
+          height: dimensions.height,
+          status: allowed ? '' : ` · ${t('renderTurntableTooLarge')}`,
+        });
+      } else if (kind === 'glb') {
+        elements.exportSummary.textContent = t('renderGlbSummary', {
+          textureSize: output.glb.textureSize === 'auto' ? t('renderExportAuto') : `${output.glb.textureSize}px`,
+          materialMode: output.glb.materialMode === 'full-pbr' ? t('renderGlbFullPbr') : t('renderGlbCompatibility'),
+        });
+      } else {
+        const dimensions = getRenderOutputDimensions(state);
+        elements.exportSummary.textContent = t('renderExportSummary', dimensions);
+      }
+    }
+  }
+
+  function openExportDialog(format = state.output.format, kind = 'image') {
+    if (!elements.exportDialog?.showModal) return exportImage(format);
+    state.output.kind = kind;
+    elements.exportFormat.value = format;
+    updateExportDialog();
+    elements.exportFormat.value = format;
+    elements.exportDialog.showModal();
+    return true;
+  }
+
   function updateControls() {
     elements.cameraPreset.value = state.camera.preset;
     elements.projection.value = state.camera.projection;
     elements.fov.value = String(state.camera.fov);
     elements.fovValue.value = `${Math.round(state.camera.fov)}°`;
+    if (elements.lens) elements.lens.value = state.camera.lens || 'custom';
+    if (elements.lensValue) elements.lensValue.textContent = `${Number(state.camera.focalLength || 35).toFixed(1)} mm · ${Math.round(state.camera.fov)}°`;
+    if (elements.heading) elements.heading.value = String(Math.round(state.camera.heading || 0));
+    if (elements.cameraElevation) elements.cameraElevation.value = String(Math.round(state.camera.elevation || 0));
+    if (elements.panX) elements.panX.value = String(Number(state.camera.horizontalPan || 0).toFixed(1));
+    if (elements.panY) elements.panY.value = String(Number(state.camera.verticalPan || 0).toFixed(1));
+    if (elements.cameraDistance) elements.cameraDistance.value = String(Number(state.camera.cameraDistance || 0).toFixed(1));
+    if (elements.frameHeight) elements.frameHeight.value = String(Number(state.camera.frameHeight || state.camera.orthographicHeight || 0).toFixed(1));
+    if (elements.verticalCorrection) {
+      elements.verticalCorrection.checked = state.camera.verticalCorrection === true;
+      elements.verticalCorrection.disabled = state.camera.projection === 'orthographic';
+    }
     setRangeProgress(elements.fov, state.camera.fov);
     elements.aspect.value = state.aspect;
     elements.longEdge.value = String(state.longEdge);
@@ -351,6 +788,35 @@ export function createRenderApp({
     setRangeProgress(elements.exposure, state.lighting.exposure);
     elements.backgroundMode.value = state.background.mode;
     elements.backgroundColor.value = state.background.color;
+    if (elements.backgroundFileName) {
+      elements.backgroundFileName.textContent = state.background.image.fileName || t('renderBackgroundNoImage');
+    }
+    if (elements.backgroundFit) elements.backgroundFit.value = state.background.image.fit;
+    if (elements.backgroundPositionX) {
+      elements.backgroundPositionX.value = String(state.background.image.positionX);
+      elements.backgroundPositionXValue.value = `${Math.round(state.background.image.positionX * 100)}%`;
+      setRangeProgress(elements.backgroundPositionX, state.background.image.positionX);
+    }
+    if (elements.backgroundPositionY) {
+      elements.backgroundPositionY.value = String(state.background.image.positionY);
+      elements.backgroundPositionYValue.value = `${Math.round(state.background.image.positionY * 100)}%`;
+      setRangeProgress(elements.backgroundPositionY, state.background.image.positionY);
+    }
+    if (elements.backgroundZoom) {
+      elements.backgroundZoom.value = String(state.background.image.zoom);
+      elements.backgroundZoomValue.value = `${state.background.image.zoom.toFixed(2)}×`;
+      setRangeProgress(elements.backgroundZoom, state.background.image.zoom);
+    }
+    if (elements.backgroundBrightness) {
+      elements.backgroundBrightness.value = String(state.background.image.brightness);
+      elements.backgroundBrightnessValue.value = state.background.image.brightness.toFixed(2);
+      setRangeProgress(elements.backgroundBrightness, state.background.image.brightness);
+    }
+    if (elements.backgroundOverlayOpacity) {
+      elements.backgroundOverlayOpacity.value = String(state.background.image.overlayOpacity);
+      elements.backgroundOverlayOpacityValue.value = `${Math.round(state.background.image.overlayOpacity * 100)}%`;
+      setRangeProgress(elements.backgroundOverlayOpacity, state.background.image.overlayOpacity);
+    }
     elements.shadowEnabled.checked = state.shadows.enabled;
     elements.shadowIntensity.value = String(state.shadows.intensity);
     elements.shadowIntensityValue.value = state.shadows.intensity.toFixed(2);
@@ -359,6 +825,23 @@ export function createRenderApp({
     elements.shadowBlurValue.value = state.shadows.blur.toFixed(1);
     setRangeProgress(elements.shadowBlur, state.shadows.blur);
     elements.transparentShadow.checked = state.shadows.includeInTransparentExport;
+    if (elements.floorReflectionEnabled) elements.floorReflectionEnabled.checked = state.floor.reflection.enabled;
+    if (elements.floorReflectionStrength) {
+      elements.floorReflectionStrength.value = String(state.floor.reflection.strength);
+      elements.floorReflectionStrengthValue.value = state.floor.reflection.strength.toFixed(2);
+      setRangeProgress(elements.floorReflectionStrength, state.floor.reflection.strength);
+    }
+    if (elements.floorReflectionBlur) {
+      elements.floorReflectionBlur.value = String(state.floor.reflection.blur);
+      elements.floorReflectionBlurValue.value = state.floor.reflection.blur.toFixed(2);
+      setRangeProgress(elements.floorReflectionBlur, state.floor.reflection.blur);
+    }
+    if (elements.floorReflectionFade) {
+      elements.floorReflectionFade.value = String(state.floor.reflection.fadeDistance);
+      elements.floorReflectionFadeValue.value = state.floor.reflection.fadeDistance.toFixed(2);
+      setRangeProgress(elements.floorReflectionFade, state.floor.reflection.fadeDistance);
+    }
+    if (elements.transparentReflection) elements.transparentReflection.checked = state.floor.reflection.includeInTransparentExport;
     if (elements.boardThickness) {
       elements.boardThickness.value = String(boardAppearance.thicknessMm);
       if (elements.boardThicknessValue) elements.boardThicknessValue.value = `${boardAppearance.thicknessMm.toFixed(2)} mm`;
@@ -403,10 +886,17 @@ export function createRenderApp({
     }
     if (elements.namedPreset) elements.namedPreset.value = activeNamedPresetId;
     updateNamedPresetOptions();
+    updateViewPresetOptions();
     updatePresetButtons();
     updateArtworkQualityList();
     updateViewportOverlay();
+    updateExportDialog();
     updateDiagnostics();
+    if (state.activeViewPresetId && !viewPresets.some((entry) => entry.id === state.activeViewPresetId)) {
+      // A project may reference a global preset that is unavailable on this device.
+      // Keep the exact camera vectors and expose the state as Custom.
+      if (elements.viewPreset) elements.viewPreset.value = '';
+    }
   }
 
   function updateDiagnostics() {
@@ -431,8 +921,13 @@ export function createRenderApp({
 
   function updateState(next, { notify = true, render = true } = {}) {
     exportController?.abort();
+    const previousState = state;
     state = sanitizeRenderSettings(next);
+    if (activeNamedPresetId && JSON.stringify(previousState) !== JSON.stringify(state)) {
+      markRenderPresetModified();
+    }
     updateControls();
+    renderer?.setBackgroundAsset?.(backgroundAsset);
     renderer?.updateSettings(state, { render });
     if (notify) notifyStateChange();
   }
@@ -459,6 +954,7 @@ export function createRenderApp({
 
   async function syncScene({ force = false, purpose = 'render-screen', targetDpi = null } = {}) {
     if (!active || disposed) return false;
+    await ensureBackgroundAsset();
     const signatures = currentSignatures();
     const structureChanged = force || !renderer || signatures.structure !== structureSignature;
     const artworkChanged = force || !renderer || signatures.artwork !== artworkSignature;
@@ -511,13 +1007,22 @@ export function createRenderApp({
           textureCanvas: composed.canvas,
           renderSettings: state,
           boardAppearance,
+          backgroundAsset,
           windowRef,
           onContextLost: () => showRecovery('renderContextLost'),
           onContextRestored: () => syncScene({ force: true }),
           onCameraChange: (camera) => {
             if (!active || disposed) return;
             renderer?.markInteraction?.();
-            state = sanitizeRenderSettings({ ...state, camera: { ...state.camera, ...camera, preset: 'custom' } });
+            const previousViewId = state.activeViewPresetId || activeViewPresetId;
+            state = sanitizeRenderSettings({
+              ...state,
+              camera: { ...state.camera, ...camera, preset: 'custom' },
+              activeViewPresetId: '',
+              viewPresetBaseId: previousViewId || state.viewPresetBaseId || '',
+            });
+            activeViewPresetId = '';
+            markRenderPresetModified();
             updateControls();
             notifyStateChange();
           },
@@ -529,6 +1034,7 @@ export function createRenderApp({
       } else {
         renderer.replaceArtwork(composed.canvas);
         renderer.setBoardAppearance?.(boardAppearance);
+        renderer.setBackgroundAsset?.(backgroundAsset);
       }
       structureSignature = signatures.structure;
       artworkSignature = signatures.artwork;
@@ -556,8 +1062,10 @@ export function createRenderApp({
     if (disposed) return false;
     active = true;
     loadNamedPresets();
+    loadViewPresets();
     updateControls();
     await syncScene();
+    windowRef.setTimeout(() => loadPresetThumbnails(), 0);
     windowRef.requestAnimationFrame(() => renderer?.resize());
     windowRef.requestAnimationFrame(updateViewportOverlay);
     return Boolean(renderer);
@@ -573,10 +1081,12 @@ export function createRenderApp({
   function restoreState(next, nextBoardAppearance = undefined) {
     exportController?.abort();
     state = sanitizeRenderSettings(next);
+    restoreRenderAssets(availableRenderAssets);
     if (nextBoardAppearance !== undefined) {
       boardAppearance = sanitizeBoardAppearance(nextBoardAppearance);
       renderer?.setBoardAppearance?.(boardAppearance);
     }
+    renderer?.setBackgroundAsset?.(backgroundAsset);
     persistSettings();
     updateControls();
     if (active) syncScene({ force: true });
@@ -608,6 +1118,27 @@ export function createRenderApp({
     }
   }
 
+  async function loadViewPresets() {
+    try {
+      viewPresets = await getRenderViewPresets();
+      const persistedId = state.activeViewPresetId || activeViewPresetId;
+      activeViewPresetId = viewPresets.some((entry) => entry.id === persistedId) ? persistedId : '';
+      if (activeViewPresetId !== state.activeViewPresetId) {
+        state = sanitizeRenderSettings({
+          ...state,
+          activeViewPresetId,
+          viewPresetBaseId: activeViewPresetId ? state.viewPresetBaseId : (persistedId || state.viewPresetBaseId),
+          camera: activeViewPresetId
+            ? state.camera
+            : { ...state.camera, preset: persistedId ? 'custom' : state.camera.preset },
+        });
+      }
+      updateControls();
+    } catch {
+      viewPresets = [];
+    }
+  }
+
   function updateBoardAppearance(mutator, { notify = true } = {}) {
     const next = cloneBoardAppearance(boardAppearance);
     mutator(next);
@@ -623,15 +1154,41 @@ export function createRenderApp({
   }
 
   async function saveNamedPreset() {
-    const name = windowRef.prompt?.(t('renderPresetNamePrompt'), 'My Render Preset')
-      || elements.namedPreset?.dataset?.customName
-      || 'My Render Preset';
+    const name = await requestPresetName(elements.namedPreset?.dataset?.customName || 'My Render Preset');
     if (!name || !String(name).trim()) return false;
     const preset = await saveRenderPreset({
       name: String(name).trim(),
       renderSettings: getState(),
       boardAppearance,
     });
+    namedPresets = [preset, ...namedPresets.filter((entry) => entry.id !== preset.id)];
+    activeNamedPresetId = preset.id;
+    updateControls();
+    return true;
+  }
+
+  async function updateNamedPreset() {
+    if (!activeNamedPresetId) return saveNamedPreset();
+    const existing = namedPresets.find((entry) => entry.id === activeNamedPresetId);
+    if (!existing || existing.builtIn) return false;
+    const preset = await saveRenderPreset({
+      id: existing.id,
+      name: existing.name,
+      renderSettings: getState(),
+      boardAppearance,
+      thumbnailId: existing.thumbnailId,
+    });
+    namedPresets = [preset, ...namedPresets.filter((entry) => entry.id !== preset.id)];
+    updateControls();
+    return true;
+  }
+
+  async function duplicateNamedPreset() {
+    const source = namedPresets.find((entry) => entry.id === (elements.namedPreset?.value || activeNamedPresetId));
+    if (!source) return false;
+    const name = await requestPresetName(`${source.name} (2)`);
+    if (!name.trim()) return false;
+    const preset = await saveRenderPreset({ name, renderSettings: source.renderSettings, boardAppearance: source.boardAppearance, modifiedFromId: source.id });
     namedPresets = [preset, ...namedPresets.filter((entry) => entry.id !== preset.id)];
     activeNamedPresetId = preset.id;
     updateControls();
@@ -658,6 +1215,21 @@ export function createRenderApp({
     await deleteRenderPreset(id);
     namedPresets = namedPresets.filter((entry) => entry.id !== id);
     activeNamedPresetId = '';
+    if (elements.undoNamedPreset) elements.undoNamedPreset.hidden = false;
+    windowRef.clearTimeout(renderUndoTimer);
+    renderUndoTimer = windowRef.setTimeout(() => {
+      if (elements.undoNamedPreset) elements.undoNamedPreset.hidden = true;
+    }, 10_000);
+    updateControls();
+    return true;
+  }
+
+  async function undoNamedPresetDelete() {
+    const restored = await undoDeleteRenderPreset();
+    if (!restored) return false;
+    namedPresets = [restored, ...namedPresets.filter((entry) => entry.id !== restored.id)];
+    activeNamedPresetId = restored.id;
+    if (elements.undoNamedPreset) elements.undoNamedPreset.hidden = true;
     updateControls();
     return true;
   }
@@ -747,11 +1319,182 @@ export function createRenderApp({
   }
 
   for (const button of elements.presetButtons) {
-    button.addEventListener('click', () => updateState(applyRenderPreset(state, button.dataset.renderPreset)));
+    button.addEventListener('click', () => updateState(applyRenderPreset(state, button.dataset.renderPreset, { preserveProjectSpecific: false })));
+  }
+
+  async function exportGlbAsset() {
+    if (!renderer && !(await activate())) return false;
+    exportController?.abort();
+    const controller = new AbortController();
+    exportController = controller;
+    const exportState = getState();
+    setBusy(true);
+    elements.status.textContent = t('renderGlbExporting');
+    try {
+      const { exportGlb } = await import('./GlbExportService.js');
+      const textureSize = exportState.output.glb.textureSize === 'auto'
+        ? 2048
+        : Number(exportState.output.glb.textureSize);
+      const synced = await syncScene({
+        force: true,
+        purpose: 'render-export',
+        targetDpi: getRenderTextureDpi(boxModel, { width: textureSize, height: textureSize }),
+      });
+      if (!synced || !renderer) throw new Error('Render scene could not be prepared for GLB export.');
+      const blob = await exportGlb({
+        renderer,
+        options: exportState.output.glb,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          elements.status.textContent = `${t('renderGlbExporting')} ${Math.round(progress * 100)}%`;
+        },
+      });
+      const dimensions = boxModel.dimensions;
+      await saveOrDownloadFile({
+        blob,
+        suggestedName: `carton-${Number(dimensions.width).toFixed(2)}x${Number(dimensions.height).toFixed(2)}x${Number(dimensions.depth).toFixed(2)}mm-${exportState.material.profile}.glb`,
+        types: createSaveTypes('glb'),
+        windowRef,
+        documentRef,
+      });
+      elements.status.textContent = t('renderGlbExported');
+      return true;
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Could not export GLB', error);
+        elements.status.textContent = t('renderGlbExportFailed');
+      }
+      return false;
+    } finally {
+      if (!disposed && exportController === controller) setBusy(false);
+      if (exportController === controller) exportController = null;
+    }
+  }
+
+  async function exportTurntableAsset() {
+    if (!renderer && !(await activate())) return false;
+    exportController?.abort();
+    const controller = new AbortController();
+    exportController = controller;
+    const exportState = getState();
+    setBusy(true);
+    elements.status.textContent = t('renderTurntableExporting');
+    try {
+      const { exportTurntable } = await import('./TurntableExportService.js');
+      const sequenceOptions = sanitizeTurntableOptions(exportState.output.sequence);
+      const dimensions = getTurntableDimensions(exportState, sequenceOptions.longEdge);
+      if (!isTurntableWithinPixelBudget({ ...sequenceOptions, ...dimensions })) {
+        throw new Error(t('renderTurntableTooLarge'));
+      }
+      const synced = await syncScene({
+        force: true,
+        purpose: 'render-export',
+        targetDpi: getRenderTextureDpi(boxModel, dimensions),
+      });
+      if (!synced || !renderer) throw new Error('Render scene could not be prepared for turntable export.');
+      const blob = await exportTurntable({
+        renderer,
+        settings: exportState,
+        options: sequenceOptions,
+        documentRef,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          elements.status.textContent = `${t('renderTurntableExporting')} ${Math.round(progress * 100)}%`;
+        },
+      });
+      await saveOrDownloadFile({
+        blob,
+        suggestedName: `carton-turntable-${sequenceOptions.frames}f-${sequenceOptions.longEdge}px.zip`,
+        types: createSaveTypes('zip'),
+        windowRef,
+        documentRef,
+      });
+      elements.status.textContent = t('renderTurntableExported');
+      return true;
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Could not export turntable', error);
+        elements.status.textContent = error?.message || t('renderTurntableExportFailed');
+      }
+      return false;
+    } finally {
+      if (!disposed && exportController === controller) setBusy(false);
+      if (exportController === controller) exportController = null;
+    }
   }
   elements.cameraPreset.addEventListener('change', (event) => change((next) => { next.camera.preset = event.target.value; }));
   elements.projection.addEventListener('change', (event) => change((next) => { next.camera.projection = event.target.value; }));
   elements.fov.addEventListener('input', (event) => change((next) => { next.camera.fov = Number(event.target.value); }));
+  const updateAdvancedCamera = (field, value) => change((next) => {
+    next.camera[field] = Number(value);
+    if (['heading', 'elevation', 'cameraDistance'].includes(field)) {
+      const { center, radius } = getBoxCenterRadius();
+      const distance = field === 'cameraDistance'
+        ? Math.max(0.01, Number(value))
+        : Math.max(0.01, Number(next.camera.cameraDistance || radius * 3));
+      next.camera.position = cameraPositionFromHeading({
+        heading: field === 'heading' ? Number(value) : Number(next.camera.heading),
+        elevation: field === 'elevation' ? Number(value) : Number(next.camera.elevation),
+        distance,
+        target: center,
+      });
+      next.camera.target = center;
+      next.camera.preset = 'custom';
+      next.activeViewPresetId = '';
+    }
+  });
+  elements.heading?.addEventListener('change', (event) => updateAdvancedCamera('heading', event.target.value));
+  elements.cameraElevation?.addEventListener('change', (event) => updateAdvancedCamera('elevation', event.target.value));
+  elements.panX?.addEventListener('change', (event) => updateAdvancedCamera('horizontalPan', event.target.value));
+  elements.panY?.addEventListener('change', (event) => updateAdvancedCamera('verticalPan', event.target.value));
+  elements.cameraDistance?.addEventListener('change', (event) => updateAdvancedCamera('cameraDistance', event.target.value));
+  elements.frameHeight?.addEventListener('change', (event) => change((next) => {
+    next.camera.frameHeight = Number(event.target.value);
+    next.camera.orthographicHeight = Number(event.target.value);
+  }));
+  elements.lens?.addEventListener('change', (event) => change((next) => {
+    const value = event.target.value;
+    if (value !== 'custom') next.camera.fov = value === '35' ? 38.2 : value === '50' ? 27 : 16.1;
+    next.camera.lens = value;
+  }));
+  elements.verticalCorrection?.addEventListener('change', (event) => change((next) => {
+    next.camera.verticalCorrection = event.target.checked;
+    next.camera.keepVerticalsParallel = event.target.checked;
+  }));
+  elements.fitCamera?.addEventListener('click', () => {
+    renderer?.fitCameraToFrame?.({ aspect: getRenderOutputDimensions(state).width / getRenderOutputDimensions(state).height });
+    const camera = renderer?.getCameraState?.();
+    if (camera) change((next) => {
+      next.camera = { ...next.camera, ...camera, preset: 'custom' };
+      next.activeViewPresetId = '';
+    });
+  });
+  elements.resetCamera?.addEventListener('click', () => {
+    if (activeViewPresetId && viewPresets.some((entry) => entry.id === activeViewPresetId)) {
+      applyViewPreset(activeViewPresetId);
+      return;
+    }
+    renderer?.resetView?.();
+    const camera = renderer?.getCameraState?.();
+    if (camera) change((next) => {
+      next.camera = { ...next.camera, ...camera };
+      next.activeViewPresetId = '';
+    });
+  });
+  elements.viewPreset?.addEventListener('change', (event) => applyViewPreset(event.target.value));
+  elements.saveViewPreset?.addEventListener('click', saveCurrentViewPreset);
+  elements.deleteViewPreset?.addEventListener('click', removeCurrentViewPreset);
+  elements.duplicateViewPreset?.addEventListener('click', async () => {
+    const id = elements.viewPreset?.value || activeViewPresetId;
+    if (!id) return;
+    const source = viewPresets.find((entry) => entry.id === id);
+    const copy = await duplicateRenderViewPreset(id, source?.name || 'View preset');
+    if (copy) {
+      viewPresets = [copy, ...viewPresets.filter((entry) => entry.id !== copy.id)];
+      activeViewPresetId = copy.id;
+      updateControls();
+    }
+  });
   elements.aspect.addEventListener('change', (event) => change((next) => { next.aspect = event.target.value; }));
   elements.longEdge.addEventListener('change', (event) => change((next) => { next.longEdge = Number(event.target.value); }));
   elements.material.addEventListener('change', (event) => change((next) => { next.material.profile = event.target.value; }));
@@ -763,10 +1506,34 @@ export function createRenderApp({
   elements.exposure.addEventListener('input', (event) => change((next) => { next.lighting.exposure = Number(event.target.value); }));
   elements.backgroundMode.addEventListener('change', (event) => change((next) => { next.background.mode = event.target.value; }));
   elements.backgroundColor.addEventListener('input', (event) => change((next) => { next.background.color = event.target.value; }));
+  elements.backgroundFile?.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      await setBackgroundImage(file);
+      elements.status.textContent = t('renderBackgroundLoaded');
+    } catch (error) {
+      elements.status.textContent = error?.message || t('renderBackgroundInvalid');
+    } finally {
+      event.target.value = '';
+    }
+  });
+  elements.clearBackground?.addEventListener('click', clearBackgroundImage);
+  elements.backgroundFit?.addEventListener('change', (event) => change((next) => { next.background.image.fit = event.target.value; }));
+  elements.backgroundPositionX?.addEventListener('input', (event) => change((next) => { next.background.image.positionX = Number(event.target.value); }));
+  elements.backgroundPositionY?.addEventListener('input', (event) => change((next) => { next.background.image.positionY = Number(event.target.value); }));
+  elements.backgroundZoom?.addEventListener('input', (event) => change((next) => { next.background.image.zoom = Number(event.target.value); }));
+  elements.backgroundBrightness?.addEventListener('input', (event) => change((next) => { next.background.image.brightness = Number(event.target.value); }));
+  elements.backgroundOverlayOpacity?.addEventListener('input', (event) => change((next) => { next.background.image.overlayOpacity = Number(event.target.value); }));
   elements.shadowEnabled.addEventListener('change', (event) => change((next) => { next.shadows.enabled = event.target.checked; }));
   elements.shadowIntensity.addEventListener('input', (event) => change((next) => { next.shadows.intensity = Number(event.target.value); }));
   elements.shadowBlur.addEventListener('input', (event) => change((next) => { next.shadows.blur = Number(event.target.value); }));
   elements.transparentShadow.addEventListener('change', (event) => change((next) => { next.shadows.includeInTransparentExport = event.target.checked; }));
+  elements.floorReflectionEnabled?.addEventListener('change', (event) => change((next) => { next.floor.reflection.enabled = event.target.checked; }));
+  elements.floorReflectionStrength?.addEventListener('input', (event) => change((next) => { next.floor.reflection.strength = Number(event.target.value); }));
+  elements.floorReflectionBlur?.addEventListener('input', (event) => change((next) => { next.floor.reflection.blur = Number(event.target.value); }));
+  elements.floorReflectionFade?.addEventListener('input', (event) => change((next) => { next.floor.reflection.fadeDistance = Number(event.target.value); }));
+  elements.transparentReflection?.addEventListener('change', (event) => change((next) => { next.floor.reflection.includeInTransparentExport = event.target.checked; }));
   elements.boardThickness?.addEventListener('input', (event) => updateBoardAppearance((next) => { next.thicknessMm = Number(event.target.value); }));
   elements.boardBevel?.addEventListener('input', (event) => updateBoardAppearance((next) => { next.bevelRadiusMm = Number(event.target.value); }));
   elements.boardInteriorColor?.addEventListener('input', (event) => updateBoardAppearance((next) => { next.interiorColor = event.target.value; }));
@@ -782,13 +1549,142 @@ export function createRenderApp({
   elements.effectsDofMaxBlur?.addEventListener('input', (event) => change((next) => { next.effects.dof.maxBlur = Number(event.target.value); }));
   elements.namedPreset?.addEventListener('change', applyNamedPreset);
   elements.saveNamedPreset?.addEventListener('click', saveNamedPreset);
+  elements.updateNamedPreset?.addEventListener('click', updateNamedPreset);
+  elements.duplicateNamedPreset?.addEventListener('click', duplicateNamedPreset);
   elements.deleteNamedPreset?.addEventListener('click', removeNamedPreset);
+  elements.undoViewPreset?.addEventListener('click', undoCurrentViewPresetDelete);
+  elements.undoNamedPreset?.addEventListener('click', undoNamedPresetDelete);
   if (elements.experimentalPathTracing) {
     elements.experimentalPathTracing.hidden = !isPathTracingEnabled();
     elements.experimentalPathTracing.addEventListener('click', runExperimentalPathTracing);
   }
-  elements.png.addEventListener('click', () => exportImage('png'));
-  elements.jpg.addEventListener('click', () => exportImage('jpg'));
+  elements.png.addEventListener('click', () => openExportDialog('png'));
+  elements.jpg.addEventListener('click', () => openExportDialog('jpg'));
+  elements.exportKind?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.kind = event.target.value;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportSizing?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.sizingMode = event.target.value;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportFormat?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.format = event.target.value;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportWidth?.addEventListener('input', (event) => {
+    const next = clone(state);
+    next.output.widthPx = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportHeight?.addEventListener('input', (event) => {
+    const next = clone(state);
+    next.output.heightPx = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportUnit?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.printUnit = event.target.value;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportPrintWidth?.addEventListener('input', (event) => {
+    const next = clone(state);
+    next.output.printWidth = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportPrintHeight?.addEventListener('input', (event) => {
+    const next = clone(state);
+    next.output.printHeight = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportPpi?.addEventListener('input', (event) => {
+    const next = clone(state);
+    next.output.ppi = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportJpegQuality?.addEventListener('input', (event) => {
+    const next = clone(state);
+    next.output.jpegQuality = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportSequenceFrames?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.sequence.frames = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportSequenceLongEdge?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.sequence.longEdge = Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportSequenceFormat?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.sequence.format = event.target.value;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportGlbTextureSize?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.glb.textureSize = event.target.value === 'auto' ? 'auto' : Number(event.target.value);
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportGlbMaterialMode?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.glb.materialMode = event.target.value;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportGlbIncludeCamera?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.glb.includeCamera = event.target.checked;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
+  elements.exportForm?.addEventListener('submit', async (event) => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    const format = elements.exportFormat.value;
+    const next = clone(state);
+    next.output.format = format;
+    next.output.sizingMode = elements.exportSizing.value;
+    next.output.widthPx = Number(elements.exportWidth.value);
+    next.output.heightPx = Number(elements.exportHeight.value);
+    next.output.printUnit = elements.exportUnit.value;
+    next.output.printWidth = Number(elements.exportPrintWidth.value);
+    next.output.printHeight = Number(elements.exportPrintHeight.value);
+    next.output.ppi = Number(elements.exportPpi.value);
+    next.output.jpegQuality = Number(elements.exportJpegQuality.value);
+    next.output.kind = elements.exportKind?.value || 'image';
+    next.output.sequence.frames = Number(elements.exportSequenceFrames?.value || next.output.sequence.frames);
+    next.output.sequence.longEdge = Number(elements.exportSequenceLongEdge?.value || next.output.sequence.longEdge);
+    next.output.sequence.format = elements.exportSequenceFormat?.value || next.output.sequence.format;
+    next.output.glb.textureSize = elements.exportGlbTextureSize?.value === 'auto'
+      ? 'auto'
+      : Number(elements.exportGlbTextureSize?.value || next.output.glb.textureSize);
+    next.output.glb.materialMode = elements.exportGlbMaterialMode?.value || next.output.glb.materialMode;
+    next.output.glb.includeCamera = elements.exportGlbIncludeCamera?.checked !== false;
+    updateState(next);
+    elements.exportDialog.close();
+    if (next.output.kind === 'glb') await exportGlbAsset();
+    else if (next.output.kind === 'sequence') await exportTurntableAsset();
+    else await exportImage(format);
+  });
   elements.back.addEventListener('click', onBackToPreview);
   elements.retry.addEventListener('click', () => syncScene({ force: true }));
   const handleWindowResize = () => {
@@ -808,7 +1704,14 @@ export function createRenderApp({
     setHtmlExportQuality,
     resetForProject,
     exportImage,
+    exportGlb: exportGlbAsset,
+    exportTurntable: exportTurntableAsset,
+    openExportDialog,
     getState,
+    getRenderAssets,
+    restoreRenderAssets,
+    setBackgroundImage,
+    clearBackgroundImage,
     getBoardAppearance() {
       return cloneBoardAppearance(boardAppearance);
     },

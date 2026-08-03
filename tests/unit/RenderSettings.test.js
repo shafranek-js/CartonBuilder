@@ -26,6 +26,11 @@ describe('RenderSettings', () => {
       shadows: { enabled: true, intensity: 0.34, blur: 2, mapSize: 1024 },
       material: { profile: 'matte' },
       quality: { interactive: 'balanced', export: 'high', html: 'auto' },
+      output: {
+        kind: 'image',
+        sequence: { frames: 36, longEdge: 1024, format: 'png' },
+        glb: { textureSize: 'auto', materialMode: 'full-pbr', includeCamera: true },
+      },
       effects: {
         gtao: { enabled: true, intensity: 0.5, radius: 0.18 },
         dof: { enabled: false },
@@ -62,6 +67,11 @@ describe('RenderSettings', () => {
         antialiasing: { interactive: 'bad', settled: 'taa', export: 'taa', taaSamples: 999 },
         dof: { enabled: 'yes', focusMode: 'bad', focusDistance: -1, aperture: 9, maxBlur: -1 },
       },
+      output: {
+        kind: 'bad',
+        sequence: { frames: 99, longEdge: 99, format: 'gif' },
+        glb: { textureSize: 99, materialMode: 'bad', includeCamera: 'no' },
+      },
     });
 
     expect(result.presetId).toBe('clean-studio');
@@ -70,7 +80,7 @@ describe('RenderSettings', () => {
     expect(result.camera).toMatchObject({ preset: 'isometric', projection: 'perspective', fov: 120 });
     expect(result.camera.position).toEqual([1, 1, 1]);
     expect(result.camera.target).toEqual([0, 0, 0]);
-    expect(result.background).toEqual({ mode: 'solid', color: '#d9dcde' });
+    expect(result.background).toMatchObject({ mode: 'solid', color: '#d9dcde', image: { fit: 'cover', zoom: 1 } });
     expect(result.lighting).toMatchObject({ azimuth: 0, elevation: 85, intensity: 0, environment: 'studio', environmentIntensity: 5, exposure: 3 });
     expect(result.shadows).toMatchObject({ enabled: false, intensity: 1, blur: 0, mapSize: 1024 });
     expect(result.material.profile).toBe('matte');
@@ -78,6 +88,11 @@ describe('RenderSettings', () => {
     expect(result.effects.gtao).toMatchObject({ enabled: true, intensity: 1, radius: 0.01, resolution: 'half' });
     expect(result.effects.antialiasing).toMatchObject({ interactive: 'smaa', settled: 'taa', export: 'taa', taaSamples: 64 });
     expect(result.effects.dof).toMatchObject({ enabled: false, focusMode: 'carton-center', focusDistance: 0.01, aperture: 0.2, maxBlur: 0 });
+    expect(result.output).toMatchObject({
+      kind: 'image',
+      sequence: { frames: 36, longEdge: 1024, format: 'png' },
+      glb: { textureSize: 'auto', materialMode: 'full-pbr', includeCamera: true },
+    });
   });
 
   it.each([
@@ -93,5 +108,14 @@ describe('RenderSettings', () => {
     const dimensions = getRenderOutputDimensions({ aspect, longEdge });
     expect(dimensions).toEqual({ width, height });
     expect(getRenderFrameAspect({ aspect, longEdge })).toBeCloseTo(width / height);
+  });
+
+  it('calculates custom pixel and print output sizes', () => {
+    expect(getRenderOutputDimensions({
+      output: { sizingMode: 'pixels', widthPx: 1200, heightPx: 800 },
+    })).toEqual({ width: 1200, height: 800 });
+    expect(getRenderOutputDimensions({
+      output: { sizingMode: 'print', printUnit: 'in', printWidth: 4, printHeight: 3, ppi: 300 },
+    })).toEqual({ width: 1200, height: 900 });
   });
 });

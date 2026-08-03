@@ -164,6 +164,7 @@ export function createArtworkApp({
   getWorkflowStep = () => 'artwork',
   getRenderState = () => DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance = () => null,
+  getRenderAssets = () => [],
   onRenderStateChanged = () => {},
   onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
@@ -613,6 +614,7 @@ export function createArtworkApp({
           previewBlob: entry.previewBlob,
         }))
         : [],
+      renderAssets: getRenderAssets() || [],
     };
     saveQueue = saveQueue
       .catch(() => {})
@@ -769,7 +771,8 @@ export function createArtworkApp({
       lockLabel.title = t('lockArtworkLayer');
       const lockCb = documentRef.createElement('input');
       lockCb.type = 'checkbox';
-      lockCb.className = 'sr-only';
+      lockCb.className = 'layer-toggle-input';
+      lockCb.setAttribute('aria-label', t('lockArtworkLabel'));
       lockCb.checked = entry.locked;
       lockCb.addEventListener('change', () => toggleArtworkLock(index, lockCb.checked));
       lockLabel.appendChild(lockCb);
@@ -2631,6 +2634,7 @@ export function createArtworkApp({
           originalBlob: entry.originalBlob,
           previewBlob: entry.previewBlob,
         })),
+        renderAssets: getRenderAssets() || [],
       });
       await saveOrDownloadFile({
         blob,
@@ -2655,7 +2659,7 @@ export function createArtworkApp({
       clearError();
       const project = await readProjectArchive(projectInput.files?.[0]);
       restoreProject(project);
-      onProjectLoaded(project.snapshot);
+      onProjectLoaded(project.snapshot, project);
       showToast(t('projectOpened'));
     } catch (error) {
       console.error(error);
@@ -2893,7 +2897,7 @@ export function createArtworkApp({
       if (!stored) return false;
       const validated = await validateProjectBundle(stored);
       restoreProject(validated);
-      onProjectLoaded(validated.snapshot);
+      onProjectLoaded(validated.snapshot, validated);
       return true;
     } catch (error) {
       console.warn('Could not restore autosaved project', error);
@@ -2914,7 +2918,7 @@ export function createArtworkApp({
       if (!response.ok) throw new Error(`Could not load example project: ${response.status}`);
       const project = await readProjectArchive(await response.blob());
       restoreProject(project);
-      onProjectLoaded(project.snapshot);
+      onProjectLoaded(project.snapshot, project);
       return true;
     } catch (error) {
       console.warn('Could not restore the first-run example project', error);

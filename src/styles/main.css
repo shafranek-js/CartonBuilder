@@ -1805,6 +1805,7 @@ dialog button {
   justify-content: center;
   width: 22px;
   height: 22px;
+  position: relative;
   color: var(--muted-text, #a0a0a0);
   cursor: pointer;
 }
@@ -1819,6 +1820,20 @@ dialog button {
 
 .layer-toggle-cell input:checked ~ svg {
   opacity: 1;
+}
+
+.layer-toggle-cell > svg {
+  pointer-events: none;
+}
+
+.layer-toggle-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .layer-thumbnail {
@@ -2840,6 +2855,34 @@ dialog input {
   width: 88px;
 }
 
+#renderExportDialog {
+  width: min(460px, calc(100vw - 32px));
+}
+
+#renderExportDialog .field {
+  margin: 8px 0;
+}
+
+.render-export-pixels,
+.render-export-print {
+  display: grid;
+  gap: 8px;
+}
+
+.render-export-print {
+  grid-template-columns: 1fr 1fr;
+}
+
+.render-export-pixels[hidden],
+.render-export-print[hidden] {
+  display: none;
+}
+
+.render-export-summary {
+  min-height: 20px;
+  color: var(--muted-text, #66716c);
+}
+
 .toast {
   position: absolute;
   left: 50%;
@@ -3082,6 +3125,41 @@ dialog input {
   min-width: 0;
   white-space: nowrap;
 }
+
+.render-preset-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.render-preset-card {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  padding: 5px;
+  white-space: normal;
+  text-align: left;
+}
+
+.render-preset-thumbnail {
+  display: block;
+  min-height: 52px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
+  border-radius: 4px;
+  background: var(--panel-bg, #34383b);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.render-preset-thumbnail.has-real-thumbnail { background-color: transparent; }
+
+.render-preset-card-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.render-view-preset-list { max-height: 180px; overflow: auto; }
+.render-view-preset-card { min-height: 68px; }
+.render-view-preset-thumbnail { min-height: 38px; }
+.camera-derived-value { display: block; margin: -3px 0 8px; color: var(--muted-text, #aeb5ba); font-size: 11px; }
+.render-view-preset-store h3 { margin: 12px 0 6px; font-size: 12px; }
 
 .render-preset-button.active {
   color: var(--accent-contrast, #fff);

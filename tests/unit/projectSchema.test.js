@@ -170,6 +170,22 @@ describe('project schema', () => {
     );
   });
 
+  it('migrates v8 output settings additively to the v9 export contract', async () => {
+    const { snapshot } = await createBundle();
+    const v8 = migrateProjectSnapshot(snapshot);
+    v8.schemaVersion = 8;
+    delete v8.render.output;
+
+    const migrated = migrateProjectSnapshot(v8);
+
+    expect(migrated.schemaVersion).toBe(9);
+    expect(migrated.render.output).toMatchObject({
+      kind: 'image',
+      sequence: { frames: 36, longEdge: 1024, format: 'png' },
+      glb: { textureSize: 'auto', materialMode: 'full-pbr', includeCamera: true },
+    });
+  });
+
   it('validates blobs, metadata and checksum before restoration', async () => {
     const bundle = await createBundle();
     const valid = await validateProjectBundle(bundle);

@@ -33,6 +33,8 @@ import {
   ShadowMaterial,
   SphereGeometry,
   SRGBColorSpace,
+  ShaderMaterial,
+  Texture,
   Vector2,
   Vector3,
   WebGLRenderTarget,
@@ -40,6 +42,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 
 import { buildFoldGraph } from './foldGraph.js';
 import {
@@ -49,6 +52,12 @@ import {
 import { disposeObject3D } from './disposeScene.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { createPanelSolidGeometry } from '../render/panelSolidGeometry.js';
+import {
+  cameraHeadingElevation,
+  cameraLensLabel,
+  focalLengthToFov,
+  fovToFocalLength,
+} from '../render/cameraState.js';
 
 const CAMERA_DIRECTION = new Vector3(1, 1, 1).normalize();
 const PERSPECTIVE_FOV = 35;
@@ -60,16 +69,47 @@ const LIGHT_DEFAULT_ELEVATION = 48;
 const LIGHT_ELEVATION_MIN = 5;
 const LIGHT_ELEVATION_MAX = 85;
 
+function clonePortableTexture(texture) {
+  if (!texture?.isTexture) return texture || null;
+  const clone = texture.clone();
+  clone.needsUpdate = true;
+  return clone;
+}
+
+function clonePortableMaterial(material, materialMode) {
+  if (!material) return material;
+  if (materialMode === 'basic-compatibility' && material.isMeshPhysicalMaterial) {
+    return new MeshStandardMaterial({
+      color: material.color?.clone?.() || 0xffffff,
+      map: clonePortableTexture(material.map),
+      roughness: Number.isFinite(material.roughness) ? material.roughness : 0.8,
+      metalness: Number.isFinite(material.metalness) ? material.metalness : 0,
+      side: material.side,
+      transparent: material.transparent,
+      opacity: material.opacity,
+      alphaTest: material.alphaTest,
+    });
+  }
+  const clone = material.clone();
+  for (const key of Object.keys(clone)) {
+    if (clone[key]?.isTexture) clone[key] = clonePortableTexture(clone[key]);
+  }
+  return clone;
+}
+
 const SCENE_PRESETS = new Set(['technical', 'studio', 'photorealistic']);
 const CAMERA_PROJECTIONS = new Set(['perspective', 'orthographic']);
-const CAMERA_PRESETS = Object.freeze({
-  isometric: new Vector3(1, 1, 1).normalize(),
-  front: new Vector3(0, 0, 1),
-  'front-right': new Vector3(1, 0.65, 1).normalize(),
-  'front-left': new Vector3(-1, 0.65, 1).normalize(),
-  'top-front': new Vector3(0.45, 1, 1).normalize(),
-  top: new Vector3(0, 1, 0),
-  right: new Vector3(1, 0, 0),
+export const CAMERA_PRESETS = Object.freeze({
+  isometric: Object.freeze({ direction: new Vector3(1, 1, 1).normalize(), up: new Vector3(0, 1, 0) }),
+  front: Object.freeze({ direction: new Vector3(0, 0, 1), up: new Vector3(0, 1, 0) }),
+  back: Object.freeze({ direction: new Vector3(0, 0, -1), up: new Vector3(0, 1, 0) }),
+  left: Object.freeze({ direction: new Vector3(-1, 0, 0), up: new Vector3(0, 1, 0) }),
+  right: Object.freeze({ direction: new Vector3(1, 0, 0), up: new Vector3(0, 1, 0) }),
+  bottom: Object.freeze({ direction: new Vector3(0, -1, 0), up: new Vector3(0, 0, 1) }),
+  top: Object.freeze({ direction: new Vector3(0, 1, 0), up: new Vector3(0, 0, -1) }),
+  'front-right': Object.freeze({ direction: new Vector3(1, 0.65, 1).normalize(), up: new Vector3(0, 1, 0) }),
+  'front-left': Object.freeze({ direction: new Vector3(-1, 0.65, 1).normalize(), up: new Vector3(0, 1, 0) }),
+  'top-front': Object.freeze({ direction: new Vector3(0.45, 1, 1).normalize(), up: new Vector3(0, 1, 0) }),
 });
 const ENVIRONMENT_PRESETS = new Set(['none', 'studio', 'neutral', 'warm', 'cool', 'bright', 'night']);
 
@@ -80,6 +120,56 @@ const ENVIRONMENT_PALETTES = Object.freeze({
   bright: { base: 0xffffff, key: 0xffffff, keyIntensity: 120, fill: 0xffffff },
   night: { base: 0x10151f, key: 0x8fa8d8, keyIntensity: 25, fill: 0x3a4a66 },
 });
+
+const BACKGROUND_VERTEX_SHADER = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const BACKGROUND_FRAGMENT_SHADER = `
+  uniform sampler2D map;
+  uniform float hasTexture;
+  uniform float imageAspect;
+  uniform float viewportAspect;
+  uniform float fit;
+  uniform vec2 position;
+  uniform float zoom;
+  uniform float brightness;
+  uniform vec3 overlayColor;
+  uniform float overlayOpacity;
+  varying vec2 vUv;
+  void main() {
+    if (hasTexture < 0.5) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+    vec2 sampleUv = vUv;
+    if (fit < 0.5) {
+      vec2 crop = imageAspect > viewportAspect
+        ? vec2(viewportAspect / imageAspect, 1.0)
+        : vec2(1.0, imageAspect / viewportAspect);
+      crop = clamp(crop / max(zoom, 0.1), vec2(0.01), vec2(1.0));
+      vec2 center = vec2(0.5) + (position - vec2(0.5)) * (vec2(1.0) - crop);
+      sampleUv = center + (vUv - vec2(0.5)) * crop;
+    } else {
+      vec2 display = imageAspect > viewportAspect
+        ? vec2(1.0, viewportAspect / imageAspect)
+        : vec2(imageAspect / viewportAspect, 1.0);
+      sampleUv = (vUv - vec2(0.5)) / max(display * max(zoom, 0.1), vec2(0.01)) + vec2(0.5);
+      if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
+        gl_FragColor = vec4(0.0);
+        return;
+      }
+    }
+    vec4 color = texture2D(map, sampleUv);
+    color.rgb *= brightness;
+    color.rgb = mix(color.rgb, overlayColor, overlayOpacity);
+    gl_FragColor = color;
+  }
+`;
 
 function createEnvironmentScene(preset) {
   const palette = ENVIRONMENT_PALETTES[preset];
@@ -213,8 +303,18 @@ export class BoxScene {
     environmentIntensity = 0.65,
     cameraPreset = 'isometric',
     cameraFov = PERSPECTIVE_FOV,
+    cameraFocalLength = null,
+    cameraHeading = null,
+    cameraElevation = null,
+    cameraHorizontalPan = 0,
+    cameraVerticalPan = 0,
+    orthographicHeight = null,
+    verticalCorrection = false,
     backgroundColor = null,
     backgroundMode = 'solid',
+    backgroundImage = null,
+    backgroundAsset = null,
+    floorReflection = null,
     alpha = false,
     materialProfile = null,
     geometryMode = 'flat',
@@ -243,8 +343,19 @@ export class BoxScene {
     this.materialProfile = materialProfile || this.scenePreset;
     this.geometryMode = geometryMode === 'solid' ? 'solid' : 'flat';
     this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
-    this.backgroundMode = backgroundMode === 'transparent' ? 'transparent' : 'solid';
+    this.backgroundMode = ['transparent', 'image'].includes(backgroundMode) ? backgroundMode : 'solid';
     this.backgroundColor = backgroundColor || '#e8eaeb';
+    this.backgroundImage = backgroundImage || null;
+    this.backgroundTexture = null;
+    this.backgroundObjectUrl = null;
+    this.backgroundImageAspect = 1;
+    this.floorReflectionSettings = {
+      enabled: floorReflection?.enabled === true,
+      strength: Math.max(0, Math.min(1, Number(floorReflection?.strength) || 0)),
+      blur: Math.max(0, Math.min(1, Number(floorReflection?.blur) || 0)),
+      fadeDistance: Math.max(0.05, Math.min(5, Number(floorReflection?.fadeDistance) || 0.65)),
+      includeInTransparentExport: floorReflection?.includeInTransparentExport === true,
+    };
     this.selectedPanelId = selectedPanelId;
     this.panelObjects = new Map();
     this.pickMeshes = [];
@@ -264,7 +375,7 @@ export class BoxScene {
     this.renderer.shadowMap.type = PCFShadowMap;
 
     this.scene = new Scene();
-    this.scene.background = this.backgroundMode === 'transparent'
+    this.scene.background = ['transparent', 'image'].includes(this.backgroundMode)
       ? null
       : new Color(this.backgroundColor);
     this.renderer.setClearColor(this.backgroundMode === 'transparent' ? 0x000000 : this.backgroundColor, this.backgroundMode === 'transparent' ? 0 : 1);
@@ -273,6 +384,39 @@ export class BoxScene {
     this.camera = this.cameraProjection === 'orthographic'
       ? this.orthographicCamera
       : this.perspectiveCamera;
+    this.scene.add(this.perspectiveCamera, this.orthographicCamera);
+    this.backgroundPlanes = new Map();
+    this.backgroundUniforms = {
+      map: { value: null },
+      hasTexture: { value: 0 },
+      imageAspect: { value: 1 },
+      viewportAspect: { value: 1 },
+      fit: { value: 0 },
+      position: { value: new Vector2(0.5, 0.5) },
+      zoom: { value: 1 },
+      brightness: { value: 1 },
+      overlayColor: { value: new Color('#000000') },
+      overlayOpacity: { value: 0 },
+    };
+    for (const camera of [this.perspectiveCamera, this.orthographicCamera]) {
+      const plane = new Mesh(
+        new PlaneGeometry(2, 2),
+        new ShaderMaterial({
+          uniforms: this.backgroundUniforms,
+          vertexShader: BACKGROUND_VERTEX_SHADER,
+          fragmentShader: BACKGROUND_FRAGMENT_SHADER,
+          transparent: false,
+          depthTest: false,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+      );
+      plane.name = 'RenderBackgroundBackplate';
+      plane.position.z = -1;
+      plane.renderOrder = -1000;
+      camera.add(plane);
+      this.backgroundPlanes.set(camera, plane);
+    }
 
     this.hemisphereLight = new HemisphereLight(0xffffff, 0x73777a, hemisphereIntensity);
     this.hemisphereIntensity = Math.max(0, Math.min(5, Number(hemisphereIntensity) || 0));
@@ -304,6 +448,15 @@ export class BoxScene {
     this.environmentIntensity = Math.max(0, Math.min(5, Number(environmentIntensity) || 0));
     this.cameraPreset = CAMERA_PRESETS[cameraPreset] ? cameraPreset : 'isometric';
     this.cameraFov = Math.max(10, Math.min(120, Number(cameraFov) || PERSPECTIVE_FOV));
+    this.cameraFocalLength = Number.isFinite(Number(cameraFocalLength))
+      ? Math.max(10, Math.min(300, Number(cameraFocalLength)))
+      : fovToFocalLength(this.cameraFov);
+    this.cameraHeading = Number.isFinite(Number(cameraHeading)) ? Number(cameraHeading) : null;
+    this.cameraElevation = Number.isFinite(Number(cameraElevation)) ? Number(cameraElevation) : null;
+    this.cameraHorizontalPan = Number(cameraHorizontalPan) || 0;
+    this.cameraVerticalPan = Number(cameraVerticalPan) || 0;
+    this.orthographicHeight = Math.max(0.01, Number(orthographicHeight) || 0);
+    this.verticalCorrection = verticalCorrection === true;
     this.perspectiveCamera.fov = this.cameraFov;
     // Transparent scenes intentionally keep `scene.background` null. Only
     // update a solid scene's Color instance during initialization.
@@ -314,6 +467,7 @@ export class BoxScene {
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
+    this.floorReflection = this.createFloorReflection();
 
     this.shadowIntensity = Math.max(0, Math.min(1, Number(shadowIntensity) || 0.25));
     this.contactShadow = this.createContactShadow();
@@ -336,6 +490,8 @@ export class BoxScene {
     this.setSelectedPanel(selectedPanelId, { notify: false, render: false });
     this.resetView({ render: false });
     this.suppressCameraChange -= 1;
+    this.updateBackgroundBackplate();
+    this.setBackgroundAsset(backgroundAsset, { render: false });
 
     this.raycaster = new Raycaster();
     this.pointer = new Vector2();
@@ -506,6 +662,131 @@ export class BoxScene {
     if (render) this.render();
   }
 
+  createFloorReflection() {
+    const reflection = new Reflector(new PlaneGeometry(1, 1), {
+      textureWidth: 512,
+      textureHeight: 512,
+      clipBias: 0.002,
+      color: 0x8d9498,
+    });
+    reflection.name = 'FloorReflection';
+    reflection.rotation.x = -Math.PI / 2;
+    reflection.renderOrder = -10;
+    reflection.material.transparent = true;
+    reflection.material.depthWrite = false;
+    reflection.material.opacity = 0;
+    this.scene.add(reflection);
+    this.applyFloorReflectionSettings();
+    return reflection;
+  }
+
+  applyFloorReflectionSettings() {
+    if (!this.floorReflection) return;
+    const enabled = this.floorReflectionSettings.enabled
+      && this.scenePreset !== 'technical'
+      && (this.backgroundMode !== 'transparent' || this.floorReflectionSettings.includeInTransparentExport);
+    this.floorReflection.visible = enabled;
+    this.floorReflection.material.opacity = enabled ? this.floorReflectionSettings.strength : 0;
+    this.floorReflection.material.transparent = true;
+  }
+
+  setFloorReflection(settings = {}, { render = true } = {}) {
+    this.floorReflectionSettings = {
+      ...this.floorReflectionSettings,
+      enabled: settings.enabled === true,
+      strength: Math.max(0, Math.min(1, Number(settings.strength) || 0)),
+      blur: Math.max(0, Math.min(1, Number(settings.blur) || 0)),
+      fadeDistance: Math.max(0.05, Math.min(5, Number(settings.fadeDistance) || 0.65)),
+      includeInTransparentExport: settings.includeInTransparentExport === true,
+    };
+    this.applyFloorReflectionSettings();
+    if (render) this.render();
+  }
+
+  updateBackgroundBackplate() {
+    const aspect = Math.max(0.01, this.container.clientWidth / Math.max(1, this.container.clientHeight));
+    this.backgroundUniforms.viewportAspect.value = aspect;
+    this.backgroundUniforms.imageAspect.value = this.backgroundImageAspect || 1;
+    const image = this.backgroundImage || {};
+    this.backgroundUniforms.fit.value = image.fit === 'contain' ? 1 : 0;
+    this.backgroundUniforms.position.value.set(
+      Number.isFinite(Number(image.positionX)) ? Number(image.positionX) : 0.5,
+      Number.isFinite(Number(image.positionY)) ? Number(image.positionY) : 0.5,
+    );
+    this.backgroundUniforms.zoom.value = Math.max(0.1, Number(image.zoom) || 1);
+    this.backgroundUniforms.brightness.value = Math.max(0, Number(image.brightness) || 1);
+    this.backgroundUniforms.overlayColor.value.set(image.overlayColor || '#000000');
+    this.backgroundUniforms.overlayOpacity.value = Math.max(0, Math.min(1, Number(image.overlayOpacity) || 0));
+    for (const [camera, plane] of this.backgroundPlanes) {
+      const distance = Math.max(0.5, camera.near * 2);
+      plane.position.z = -distance;
+      if (camera.isPerspectiveCamera) {
+        const height = 2 * distance * Math.tan(camera.fov * Math.PI / 360);
+        plane.scale.set(height * camera.aspect / 2, height / 2, 1);
+      } else {
+        plane.scale.set((camera.right - camera.left) / 2, (camera.top - camera.bottom) / 2, 1);
+      }
+      plane.visible = camera === this.camera
+        && this.backgroundMode === 'image'
+        && Boolean(this.backgroundTexture);
+    }
+  }
+
+  setBackgroundAsset(asset = null, { render = true } = {}) {
+    this.backgroundImage = asset ? { ...this.backgroundImage, ...asset } : this.backgroundImage;
+    this.backgroundTexture?.dispose?.();
+    this.backgroundTexture = null;
+    this.backgroundUniforms.map.value = null;
+    this.backgroundUniforms.hasTexture.value = 0;
+    if (this.backgroundObjectUrl) {
+      URL.revokeObjectURL(this.backgroundObjectUrl);
+      this.backgroundObjectUrl = null;
+    }
+    if (!asset?.blob || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+      this.updateBackgroundBackplate();
+      if (render) this.render();
+      return Promise.resolve(false);
+    }
+    const objectUrl = URL.createObjectURL(asset.blob);
+    this.backgroundObjectUrl = objectUrl;
+    const ImageCtor = this.windowRef?.Image || globalThis.Image;
+    if (typeof ImageCtor !== 'function') {
+      URL.revokeObjectURL(objectUrl);
+      this.backgroundObjectUrl = null;
+      return Promise.resolve(false);
+    }
+    const image = new ImageCtor();
+    return new Promise((resolve) => {
+      image.onload = () => {
+        if (this.disposed || this.backgroundObjectUrl !== objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          resolve(false);
+          return;
+        }
+        const texture = new Texture(image);
+        texture.colorSpace = SRGBColorSpace;
+        texture.wrapS = ClampToEdgeWrapping;
+        texture.wrapT = ClampToEdgeWrapping;
+        texture.minFilter = LinearFilter;
+        texture.magFilter = LinearFilter;
+        texture.needsUpdate = true;
+        this.backgroundTexture = texture;
+        this.backgroundUniforms.map.value = texture;
+        this.backgroundUniforms.hasTexture.value = 1;
+        this.backgroundImageAspect = Math.max(0.01, image.naturalWidth / Math.max(1, image.naturalHeight));
+        this.updateBackgroundBackplate();
+        if (render) this.render();
+        resolve(true);
+      };
+      image.onerror = () => {
+        if (this.backgroundObjectUrl === objectUrl) this.backgroundObjectUrl = null;
+        URL.revokeObjectURL(objectUrl);
+        resolve(false);
+      };
+      image.src = objectUrl;
+    });
+  }
+
   updateGround() {
     const bounds = new Box3().setFromObject(this.boxRoot);
     if (bounds.isEmpty()) return;
@@ -527,6 +808,11 @@ export class BoxScene {
         bounds.min.y - 0.01,
         center.z,
       );
+    }
+    if (this.floorReflection) {
+      const reflectionExtent = extent * (1 + this.floorReflectionSettings.fadeDistance * 0.35);
+      this.floorReflection.scale.set(reflectionExtent, reflectionExtent, 1);
+      this.floorReflection.position.set(center.x, bounds.min.y - 0.012, center.z);
     }
     const shadowExtent = extent / 2;
     const shadowCamera = this.directionalLight.shadow.camera;
@@ -593,12 +879,14 @@ export class BoxScene {
       this.setOrthographicHeight(visibleHeight);
     }
     this.camera.position.copy(target).addScaledVector(direction, distance);
-    this.camera.up.set(0, 1, 0);
+    this.camera.up.copy(CAMERA_PRESETS[this.cameraPreset]?.up || new Vector3(0, 1, 0));
     this.camera.lookAt(target);
     this.camera.updateProjectionMatrix();
     this.createControls();
     this.controls.target.copy(target);
     this.controls.update();
+    this.applyVerticalCorrection();
+    this.updateBackgroundBackplate();
     this.render();
     } finally {
       this.suppressCameraChange -= 1;
@@ -758,21 +1046,27 @@ export class BoxScene {
 
   setFov(fov) {
     this.cameraFov = Math.max(10, Math.min(120, Number(fov) || PERSPECTIVE_FOV));
+    this.cameraFocalLength = fovToFocalLength(this.cameraFov);
     this.perspectiveCamera.fov = this.cameraFov;
     this.perspectiveCamera.updateProjectionMatrix();
+    this.updateBackgroundBackplate();
     this.render();
   }
 
   setCameraPreset(preset) {
-    const direction = CAMERA_PRESETS[preset];
-    if (!direction) return;
+    const definition = CAMERA_PRESETS[preset];
+    if (!definition) return;
     this.suppressCameraChange += 1;
     try {
-    this.cameraPreset = preset;
-    const distance = this.camera.position.distanceTo(this.controls.target);
-    this.camera.position.copy(this.controls.target).addScaledVector(direction, distance);
-    this.controls.update();
-    this.render();
+      this.cameraPreset = preset;
+      const distance = Math.max(0.01, this.camera.position.distanceTo(this.controls.target));
+      this.camera.position.copy(this.controls.target).addScaledVector(definition.direction, distance);
+      this.camera.up.copy(definition.up);
+      this.camera.lookAt(this.controls.target);
+      this.cameraHeading = cameraHeadingElevation(this.camera.position, this.controls.target).heading;
+      this.cameraElevation = cameraHeadingElevation(this.camera.position, this.controls.target).elevation;
+      this.controls.update();
+      this.render();
     } finally {
       this.suppressCameraChange -= 1;
     }
@@ -785,7 +1079,7 @@ export class BoxScene {
   }
 
   setBackgroundMode(mode, color = this.backgroundColor, { render = true } = {}) {
-    this.backgroundMode = mode === 'transparent' ? 'transparent' : 'solid';
+    this.backgroundMode = ['transparent', 'image'].includes(mode) ? mode : 'solid';
     this.backgroundColor = color || this.backgroundColor || '#e8eaeb';
     if (this.backgroundMode === 'transparent') {
       this.scene.background = null;
@@ -795,7 +1089,15 @@ export class BoxScene {
       else this.scene.background.set(this.backgroundColor);
       this.renderer.setClearColor(this.backgroundColor, 1);
     }
+    this.updateBackgroundBackplate();
+    this.applyFloorReflectionSettings();
     if (render) this.render();
+  }
+
+  setBackgroundImage(image = {}) {
+    this.backgroundImage = { ...this.backgroundImage, ...image };
+    this.updateBackgroundBackplate();
+    this.render();
   }
 
   setMaterialProfile(profile) {
@@ -803,6 +1105,29 @@ export class BoxScene {
     if (!allowed.includes(profile)) return;
     this.applyMaterials(profile);
     this.render();
+  }
+
+  setVerticalCorrection(enabled) {
+    this.verticalCorrection = enabled === true;
+    this.applyVerticalCorrection();
+    this.render();
+  }
+
+  applyVerticalCorrection() {
+    if (!this.camera?.isPerspectiveCamera) return;
+    const width = Math.max(1, this.renderer.domElement.width || this.container.clientWidth || 1);
+    const height = Math.max(1, this.renderer.domElement.height || this.container.clientHeight || 1);
+    if (!this.verticalCorrection || Math.abs(this.cameraElevation || 0) < 0.01) {
+      this.camera.clearViewOffset?.();
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    // Shift the perspective centre instead of rotating the camera around its
+    // viewing axis. This keeps carton edges vertical while retaining the
+    // current heading/elevation and composition.
+    const shift = Math.tan((this.cameraElevation || 0) * Math.PI / 180) * height * 0.12;
+    this.camera.setViewOffset(width, height, 0, -shift, width, height);
+    this.camera.updateProjectionMatrix();
   }
 
   setBoardAppearance(boardAppearance) {
@@ -831,12 +1156,94 @@ export class BoxScene {
   }
 
   getCameraState() {
+    const orientation = cameraHeadingElevation(this.camera.position, this.controls.target);
     return {
       preset: this.cameraPreset,
       projection: this.cameraProjection,
       fov: this.cameraFov,
+      focalLength: this.cameraFocalLength || fovToFocalLength(this.cameraFov),
+      lens: cameraLensLabel(this.cameraFov),
+      heading: orientation.heading,
+      elevation: orientation.elevation,
+      horizontalPan: this.cameraHorizontalPan,
+      verticalPan: this.cameraVerticalPan,
+      cameraDistance: orientation.distance,
+      frameHeight: this.orthographicHeight || visibleHeightForPerspective(this.perspectiveCamera, orientation.distance),
+      orthographicHeight: this.orthographicHeight || 0,
+      verticalCorrection: this.verticalCorrection,
+      keepVerticalsParallel: this.verticalCorrection,
       position: this.camera.position.toArray(),
       target: this.controls.target.toArray(),
+    };
+  }
+
+  /**
+   * Creates an export-owned, static presentation scene in glTF meters.
+   * Presentation-only helpers (floor, background, reflector, outlines and
+   * post-processing) are intentionally excluded from the portable asset.
+   */
+  createPortableScene({ includeCamera = true, materialMode = 'full-pbr' } = {}) {
+    if (!this.boxRoot) throw new Error('Render carton scene is not ready.');
+    const scene = new Scene();
+    scene.name = 'CartonBuilder GLB';
+    scene.userData.cartonBuilder = {
+      sourceUnit: 'mm',
+      exportUnit: 'm',
+      dimensions: { ...this.boxModel.dimensions },
+      materialProfile: this.materialProfile,
+      materialMode,
+      foldProgress: this.foldProgress,
+      static: true,
+    };
+
+    const cartonRoot = new Group();
+    cartonRoot.name = 'Carton';
+    cartonRoot.scale.setScalar(0.001);
+    const sourceRoot = this.boxRoot.clone(true);
+    sourceRoot.name = 'Carton';
+    sourceRoot.traverse((object) => {
+      if (object.isLine || object.isLineLoop) {
+        object.visible = false;
+        return;
+      }
+      if (!object.isMesh) return;
+      object.castShadow = false;
+      object.receiveShadow = false;
+      if (object.geometry) object.geometry = object.geometry.clone();
+      if (Array.isArray(object.material)) {
+        object.material = object.material.map((material) => clonePortableMaterial(material, materialMode));
+      } else {
+        object.material = clonePortableMaterial(object.material, materialMode);
+      }
+    });
+    cartonRoot.add(sourceRoot);
+    scene.add(cartonRoot);
+
+    if (includeCamera && this.camera) {
+      const camera = this.camera.clone();
+      camera.name = 'CartonBuilder Camera';
+      const meterScale = 0.001;
+      camera.position.multiplyScalar(meterScale);
+      camera.near = Math.max(0.0001, camera.near * meterScale);
+      camera.far = Math.max(camera.near + 1, camera.far * meterScale);
+      if (camera.isOrthographicCamera) {
+        camera.left *= meterScale;
+        camera.right *= meterScale;
+        camera.top *= meterScale;
+        camera.bottom *= meterScale;
+      }
+      const target = this.controls?.target?.clone?.() || new Vector3();
+      target.multiplyScalar(meterScale);
+      camera.lookAt(target);
+      camera.updateProjectionMatrix();
+      scene.add(camera);
+    }
+    scene.updateMatrixWorld(true);
+    return {
+      scene,
+      dispose() {
+        disposeObject3D(scene, { disposeTextures: true });
+      },
     };
   }
 
@@ -848,6 +1255,17 @@ export class BoxScene {
       this.setCameraProjection(state.projection);
     }
     if (Number.isFinite(Number(state.fov))) this.setFov(state.fov);
+    if (Number.isFinite(Number(state.focalLength)) && !Number.isFinite(Number(state.fov))) {
+      this.setFov(focalLengthToFov(state.focalLength));
+    }
+    if (Number.isFinite(Number(state.orthographicHeight)) && Number(state.orthographicHeight) > 0) {
+      this.setOrthographicHeight(state.orthographicHeight);
+    }
+    if (Number.isFinite(Number(state.heading))) this.cameraHeading = Number(state.heading);
+    if (Number.isFinite(Number(state.elevation))) this.cameraElevation = Number(state.elevation);
+    this.cameraHorizontalPan = Number.isFinite(Number(state.horizontalPan)) ? Number(state.horizontalPan) : this.cameraHorizontalPan;
+    this.cameraVerticalPan = Number.isFinite(Number(state.verticalPan)) ? Number(state.verticalPan) : this.cameraVerticalPan;
+    this.verticalCorrection = state.verticalCorrection === true || state.keepVerticalsParallel === true;
     if (Array.isArray(state.position) && state.position.length === 3 && state.position.every(Number.isFinite)) {
       this.camera.position.fromArray(state.position);
     }
@@ -856,6 +1274,7 @@ export class BoxScene {
       this.camera.lookAt(this.controls.target);
     }
     this.camera.updateProjectionMatrix();
+    this.applyVerticalCorrection();
     this.controls.update();
     this.render();
     } finally {
@@ -863,7 +1282,7 @@ export class BoxScene {
     }
   }
 
-  async renderToPixels({ width, height, backgroundMode = this.backgroundMode, backgroundColor = this.backgroundColor, includeShadow = true, signal, renderOverride = null }) {
+  async renderToPixels({ width, height, backgroundMode = this.backgroundMode, backgroundColor = this.backgroundColor, includeShadow = true, includeReflection = true, signal, renderOverride = null }) {
     if (signal?.aborted) throw new DOMException('Render export aborted.', 'AbortError');
     const outputWidth = Math.max(1, Math.floor(width));
     const outputHeight = Math.max(1, Math.floor(height));
@@ -878,9 +1297,11 @@ export class BoxScene {
     const previousBackgroundColor = this.backgroundColor;
     const previousProjection = this.cameraProjection;
     const previousPerspectiveAspect = this.perspectiveCamera.aspect;
+    const previousPerspectiveView = this.perspectiveCamera.view ? { ...this.perspectiveCamera.view } : null;
     const previousOrthographicHeight = this.orthographicHeight;
     const previousGroundVisible = this.ground.visible;
     const previousContactShadowVisible = this.contactShadow?.visible;
+    const previousReflectionVisible = this.floorReflection?.visible;
     let overrideResult = null;
     let overrideRestored = false;
     try {
@@ -889,9 +1310,15 @@ export class BoxScene {
         this.ground.visible = false;
         if (this.contactShadow) this.contactShadow.visible = false;
       }
+      if (this.floorReflection) {
+        this.floorReflection.visible = Boolean(includeReflection)
+          && this.floorReflectionSettings.enabled
+          && (backgroundMode !== 'transparent' || this.floorReflectionSettings.includeInTransparentExport);
+      }
       this.renderer.setSize(outputWidth, outputHeight, false);
       this.perspectiveCamera.aspect = outputWidth / outputHeight;
       this.perspectiveCamera.updateProjectionMatrix();
+      this.applyVerticalCorrection();
       if (this.camera.isOrthographicCamera && previousOrthographicHeight) {
         this.setOrthographicHeight(previousOrthographicHeight, outputWidth / outputHeight);
       }
@@ -917,6 +1344,18 @@ export class BoxScene {
       this.renderer.setRenderTarget(previousTarget);
       this.renderer.setSize(previousSize.x, previousSize.y, false);
       this.perspectiveCamera.aspect = previousPerspectiveAspect;
+      if (previousPerspectiveView?.enabled) {
+        this.perspectiveCamera.setViewOffset(
+          previousPerspectiveView.fullWidth,
+          previousPerspectiveView.fullHeight,
+          previousPerspectiveView.offsetX,
+          previousPerspectiveView.offsetY,
+          previousPerspectiveView.width,
+          previousPerspectiveView.height,
+        );
+      } else {
+        this.perspectiveCamera.clearViewOffset?.();
+      }
       this.perspectiveCamera.updateProjectionMatrix();
       if (this.camera.isOrthographicCamera && previousOrthographicHeight) {
         this.setOrthographicHeight(previousOrthographicHeight);
@@ -926,6 +1365,7 @@ export class BoxScene {
       this.setBackgroundMode(previousBackgroundMode, previousBackgroundColor, { render: false });
       this.ground.visible = previousGroundVisible;
       if (this.contactShadow) this.contactShadow.visible = previousContactShadowVisible;
+      if (this.floorReflection) this.floorReflection.visible = previousReflectionVisible;
       target.dispose();
       if (previousProjection !== this.cameraProjection) this.setCameraProjection(previousProjection);
     }
@@ -1013,14 +1453,53 @@ export class BoxScene {
       this.camera.far = Math.max(1000, distance + radius * 10);
       this.camera.zoom = 1;
     }
-    this.camera.position.copy(sphere.center).addScaledVector(CAMERA_DIRECTION, distance);
-    this.camera.up.set(0, 1, 0);
+    const definition = CAMERA_PRESETS[this.cameraPreset] || CAMERA_PRESETS.isometric;
+    this.camera.position.copy(sphere.center).addScaledVector(definition.direction, distance);
+    this.camera.up.copy(definition.up);
     this.camera.lookAt(sphere.center);
     this.camera.updateProjectionMatrix();
     this.controls.target.copy(sphere.center);
     this.controls.saveState();
     this.controls.update();
+    const orientation = cameraHeadingElevation(this.camera.position, this.controls.target);
+    this.cameraHeading = orientation.heading;
+    this.cameraElevation = orientation.elevation;
+    this.applyVerticalCorrection();
     if (render) this.render();
+  }
+
+  fitCameraToFrame({ margin = CAMERA_MARGIN, aspect = null, render = true } = {}) {
+    this.boxRoot.updateMatrixWorld(true);
+    const bounds = new Box3().setFromObject(this.boxRoot);
+    const sphere = bounds.getBoundingSphere({ center: new Vector3(), radius: 1 });
+    const radius = Math.max(0.001, sphere.radius);
+    const target = sphere.center.clone();
+    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
+    const safeDirection = direction.lengthSq() > 0.0001 ? direction : CAMERA_PRESETS.isometric.direction;
+    const visibleHeight = radius * 2 * Math.max(1, Number(margin) || CAMERA_MARGIN);
+    const frameAspect = Number.isFinite(Number(aspect)) ? Math.max(0.01, Number(aspect)) : null;
+    if (this.camera.isPerspectiveCamera) {
+      const previousAspect = this.perspectiveCamera.aspect;
+      if (frameAspect) this.perspectiveCamera.aspect = frameAspect;
+      const distance = distanceForPerspective(this.perspectiveCamera, visibleHeight);
+      this.camera.position.copy(target).addScaledVector(safeDirection, distance);
+      this.perspectiveCamera.near = Math.max(0.01, radius / 1000);
+      this.perspectiveCamera.far = Math.max(1000, distance + radius * 10);
+      this.perspectiveCamera.updateProjectionMatrix();
+      this.perspectiveCamera.aspect = previousAspect;
+    } else {
+      this.setOrthographicHeight(visibleHeight, frameAspect);
+      const distance = Math.max(radius * 4, this.camera.position.distanceTo(this.controls.target));
+      this.camera.position.copy(target).addScaledVector(safeDirection, distance);
+    }
+    this.cameraHorizontalPan = 0;
+    this.cameraVerticalPan = 0;
+    this.controls.target.copy(target);
+    this.camera.lookAt(target);
+    this.controls.update();
+    this.applyVerticalCorrection();
+    if (render) this.render();
+    return this.getCameraState();
   }
 
   resize({ render = true, width: requestedWidth, height: requestedHeight, pixelRatio } = {}) {
@@ -1032,6 +1511,8 @@ export class BoxScene {
     this.perspectiveCamera.aspect = width / height;
     this.perspectiveCamera.updateProjectionMatrix();
     if (this.orthographicHeight) this.setOrthographicHeight(this.orthographicHeight);
+    this.applyVerticalCorrection();
+    this.updateBackgroundBackplate();
     if (render) this.render();
   }
 
@@ -1090,6 +1571,19 @@ export class BoxScene {
     this.edgeMaterial?.dispose();
     this.outlineMaterial?.dispose();
     this.texture?.dispose();
+    for (const plane of this.backgroundPlanes?.values?.() || []) {
+      plane.geometry?.dispose();
+      plane.material?.dispose();
+    }
+    this.backgroundTexture?.dispose?.();
+    if (this.backgroundObjectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(this.backgroundObjectUrl);
+    }
+    if (this.floorReflection) {
+      this.floorReflection.geometry?.dispose();
+      this.floorReflection.material?.dispose();
+      this.floorReflection.getRenderTarget?.()?.dispose?.();
+    }
     this.environmentTexture?.dispose();
     this.pmremGenerator?.dispose();
     this.renderer.dispose();

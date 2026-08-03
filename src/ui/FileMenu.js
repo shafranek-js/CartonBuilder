@@ -9,6 +9,7 @@ export function createFileMenu({
   onSaveProject = () => {},
   onPlaceArtwork = () => {},
   onExport = () => {},
+  onRenderExport = () => {},
   onOpen = () => {},
   showToast = () => {},
   windowRef = window,
@@ -28,7 +29,9 @@ export function createFileMenu({
   function bindExportButton(selector, type) {
     popoverContainer.querySelector(selector)?.addEventListener('click', () => {
       togglePopover(false);
-      onExport(type);
+      if (type === 'render-glb') onRenderExport('glb');
+      else if (type === 'render-sequence') onRenderExport('sequence');
+      else onExport(type);
     });
   }
 
@@ -81,6 +84,12 @@ export function createFileMenu({
               <button type="button" class="file-menu-item" id="menuExport3dHtmlBtn">
                 <span class="file-menu-item-title">${t('export3dHtml') || 'Export HTML'}</span>
               </button>
+              <button type="button" class="file-menu-item" id="menuExportGlbBtn">
+                <span class="file-menu-item-title">${t('export3dGlb') || 'Binary glTF (.glb)'}</span>
+              </button>
+              <button type="button" class="file-menu-item" id="menuExportTurntableBtn">
+                <span class="file-menu-item-title">${t('exportTurntable') || 'Turntable ZIP'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -112,6 +121,8 @@ export function createFileMenu({
     bindExportButton('#menuExportSvgBtn', 'svg');
     bindExportButton('#menuExportPdfBtn', 'pdf');
     bindExportButton('#menuExport3dHtmlBtn', 'html');
+    bindExportButton('#menuExportGlbBtn', 'render-glb');
+    bindExportButton('#menuExportTurntableBtn', 'render-sequence');
   }
 
   triggerButton.addEventListener('click', (e) => {
