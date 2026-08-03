@@ -214,6 +214,7 @@ if (settingsTriggerBtn && settingsPopover) {
   createSettingsModal({
     triggerButton: settingsTriggerBtn,
     popoverContainer: settingsPopover,
+    getRenderDiagnostics: () => renderApp?.getDiagnostics?.() || null,
   });
 }
 
@@ -410,6 +411,7 @@ renderApp = createRenderApp({
     artworkApp?.notifyRenderStateChanged?.();
   },
   setArtworkQuality: (...args) => artworkApp?.setArtworkQuality?.(...args),
+  updateArtworkFinish: (...args) => artworkApp?.updateArtworkFinish?.(...args),
   onBackToPreview: () => showStep('preview'),
 });
 

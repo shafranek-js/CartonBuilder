@@ -83,11 +83,16 @@ export class RenderQualityManager {
   }
 
   getDiagnostics() {
+    const sortedFrameTimes = [...this.frameTimes].sort((left, right) => left - right);
+    const p95Index = sortedFrameTimes.length
+      ? Math.min(sortedFrameTimes.length - 1, Math.ceil(sortedFrameTimes.length * 0.95) - 1)
+      : -1;
     return {
       state: this.state,
       profile: this.profile,
       renderScale: this.scale,
       frameTime: this.lastFrameTime,
+      frameTimeP95: p95Index >= 0 ? sortedFrameTimes[p95Index] : null,
       targetFrameMs: this.getProfile().targetFrameMs,
       sampleCount: this.frameTimes.length,
     };

@@ -68,7 +68,7 @@ describe('project schema', () => {
 
     expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(migrated.render).toMatchObject({ presetId: 'clean-studio', aspect: 'square', longEdge: 2048 });
-    expect(migrated.artworks).toEqual([{ artwork, visible: true }]);
+    expect(migrated.artworks).toEqual([{ artwork, visible: true, outputRole: 'print', finish: null }]);
     expect(migrated.activeArtworkIndex).toBe(0);
     expect(migrated).not.toBe(snapshot);
     migrated.artworks[0].artwork.centerXmm = 1;
@@ -178,11 +178,43 @@ describe('project schema', () => {
 
     const migrated = migrateProjectSnapshot(v8);
 
-    expect(migrated.schemaVersion).toBe(9);
+    expect(migrated.schemaVersion).toBe(10);
     expect(migrated.render.output).toMatchObject({
       kind: 'image',
       sequence: { frames: 36, longEdge: 1024, format: 'png' },
       glb: { textureSize: 'auto', materialMode: 'full-pbr', includeCamera: true },
+    });
+  });
+
+  it('migrates v9 artwork entries to schema v10 finish defaults without losing history', async () => {
+    const { snapshot } = await createBundle();
+    const v9 = migrateProjectSnapshot(snapshot);
+    v9.schemaVersion = 9;
+    v9.artworks[0].outputRole = 'finish';
+    v9.artworks[0].finish = { type: 'emboss', reliefStrength: 0.6 };
+    v9.history = {
+      undo: [{
+        label: 'finish',
+        before: { artworks: [{ artwork: v9.artworks[0].artwork, visible: true }], activeArtworkIndex: 0 },
+        after: { artworks: [{ ...v9.artworks[0] }], activeArtworkIndex: 0 },
+      }],
+      redo: [],
+    };
+
+    const migrated = migrateProjectSnapshot(v9);
+
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
+    expect(migrated.artworks[0]).toMatchObject({
+      outputRole: 'finish',
+      finish: { type: 'emboss', reliefStrength: 0.6 },
+    });
+    expect(migrated.history.undo[0].before.artworks[0]).toMatchObject({
+      outputRole: 'print',
+      finish: null,
+    });
+    expect(migrated.history.undo[0].after.artworks[0]).toMatchObject({
+      outputRole: 'finish',
+      finish: { type: 'emboss', reliefStrength: 0.6 },
     });
   });
 

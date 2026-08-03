@@ -24,6 +24,7 @@ import { saveOrDownloadFile } from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { getArtworkRasterSignature, rasterizeArtwork, resolveArtworkDpi } from './artworkRasterizer.js';
+import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 
 const SNAP_SCREEN_PX = 6;
 const SNAP_RELEASE_SCREEN_PX = 9;
@@ -145,6 +146,10 @@ function assignLayerColor(existingColors) {
   return LAYER_PALETTE[0];
 }
 
+function finishState(entry) {
+  return sanitizeArtworkFinish(entry);
+}
+
 function range(start, end) {
   const result = [];
   const step = start <= end ? 1 : -1;
@@ -220,6 +225,18 @@ export function createArtworkApp({
     previewQuality: documentRef.getElementById('artworkPreviewQuality'),
     renderQuality: documentRef.getElementById('artworkRenderQuality'),
     qualitySummary: documentRef.getElementById('artworkQualitySummary'),
+    finishSection: documentRef.getElementById('artworkFinishSection'),
+    finishRole: documentRef.getElementById('artworkFinishRole'),
+    finishType: documentRef.getElementById('artworkFinishType'),
+    finishMaskChannel: documentRef.getElementById('artworkFinishMaskChannel'),
+    finishInvert: documentRef.getElementById('artworkFinishInvert'),
+    finishIntensity: documentRef.getElementById('artworkFinishIntensity'),
+    finishIntensityValue: documentRef.getElementById('artworkFinishIntensityValue'),
+    finishColor: documentRef.getElementById('artworkFinishColor'),
+    finishRoughness: documentRef.getElementById('artworkFinishRoughness'),
+    finishRoughnessValue: documentRef.getElementById('artworkFinishRoughnessValue'),
+    finishRelief: documentRef.getElementById('artworkFinishRelief'),
+    finishReliefValue: documentRef.getElementById('artworkFinishReliefValue'),
     choose: documentRef.getElementById('chooseArtworkButton'),
     replace: documentRef.getElementById('replaceArtworkButton'),
     remove: documentRef.getElementById('removeArtworkButton'),
@@ -350,6 +367,7 @@ export function createArtworkApp({
         visible: entry.visible,
         locked: entry.locked,
         color: entry.color,
+        ...finishState(entry),
         originalBlob: entry.originalBlob,
         previewBlob: entry.previewBlob,
       })),
@@ -369,6 +387,7 @@ export function createArtworkApp({
         visible: entry.visible !== false,
         locked: Boolean(entry.locked),
         color: entry.color || assignLayerColor(artworks.map((e) => e.color)),
+        ...finishState(entry),
         originalBlob: entry.originalBlob || null,
         previewBlob: entry.previewBlob || null,
         displayBlob: null,
@@ -495,6 +514,7 @@ export function createArtworkApp({
       previewBlob: entry.previewBlob,
       displayBlob: entry.displayBlob || null,
       visible: entry.visible,
+      ...finishState(entry),
     }));
   }
 
@@ -560,6 +580,7 @@ export function createArtworkApp({
       artworks: artworks.map((entry) => ({
         artwork: entry.model.toJSON(),
         visible: entry.visible,
+        ...finishState(entry),
       })),
       activeArtworkIndex,
     });
@@ -588,6 +609,7 @@ export function createArtworkApp({
       artworks: artworks.map((entry) => ({
         artwork: entry.model.toJSON(),
         visible: entry.visible,
+        ...finishState(entry),
       })),
       activeArtworkIndex,
       render: sanitizeRenderSettings(getRenderState()),
@@ -704,6 +726,38 @@ export function createArtworkApp({
           ? t('qualityVectorSummary')
           : t('qualityNativeSummary', { dpi: Math.round(dpi || 0) });
     }
+    const activeFinish = finishState(getActiveEntry());
+    const hasFinish = enabled && activeFinish.outputRole !== 'print';
+    if (controls.finishSection) controls.finishSection.hidden = !enabled;
+    if (controls.finishRole) {
+      controls.finishRole.value = enabled ? activeFinish.outputRole : 'print';
+      controls.finishRole.disabled = !enabled || !transformEnabled;
+    }
+    if (controls.finishType) controls.finishType.value = activeFinish.finish?.type || 'spot-gloss';
+    if (controls.finishMaskChannel) controls.finishMaskChannel.value = activeFinish.finish?.maskChannel || 'auto';
+    if (controls.finishInvert) controls.finishInvert.checked = activeFinish.finish?.invert === true;
+    if (controls.finishIntensity) {
+      controls.finishIntensity.value = String(Math.round((activeFinish.finish?.intensity || 1) * 100));
+      controls.finishIntensity.disabled = !hasFinish || !transformEnabled;
+    }
+    if (controls.finishIntensityValue) controls.finishIntensityValue.value = `${Math.round((activeFinish.finish?.intensity || 1) * 100)}%`;
+    if (controls.finishColor) {
+      controls.finishColor.value = activeFinish.finish?.foilColor || '#d4af37';
+      controls.finishColor.disabled = !hasFinish || activeFinish.finish?.type !== 'foil' || !transformEnabled;
+    }
+    if (controls.finishRoughness) {
+      controls.finishRoughness.value = String(Math.round((activeFinish.finish?.foilRoughness || 0.22) * 100));
+      controls.finishRoughness.disabled = !hasFinish || !['spot-gloss', 'foil'].includes(activeFinish.finish?.type) || !transformEnabled;
+    }
+    if (controls.finishRoughnessValue) controls.finishRoughnessValue.value = `${Math.round((activeFinish.finish?.foilRoughness || 0.22) * 100)}%`;
+    if (controls.finishRelief) {
+      controls.finishRelief.value = String(Math.round((activeFinish.finish?.reliefStrength || 0.35) * 100));
+      controls.finishRelief.disabled = !hasFinish || !['emboss', 'deboss'].includes(activeFinish.finish?.type) || !transformEnabled;
+    }
+    if (controls.finishReliefValue) controls.finishReliefValue.value = `${Math.round((activeFinish.finish?.reliefStrength || 0.35) * 100)}%`;
+    for (const control of [controls.finishType, controls.finishMaskChannel, controls.finishInvert]) {
+      if (control) control.disabled = !hasFinish || !transformEnabled;
+    }
 
     for (const control of [
       controls.x, controls.y, controls.width, controls.height, controls.opacity,
@@ -807,6 +861,13 @@ export function createArtworkApp({
         startRenameSublayer(index, name);
       });
       row.appendChild(name);
+      if (entry.outputRole && entry.outputRole !== 'print') {
+        const finishBadge = documentRef.createElement('span');
+        finishBadge.className = 'artwork-finish-badge';
+        finishBadge.textContent = entry.finish?.type || 'finish';
+        finishBadge.title = t('artworkFinishMask');
+        row.appendChild(finishBadge);
+      }
 
       const target = documentRef.createElement('span');
       target.className = 'layer-target-circle';
@@ -915,6 +976,7 @@ export function createArtworkApp({
       visible: entry.visible,
       locked: false,
       color,
+      ...finishState(entry),
     });
     if (activeArtworkIndex >= index) activeArtworkIndex += 1;
     renderer.setArtworks(artworks);
@@ -1336,6 +1398,8 @@ export function createArtworkApp({
           visible: true,
           locked: false,
           color: assignLayerColor(existingColors),
+          outputRole: 'print',
+          finish: null,
         });
         activeArtworkIndex = 0;
       }
@@ -2151,11 +2215,87 @@ export function createArtworkApp({
     return true;
   }
 
+  function updateArtworkFinish(index, patch = {}) {
+    const entry = artworks[index];
+    if (!entry?.model?.hasArtwork || entry.locked) return false;
+    const before = captureEditorState();
+    const next = finishState(entry);
+    next.outputRole = patch.outputRole || next.outputRole;
+    next.finish = { ...next.finish, ...patch };
+    if (next.outputRole === 'print') next.finish = null;
+    const sanitized = sanitizeArtworkFinish(next);
+    entry.outputRole = sanitized.outputRole;
+    entry.finish = sanitized.finish;
+    commitChange('Update artwork finish', before);
+    Promise.resolve(onArtworkQualityChanged({
+      kind: 'finish',
+      index,
+      outputRole: entry.outputRole,
+      finish: entry.finish,
+    })).catch(() => {});
+    return true;
+  }
+
   controls.previewQuality?.addEventListener('change', (event) => {
     setArtworkQuality('preview', event.target.value);
   });
   controls.renderQuality?.addEventListener('change', (event) => {
     setArtworkQuality('render', event.target.value);
+  });
+
+  function updateFinishConfig(label, updater) {
+    const entry = getActiveEntry();
+    if (!entry?.model?.hasArtwork || layerLocks.artwork || entry.locked) return;
+    const before = captureEditorState();
+    const next = finishState(entry);
+    updater(next);
+    entry.outputRole = next.outputRole;
+    entry.finish = next.outputRole === 'print' ? null : next.finish;
+    commitChange(label, before);
+    Promise.resolve(onArtworkQualityChanged({
+      kind: 'finish',
+      index: activeArtworkIndex,
+      outputRole: entry.outputRole,
+      finish: entry.finish,
+    })).catch(() => {});
+  }
+
+  controls.finishRole?.addEventListener('change', (event) => {
+    updateFinishConfig('Set artwork output role', (next) => {
+      next.outputRole = event.target.value;
+      if (next.outputRole !== 'print' && !next.finish) next.finish = sanitizeArtworkFinish({}).finish;
+    });
+  });
+  controls.finishType?.addEventListener('change', (event) => {
+    updateFinishConfig('Set artwork finish type', (next) => {
+      next.finish = { ...next.finish, type: event.target.value };
+    });
+  });
+  controls.finishMaskChannel?.addEventListener('change', (event) => {
+    updateFinishConfig('Set artwork finish mask channel', (next) => {
+      next.finish = { ...next.finish, maskChannel: event.target.value };
+    });
+  });
+  controls.finishInvert?.addEventListener('change', (event) => {
+    updateFinishConfig('Invert artwork finish mask', (next) => {
+      next.finish = { ...next.finish, invert: event.target.checked };
+    });
+  });
+  function bindFinishSlider(control, label, key, scale = 100) {
+    control?.addEventListener('change', (event) => {
+      const value = Number(event.target.value) / scale;
+      updateFinishConfig(label, (next) => {
+        next.finish = { ...next.finish, [key]: value };
+      });
+    });
+  }
+  bindFinishSlider(controls.finishIntensity, 'Set finish intensity', 'intensity');
+  bindFinishSlider(controls.finishRoughness, 'Set finish roughness', 'foilRoughness');
+  bindFinishSlider(controls.finishRelief, 'Set relief strength', 'reliefStrength');
+  controls.finishColor?.addEventListener('change', (event) => {
+    updateFinishConfig('Set foil color', (next) => {
+      next.finish = { ...next.finish, foilColor: event.target.value };
+    });
   });
 
   let lastNonZeroArtworkOpacity = 1.0;
@@ -2676,7 +2816,7 @@ export function createArtworkApp({
       let suggestedName;
       let types;
       let fallback = 'unexpectedError';
-      const exportArtworks = getArtworks().filter((entry) => entry.visible);
+      const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
 
       if (type === 'svg') {
         blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
@@ -2758,6 +2898,7 @@ export function createArtworkApp({
         visible: entry.visible !== false,
         locked: Boolean(entry.locked),
         color: entry.color || assignLayerColor(artworks.map((e) => e.color)),
+        ...finishState(entry),
         originalBlob: blobs.originalBlob || null,
         previewBlob: blobs.previewBlob || null,
         displayBlob: null,
@@ -2956,6 +3097,7 @@ export function createArtworkApp({
     getArtworks,
     getArtworksJson,
     setArtworkQuality,
+    updateArtworkFinish,
     refreshPreviewResources,
     hasModifiedArtwork: () => artwork.hasArtwork && artwork.modified,
     exportDeliverable,

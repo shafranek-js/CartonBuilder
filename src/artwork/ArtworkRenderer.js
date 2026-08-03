@@ -333,6 +333,7 @@ export class ArtworkRenderer {
     this.entries = (entries || []).map((entry, i) => ({
       model: entry.model,
       visible: entry.visible !== false,
+      outputRole: entry.outputRole || 'print',
       previewUrl: (entry.displayBlob || entry.previewBlob)
         ? URL.createObjectURL(entry.displayBlob || entry.previewBlob)
         : '',
@@ -423,7 +424,7 @@ export class ArtworkRenderer {
           : [];
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
-        if (!entry.visible || !entry.model.hasArtwork || !entry.previewUrl) continue;
+        if (!entry.visible || entry.outputRole === 'finish' || !entry.model.hasArtwork || !entry.previewUrl) continue;
         const ai = entry.artworkIndex;
         const crop = entry.model.crop;
         if (!preview && entry.model.bgOpacity > 0) {

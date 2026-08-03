@@ -18,11 +18,22 @@ class ContextMock {
   rect() {}
   clip() {}
   fillRect() {}
+  clearRect() {}
   save() {}
   restore() {}
   scale() {}
   translate() {}
   rotate() {}
+
+  getImageData(_x, _y, width, height) {
+    return { data: new Uint8ClampedArray(width * height * 4) };
+  }
+
+  createImageData(width, height) {
+    return { data: new Uint8ClampedArray(width * height * 4) };
+  }
+
+  putImageData() {}
 
   drawImage() {
     if (this.failDraw) throw new Error('draw failed');
@@ -164,6 +175,37 @@ describe('3D texture composition', () => {
     expect(result.width).toBe(1200);
     expect(result.height).toBe(720);
     expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
+  it('composes finish maps in the same flat-net texture space', async () => {
+    vi.stubGlobal('OffscreenCanvas', CanvasMock);
+    const bitmap = { close: vi.fn() };
+    const finishFixture = fixture();
+    finishFixture.artworks.push({
+      ...finishFixture.artworks[0],
+      outputRole: 'finish',
+      finish: {
+        type: 'foil',
+        maskChannel: 'luminance',
+        intensity: 0.8,
+        foilColor: '#d4af37',
+      },
+    });
+    const result = await composeArtworkTexture({
+      ...finishFixture,
+      includeFinishMaps: true,
+      materialProfile: 'matte',
+      createImageBitmapFn: vi.fn().mockResolvedValue(bitmap),
+    });
+
+    expect(result.materialMaps).toEqual(expect.objectContaining({
+      clearcoat: expect.any(Object),
+      clearcoatRoughness: expect.any(Object),
+      metalness: expect.any(Object),
+      roughness: expect.any(Object),
+      normal: expect.any(Object),
+    }));
+    expect(bitmap.close).toHaveBeenCalledTimes(2);
   });
 
   it('does not rasterize interactive artwork above the composed texture density', async () => {

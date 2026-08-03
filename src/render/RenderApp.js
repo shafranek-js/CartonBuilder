@@ -11,6 +11,7 @@ import {
 } from './RenderSettings.js';
 import { applyRenderPreset } from './renderPresets.js';
 import { renderStill } from './StillRenderService.js';
+import { getRenderHealth, runRenderExportPreflight } from './renderPreflight.js';
 import {
   getTurntableDimensions,
   isTurntableWithinPixelBudget,
@@ -89,6 +90,25 @@ function createSaveTypes(format) {
   return [{ description: 'ZIP archive (*.zip)', accept: { 'application/zip': ['.zip'] } }];
 }
 
+function formatMegabytes(bytes) {
+  return `${(Math.max(0, Number(bytes) || 0) / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderPreflightIssueText(entry) {
+  const details = entry.details || {};
+  switch (entry.code) {
+    case 'context-lost': return t('renderPreflightContextLost');
+    case 'renderer-unavailable': return t('renderPreflightRendererUnavailable');
+    case 'renderer-will-initialize': return t('renderPreflightWillInitialize');
+    case 'gpu-limit': return t('renderPreflightGpuLimit', { width: details.width, height: details.height, maxDimension: details.maxDimension });
+    case 'turntable-budget': return t('renderPreflightTurntableBudget', { frames: details.frames, width: details.width, height: details.height });
+    case 'jpeg-background': return t('renderPreflightJpegBackground');
+    case 'basic-glb-finishes': return t('renderPreflightBasicGlbFinishes');
+    case 'memory-budget': return t('renderPreflightMemory', { estimated: formatMegabytes(details.estimatedBytes), budget: formatMegabytes(details.memoryBudgetBytes) });
+    default: return entry.code;
+  }
+}
+
 function getRenderTextureDpi(boxModel, dimensions) {
   const bounds = boxModel.getBounds();
   return Math.max(
@@ -125,6 +145,7 @@ export function createRenderApp({
   restorePersistedSettings = true,
   onStateChange = () => {},
   setArtworkQuality = () => false,
+  updateArtworkFinish = () => false,
   onBackToPreview = () => {},
 }) {
   const elements = {
@@ -233,10 +254,13 @@ export function createRenderApp({
     experimentalPathTracing: documentRef.getElementById('experimentalPathTracingButton'),
     diagnosticsOutput: documentRef.getElementById('renderDiagnosticsOutput'),
     artworkQualityList: documentRef.getElementById('renderArtworkQualityList'),
+    finishSummary: documentRef.getElementById('renderFinishSummary'),
     viewportOverlay: documentRef.getElementById('renderViewportOverlay'),
     viewportFrame: documentRef.getElementById('renderViewportFrame'),
     viewportLabel: documentRef.getElementById('renderViewportLabel'),
     viewportSummary: documentRef.getElementById('renderViewportSummary'),
+    exportPreflight: documentRef.getElementById('renderExportPreflight'),
+    exportConfirm: documentRef.getElementById('renderExportConfirm'),
     presetButtons: [...documentRef.querySelectorAll('[data-render-preset]')],
   exportDialog: documentRef.getElementById('renderExportDialog'),
     exportForm: documentRef.getElementById('renderExportForm'),
@@ -257,6 +281,7 @@ export function createRenderApp({
     exportGlbTextureSize: documentRef.getElementById('renderExportGlbTextureSize'),
     exportGlbMaterialMode: documentRef.getElementById('renderExportGlbMaterialMode'),
     exportGlbIncludeCamera: documentRef.getElementById('renderExportGlbIncludeCamera'),
+    exportGlbWarning: documentRef.getElementById('renderExportGlbWarning'),
     exportImageOptions: documentRef.getElementById('renderExportImageOptions'),
     exportSequenceOptions: documentRef.getElementById('renderExportSequenceOptions'),
     exportGlbOptions: documentRef.getElementById('renderExportGlbOptions'),
@@ -307,6 +332,9 @@ export function createRenderApp({
   let syncGeneration = 0;
   let structureSignature = '';
   let artworkSignature = '';
+  let lastPreflight = null;
+  let renderContextState = 'initializing';
+  let renderContextRecoveryCount = 0;
 
   function restoreRenderAssets(assets = []) {
     const entries = Array.isArray(assets) ? assets.map(normalizeRenderAsset).filter(Boolean) : [];
@@ -517,6 +545,68 @@ export function createRenderApp({
     }
   }
 
+  function updateFinishSummary() {
+    if (!elements.finishSummary) return;
+    const entries = getArtworks?.() || [];
+    elements.finishSummary.replaceChildren();
+    const finishes = entries
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry?.visible !== false && entry?.outputRole !== 'print' && entry?.finish);
+    if (!finishes.length) {
+      const empty = documentRef.createElement('p');
+      empty.className = 'quality-help';
+      empty.textContent = t('renderFinishesEmpty');
+      elements.finishSummary.appendChild(empty);
+      return;
+    }
+    for (const { entry, index } of finishes) {
+      const finish = entry.finish;
+      const row = documentRef.createElement('div');
+      row.className = 'render-finish-row';
+      const title = documentRef.createElement('span');
+      title.className = 'render-finish-name';
+      title.textContent = entry.model.source?.fileName || t('artwork');
+      const type = documentRef.createElement('select');
+      type.setAttribute('aria-label', `${t('artworkFinishType')} ${title.textContent}`);
+      for (const [value, labelKey] of [
+        ['spot-gloss', 'artworkFinishSpotGloss'],
+        ['foil', 'artworkFinishFoil'],
+        ['emboss', 'artworkFinishEmboss'],
+        ['deboss', 'artworkFinishDeboss'],
+      ]) {
+        const option = documentRef.createElement('option');
+        option.value = value;
+        option.textContent = t(labelKey);
+        type.appendChild(option);
+      }
+      type.value = finish.type;
+      type.addEventListener('change', () => {
+        Promise.resolve(updateArtworkFinish(index, { type: type.value })).catch(() => {});
+      });
+      const intensity = documentRef.createElement('input');
+      intensity.type = 'range';
+      intensity.min = '0';
+      intensity.max = '100';
+      intensity.value = String(Math.round((finish.intensity || 1) * 100));
+      intensity.setAttribute('aria-label', `${t('artworkFinishIntensity')} ${title.textContent}`);
+      intensity.addEventListener('change', () => {
+        Promise.resolve(updateArtworkFinish(index, { intensity: Number(intensity.value) / 100 })).catch(() => {});
+      });
+      row.append(title, type, intensity);
+      if (finish.type === 'foil') {
+        const color = documentRef.createElement('input');
+        color.type = 'color';
+        color.value = finish.foilColor || '#d4af37';
+        color.setAttribute('aria-label', `${t('artworkFinishFoilColor')} ${title.textContent}`);
+        color.addEventListener('change', () => {
+          Promise.resolve(updateArtworkFinish(index, { foilColor: color.value })).catch(() => {});
+        });
+        row.appendChild(color);
+      }
+      elements.finishSummary.appendChild(row);
+    }
+  }
+
   function updateViewportOverlay() {
     const dimensions = getRenderOutputDimensions(state);
     const aspect = dimensions.width / dimensions.height;
@@ -687,6 +777,44 @@ export function createRenderApp({
     return true;
   }
 
+  function updateExportPreflight() {
+    if (!elements.exportPreflight) return null;
+    const output = state.output;
+    const hasFinishes = (getArtworks?.() || []).some((entry) => (
+      entry?.visible !== false && entry?.outputRole !== 'print' && entry?.finish
+    ));
+    lastPreflight = runRenderExportPreflight({
+      kind: output.kind,
+      format: output.kind === 'sequence' ? output.sequence.format : output.format,
+      settings: state,
+      diagnostics: renderer?.getDiagnostics?.() || {},
+      rendererAvailable: Boolean(renderer),
+      hasFinishes,
+    });
+    const statusLabel = lastPreflight.status === 'blocked'
+      ? t('renderPreflightBlocked')
+      : lastPreflight.status === 'warning'
+        ? t('renderPreflightWarning')
+        : t('renderPreflightReady');
+    const details = `${lastPreflight.dimensions.width} × ${lastPreflight.dimensions.height} px · ${formatMegabytes(lastPreflight.estimatedBytes)}`;
+    const issueLines = lastPreflight.issues
+      .filter((entry) => entry.severity !== 'info')
+      .map((entry) => `${entry.severity === 'error' ? '⛔' : '⚠'} ${renderPreflightIssueText(entry)}`);
+    elements.exportPreflight.className = `render-export-preflight is-${lastPreflight.status}`;
+    elements.exportPreflight.replaceChildren();
+    const status = documentRef.createElement('strong');
+    status.textContent = `${statusLabel} · ${details}`;
+    elements.exportPreflight.append(status);
+    if (issueLines.length) {
+      const list = documentRef.createElement('span');
+      list.textContent = issueLines.join(' ');
+      elements.exportPreflight.append(list);
+    }
+    if (elements.exportConfirm) elements.exportConfirm.disabled = lastPreflight.status === 'blocked';
+    if (elements.exportGlbWarning) elements.exportGlbWarning.hidden = !lastPreflight.issues.some((entry) => entry.code === 'basic-glb-finishes');
+    return lastPreflight;
+  }
+
   function updateExportDialog() {
     const output = state.output;
     if (!elements.exportFormat) return;
@@ -737,6 +865,7 @@ export function createRenderApp({
         elements.exportSummary.textContent = t('renderExportSummary', dimensions);
       }
     }
+    updateExportPreflight();
   }
 
   function openExportDialog(format = state.output.format, kind = 'image') {
@@ -889,6 +1018,7 @@ export function createRenderApp({
     updateViewPresetOptions();
     updatePresetButtons();
     updateArtworkQualityList();
+    updateFinishSummary();
     updateViewportOverlay();
     updateExportDialog();
     updateDiagnostics();
@@ -901,21 +1031,25 @@ export function createRenderApp({
 
   function updateDiagnostics() {
     if (!elements.diagnosticsOutput) return;
-    const diagnostics = renderer?.getDiagnostics?.();
-    if (!diagnostics) {
-      elements.diagnosticsOutput.textContent = t('renderDiagnosticsWaiting');
-      return;
-    }
+    const diagnostics = renderer?.getDiagnostics?.() || { contextState: active ? 'unavailable' : 'initializing' };
+    const health = diagnostics.health || getRenderHealth(diagnostics);
+    const quality = diagnostics.quality || {};
     const lines = [
       `backend: ${diagnostics.backend || 'WebGL2'}`,
+      `health: ${health.status}`,
+      `context: ${diagnostics.contextState || 'initializing'} · recoveries: ${diagnostics.contextRecoveryCount || 0}`,
       `drawing buffer: ${diagnostics.drawingBufferWidth || 0}×${diagnostics.drawingBufferHeight || 0}`,
-      `quality: ${diagnostics.qualityState || diagnostics.quality?.state || 'interactive'}`,
-      `render scale: ${Number(diagnostics.renderScale ?? diagnostics.quality?.renderScale ?? 1).toFixed(2)}`,
+      `quality: ${diagnostics.qualityState || quality.state || 'interactive'}`,
+      `render scale: ${Number(diagnostics.renderScale ?? quality.renderScale ?? 1).toFixed(2)}`,
+      `frame time: ${Number(quality.frameTime || 0).toFixed(1)} ms · p95: ${Number(quality.frameTimeP95 || 0).toFixed(1)} ms · target: ${Number(quality.targetFrameMs || 0).toFixed(1)} ms`,
       `passes: ${(diagnostics.passes || []).join(' → ') || 'none'}`,
       `shadow map: ${diagnostics.shadowMapSize || 0}`,
       `draw calls: ${diagnostics.calls || 0}`,
       `geometries/textures: ${diagnostics.geometries || 0}/${diagnostics.textures || 0}`,
     ];
+    if (diagnostics.lastExport) {
+      lines.push(`last export: ${diagnostics.lastExport.width}×${diagnostics.lastExport.height} px · ${diagnostics.lastExport.durationMs} ms`);
+    }
     elements.diagnosticsOutput.textContent = lines.join('\n');
   }
 
@@ -991,6 +1125,8 @@ export function createRenderApp({
           purpose,
           requiredDpi: textureDpi,
         }),
+        includeFinishMaps: true,
+        materialProfile: state.material.profile,
         signal: syncController.signal,
       });
       if (generation !== syncGeneration || syncController.signal.aborted) return false;
@@ -1005,12 +1141,20 @@ export function createRenderApp({
           boxModel,
           sceneModel: signatures.sceneModel,
           textureCanvas: composed.canvas,
+          materialMaps: composed.materialMaps,
           renderSettings: state,
           boardAppearance,
           backgroundAsset,
           windowRef,
-          onContextLost: () => showRecovery('renderContextLost'),
-          onContextRestored: () => syncScene({ force: true }),
+          onContextLost: () => {
+            renderContextState = 'lost';
+            showRecovery('renderContextLost');
+          },
+          onContextRestored: () => {
+            renderContextState = 'restored';
+            renderContextRecoveryCount += 1;
+            syncScene({ force: true });
+          },
           onCameraChange: (camera) => {
             if (!active || disposed) return;
             renderer?.markInteraction?.();
@@ -1032,13 +1176,14 @@ export function createRenderApp({
         // when artwork quality is changed from an already-open Render step.
         renderer.resize();
       } else {
-        renderer.replaceArtwork(composed.canvas);
+        renderer.replaceArtwork(composed.canvas, composed.materialMaps, signatures.sceneModel);
         renderer.setBoardAppearance?.(boardAppearance);
         renderer.setBackgroundAsset?.(backgroundAsset);
       }
       structureSignature = signatures.structure;
       artworkSignature = signatures.artwork;
       renderer.updateSettings(state);
+      renderContextState = 'ready';
       setBusy(false);
       updateControls();
       elements.status.textContent = t('renderReady');
@@ -1076,6 +1221,41 @@ export function createRenderApp({
     syncGeneration += 1;
     syncController?.abort();
     syncController = null;
+  }
+
+  function nextFrame() {
+    return new Promise((resolve) => {
+      if (typeof windowRef.requestAnimationFrame === 'function') windowRef.requestAnimationFrame(() => resolve());
+      else windowRef.setTimeout(resolve, 16);
+    });
+  }
+
+  async function whenStable({ timeoutMs = 5000 } = {}) {
+    const deadline = Date.now() + Math.max(250, Number(timeoutMs) || 5000);
+    while (syncController && Date.now() < deadline) {
+      await new Promise((resolve) => windowRef.setTimeout(resolve, 16));
+    }
+    if (!renderer || Date.now() >= deadline) return false;
+    await nextFrame();
+    await nextFrame();
+    renderer.renderSettled?.();
+    updateDiagnostics();
+    return true;
+  }
+
+  function runExportPreflight(options = {}) {
+    const output = state.output;
+    const hasFinishes = (getArtworks?.() || []).some((entry) => (
+      entry?.visible !== false && entry?.outputRole !== 'print' && entry?.finish
+    ));
+    return runRenderExportPreflight({
+      kind: options.kind || output.kind,
+      format: options.format || (output.kind === 'sequence' ? output.sequence.format : output.format),
+      settings: options.settings || state,
+      diagnostics: options.diagnostics || renderer?.getDiagnostics?.() || {},
+      rendererAvailable: options.rendererAvailable ?? Boolean(renderer),
+      hasFinishes: options.hasFinishes ?? hasFinishes,
+    });
   }
 
   function restoreState(next, nextBoardAppearance = undefined) {
@@ -1242,6 +1422,8 @@ export function createRenderApp({
     syncController?.abort();
     renderer?.dispose();
     renderer = null;
+    renderContextState = 'initializing';
+    renderContextRecoveryCount = 0;
   }
 
   async function exportImage(format) {
@@ -1250,6 +1432,12 @@ export function createRenderApp({
     const controller = new AbortController();
     exportController = controller;
     const exportState = getState();
+    const preflight = runExportPreflight({ kind: 'image', format });
+    if (preflight.status === 'blocked') {
+      elements.status.textContent = t('renderPreflightBlocked');
+      exportController = null;
+      return false;
+    }
     setBusy(true);
     elements.status.textContent = t('renderExporting');
     try {
@@ -1328,6 +1516,12 @@ export function createRenderApp({
     const controller = new AbortController();
     exportController = controller;
     const exportState = getState();
+    const preflight = runExportPreflight({ kind: 'glb', format: 'glb' });
+    if (preflight.status === 'blocked') {
+      elements.status.textContent = t('renderPreflightBlocked');
+      exportController = null;
+      return false;
+    }
     setBusy(true);
     elements.status.textContent = t('renderGlbExporting');
     try {
@@ -1377,6 +1571,12 @@ export function createRenderApp({
     const controller = new AbortController();
     exportController = controller;
     const exportState = getState();
+    const preflight = runExportPreflight({ kind: 'sequence', format: exportState.output.sequence.format });
+    if (preflight.status === 'blocked') {
+      elements.status.textContent = t('renderPreflightBlocked');
+      exportController = null;
+      return false;
+    }
     setBusy(true);
     elements.status.textContent = t('renderTurntableExporting');
     try {
@@ -1659,6 +1859,8 @@ export function createRenderApp({
   elements.exportForm?.addEventListener('submit', async (event) => {
     if (event.submitter?.value !== 'confirm') return;
     event.preventDefault();
+    const preflight = updateExportPreflight();
+    if (preflight?.status === 'blocked') return;
     const format = elements.exportFormat.value;
     const next = clone(state);
     next.output.format = format;
@@ -1719,11 +1921,26 @@ export function createRenderApp({
       if (!active) return Promise.resolve(false);
       return syncScene({ force: true });
     },
+    whenStable,
+    runExportPreflight,
     render() {
       renderer?.render();
     },
     getDiagnostics() {
-      return renderer?.getDiagnostics() || { panels: 0, geometries: 0, textures: 0, calls: 0 };
+      const diagnostics = renderer?.getDiagnostics() || {
+        backend: 'WebGL2',
+        contextState: active ? (renderContextState === 'initializing' ? 'unavailable' : renderContextState) : 'initializing',
+        panels: 0,
+        geometries: 0,
+        textures: 0,
+        calls: 0,
+      };
+      const normalized = {
+        ...diagnostics,
+        contextState: renderContextState === 'initializing' ? diagnostics.contextState : renderContextState,
+        contextRecoveryCount: Math.max(diagnostics.contextRecoveryCount || 0, renderContextRecoveryCount),
+      };
+      return normalized.health ? normalized : { ...normalized, health: getRenderHealth(normalized) };
     },
     dispose() {
       if (disposed) return;

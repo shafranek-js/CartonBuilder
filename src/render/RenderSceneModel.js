@@ -1,5 +1,6 @@
 import { sanitizeRenderSettings } from './RenderSettings.js';
 import { sanitizeBoardAppearance } from './BoardAppearance.js';
+import { sanitizeArtworkFinish } from './FinishConfig.js';
 
 function clone(value) {
   return structuredClone(value);
@@ -18,6 +19,7 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
       visible: true,
       originalBlob: entry.originalBlob || null,
       previewBlob: entry.previewBlob || null,
+      ...sanitizeArtworkFinish(entry),
     }));
   if (!visibleArtworks.length) {
     throw new Error('At least one visible artwork is required for Render.');
@@ -63,6 +65,10 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
 
 export function getRenderArtworkSignature(sceneModel) {
   return JSON.stringify({
-    artworks: sceneModel.artworks.map((entry) => entry.model.toJSON()),
+    artworks: sceneModel.artworks.map((entry) => ({
+      artwork: entry.model.toJSON(),
+      outputRole: entry.outputRole,
+      finish: entry.finish,
+    })),
   });
 }

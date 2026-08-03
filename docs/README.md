@@ -143,4 +143,5 @@ Canonical for: <scope, or "not canonical">
 - [ ] schema/archive changes имеют migration notes;
 - [ ] Planned функции не выдаются за текущие;
 - [ ] Historical/Research документы явно помечены как ненормативные;
+- [ ] Render preflight, diagnostics health and visual baselines pass;
 - [ ] `npm run test:unit`, `npm run build` и нужные E2E прошли.
