@@ -1,25 +1,20 @@
-name: Deploy to GitHub Pages
+name: CartonBuilder Quality
 
 on:
+  pull_request:
   push:
     branches:
       - master
-  workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  quality:
     runs-on: ubuntu-latest
 
     steps:
@@ -35,26 +30,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Run unit tests
         run: npm run test:unit
 
       - name: Build
         run: npm run build
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
       - name: Run Render reliability browser gate
         run: npm run test:visual -- --workers=1
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v6
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: ./dist
-
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5

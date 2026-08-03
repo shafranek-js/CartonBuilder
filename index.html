@@ -395,6 +395,37 @@
                 </label>
                 <p class="quality-summary" id="artworkQualitySummary" role="status"></p>
               </div>
+              <section class="artwork-finish-section" id="artworkFinishSection" hidden>
+                <h3 data-i18n="artworkFinishHeading">Presentation finish</h3>
+                <label class="field"><span data-i18n="artworkFinishRole">Output</span>
+                  <select id="artworkFinishRole" aria-label="Artwork output role" data-i18n-aria-label="artworkFinishRole">
+                    <option value="print" data-i18n="artworkFinishPrint">Print artwork</option>
+                    <option value="finish" data-i18n="artworkFinishMask">Finish mask only</option>
+                    <option value="print-and-finish" data-i18n="artworkFinishPrintAndFinish">Print + finish</option>
+                  </select>
+                </label>
+                <label class="field"><span data-i18n="artworkFinishType">Finish</span>
+                  <select id="artworkFinishType" aria-label="Finish type" data-i18n-aria-label="artworkFinishType">
+                    <option value="spot-gloss" data-i18n="artworkFinishSpotGloss">Spot gloss varnish</option>
+                    <option value="foil" data-i18n="artworkFinishFoil">Metallic foil</option>
+                    <option value="emboss" data-i18n="artworkFinishEmboss">Emboss</option>
+                    <option value="deboss" data-i18n="artworkFinishDeboss">Deboss</option>
+                  </select>
+                </label>
+                <label class="field"><span data-i18n="artworkFinishMaskChannel">Mask source</span>
+                  <select id="artworkFinishMaskChannel" aria-label="Finish mask source" data-i18n-aria-label="artworkFinishMaskChannel">
+                    <option value="auto" data-i18n="artworkFinishMaskAuto">Auto</option>
+                    <option value="alpha" data-i18n="artworkFinishMaskAlpha">Transparency</option>
+                    <option value="luminance" data-i18n="artworkFinishMaskLuminance">Brightness</option>
+                  </select>
+                </label>
+                <label class="field"><span data-i18n="artworkFinishInvert">Invert mask</span><input id="artworkFinishInvert" type="checkbox"></label>
+                <div class="light-control"><span data-i18n="artworkFinishIntensity">Intensity</span><input id="artworkFinishIntensity" type="range" min="0" max="100" step="1" value="100"><output id="artworkFinishIntensityValue">100%</output></div>
+                <label class="field"><span data-i18n="artworkFinishFoilColor">Foil color</span><input id="artworkFinishColor" type="color" value="#d4af37"></label>
+                <div class="light-control"><span data-i18n="artworkFinishRoughness">Finish roughness</span><input id="artworkFinishRoughness" type="range" min="4" max="80" step="1" value="22"><output id="artworkFinishRoughnessValue">22%</output></div>
+                <div class="light-control"><span data-i18n="artworkFinishReliefStrength">Relief strength</span><input id="artworkFinishRelief" type="range" min="2" max="100" step="1" value="35"><output id="artworkFinishReliefValue">35%</output></div>
+                <p class="quality-help" data-i18n="artworkFinishHelp">White or opaque areas receive the finish. Duplicate a layer to combine multiple finishes.</p>
+              </section>
               <div class="button-grid icon-button-grid">
                 <button type="button" class="tool-icon-btn" id="fitArtworkButton" disabled title="Fit artwork to dieline" data-i18n-title="fitDieline" aria-label="Fit artwork to dieline" data-i18n-aria-label="fitDieline">
                   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -866,6 +897,12 @@
               </label>
             </section>
 
+            <section class="tool-section render-finishes-section">
+              <h2 data-i18n="renderFinishes">Finishes</h2>
+              <p class="quality-help" data-i18n="renderFinishesHelp">Assigned artwork layers are rendered as physical presentation finishes.</p>
+              <div id="renderFinishSummary" class="render-finish-summary" role="status"></div>
+            </section>
+
             <section class="tool-section">
               <h2 data-i18n="renderBoardAppearance">Board appearance</h2>
               <div class="light-control"><span data-i18n="renderThickness">Thickness</span><input id="renderBoardThickness" type="range" min="0.05" max="2" step="0.01" value="0.35"><output id="renderBoardThicknessValue">0.35 mm</output></div>
@@ -1013,9 +1050,11 @@
             <label class="field"><span data-i18n="renderGlbTextureSize">Texture size</span><select id="renderExportGlbTextureSize"><option value="auto" data-i18n="renderExportAuto">Auto</option><option value="1024">1024 px</option><option value="2048">2048 px</option><option value="4096">4096 px</option></select></label>
             <label class="field"><span data-i18n="renderGlbMaterialMode">Materials</span><select id="renderExportGlbMaterialMode"><option value="full-pbr" data-i18n="renderGlbFullPbr">Full PBR</option><option value="basic-compatibility" data-i18n="renderGlbCompatibility">Basic compatibility</option></select></label>
             <label class="field"><span data-i18n="renderGlbIncludeCamera">Include current camera</span><input id="renderExportGlbIncludeCamera" type="checkbox" checked></label>
+            <p class="render-export-warning" id="renderExportGlbWarning" role="status" hidden data-i18n="renderGlbCompatibilityWarning">Basic compatibility keeps print artwork but simplifies packaging finishes for viewers with limited PBR support.</p>
           </div>
           <p class="render-export-summary" id="renderExportSummary"></p>
-          <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Cancel</button><button class="primary-action" value="confirm" data-i18n="renderExportAction">Export</button></div>
+          <div id="renderExportPreflight" class="render-export-preflight" role="status" aria-live="polite"></div>
+          <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Cancel</button><button class="primary-action" id="renderExportConfirm" value="confirm" data-i18n="renderExportAction">Export</button></div>
         </form>
       </dialog>
 

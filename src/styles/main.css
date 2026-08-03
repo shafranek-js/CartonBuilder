@@ -1995,6 +1995,18 @@ dialog button {
   display: none;
 }
 
+.artwork-finish-badge {
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #1e1e1e;
+  background: var(--accent, #b2d235);
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .layer-target-circle {
   display: inline-flex;
   align-items: center;
@@ -2721,6 +2733,24 @@ dialog button {
   max-width: 100%;
 }
 
+.artwork-finish-section {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border, #3a3a3a);
+}
+
+.artwork-finish-section h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.artwork-finish-section .light-control {
+  margin-bottom: 0;
+}
+
 .quality-summary,
 .quality-help {
   margin: 0;
@@ -2881,6 +2911,35 @@ dialog input {
 .render-export-summary {
   min-height: 20px;
   color: var(--muted-text, #66716c);
+}
+
+.render-export-warning {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent, #9bbd3b);
+  color: var(--muted-text, #66716c);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.render-export-preflight {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent, #9bbd3b);
+  color: var(--muted-text, #66716c);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.render-export-preflight.is-warning {
+  border-left-color: #d7a63a;
+}
+
+.render-export-preflight.is-blocked {
+  border-left-color: #c75a5a;
+  color: #f0b2b2;
 }
 
 .toast {
@@ -3087,6 +3146,39 @@ dialog input {
 .render-artwork-quality-list {
   display: grid;
   gap: 6px;
+}
+
+.render-finish-summary {
+  display: grid;
+  gap: 7px;
+}
+
+.render-finish-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px minmax(72px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.render-finish-row select,
+.render-finish-row input[type="range"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.render-finish-row input[type="color"] {
+  width: 28px;
+  min-width: 28px;
+  height: 24px;
+  padding: 1px;
+}
+
+.render-finish-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text, #fff);
+  font-size: 11px;
 }
 
 .render-artwork-quality-name {

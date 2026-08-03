@@ -10,13 +10,12 @@
 ## 1. Состояние репозитория
 
 - Рабочая директория: `C:\Projects\CartonBuilder`.
-- Текущая ветка: `master`.
-- Последний коммит на момент handoff: `1c2e6f4 split render settings across side panels`.
-- Ветка `master` синхронизирована с `origin/master`; рабочее дерево чистое.
-- GitHub Pages опубликован из этого коммита после успешного workflow `Deploy to
-  GitHub Pages` (run `30767937814`).
-- Unit-тесты на момент handoff проходят: 39 test files, 188 tests. Render E2E:
-  5 passed; Preview 3D E2E: 7 passed.
+- Текущая ветка: `codex/wave4-packaging-finishes`.
+- Базовый коммит: `0ec0f0b Merge production 3D export workflow`.
+- Рабочее дерево содержит незакоммиченные изменения Wave 4 и Wave 5; их нельзя
+  смешивать с посторонними пользовательскими изменениями.
+- Wave 5 добавляет Render preflight, health diagnostics, settled lifecycle API,
+  PMREM cleanup, deterministic screenshots и CI quality workflow.
 
 Перед началом работы проверить:
 
@@ -37,9 +36,10 @@ git log -5 --oneline
    PNG/JPG/SVG/PDF и self-contained 3D HTML export. Настройки разделены на левую
    панель Scene/Export и правую панель Camera/Lighting/Model; обе панели имеют
    независимую прокрутку.
-4. **Render** — отдельная presentation-сцена полностью закрытой коробки и
-   PNG/JPG still export на 2048/4096 px по длинной стороне. Настройки разделены
-   на левую панель Output и правую панель Lighting/Effects вокруг viewport.
+4. **Render** — отдельная presentation-сцена полностью закрытой коробки,
+   masked packaging finishes, export preflight/health diagnostics и PNG/JPG,
+   turntable или GLB export. Настройки разделены на левую панель Output и
+   правую панель Lighting/Effects вокруг viewport.
 
 Step 3 и Step 4 намеренно разделены. Preview остаётся техническим и быстрым;
 Render владеет presentation-сценой и тяжёлыми эффектами.
@@ -55,7 +55,8 @@ Render владеет presentation-сценой и тяжёлыми эффект
 - `src/preview3d/` — lazy Three.js technical renderer, fold graph, texture
   composer, panel picking, Preview scene presets and lifecycle.
 - `src/render/` — Render settings, solid presentation geometry, Render scene
-  model, post-processing, quality states, named Render presets and still export.
+  model, post-processing, quality states, named Render presets, preflight,
+  diagnostics and still/turntable/GLB export.
 - `src/export/` — raster, SVG, PDF and preflight adapters.
 - `src/ui/` — box editor, menus, settings, theme and shared UI controls.
 - `src/main.js` — workflow navigation, app wiring, autosave callbacks and
@@ -170,15 +171,13 @@ WebGPU, CMYK/ICC/Pantone/overprint и print-proof validation находятся 
 
 ## 8. Persistence и версии
 
-- Current project schema: **v6** (`src/project/projectSchema.js`).
-- v4 → v5 migration rebases legacy cropped artwork and corresponding history
-  states to the visual-equivalent 100% baseline.
-- v5 → v6 migration adds per-artwork Preview/Render quality preferences and
-  normalizes legacy cropped artwork to the same visual-equivalent baseline.
-- `.carton` archive manifest export version: **2**.
-- Legacy manifest version 1 поддерживается на import.
-- Current archive stores arrays of `assets/artwork-{index}.*` and
-  `preview/artwork-{index}.png`.
+- Current project schema: **v10** (`src/project/projectSchema.js`).
+- v2 → v10 migrations add per-artwork quality/finish roles and Render board
+  appearance while preserving artwork, box, history and view state.
+- `.carton` archive manifest export version: **3**.
+- Legacy manifest versions 1 and 2 поддерживаются на import.
+- Current archive stores arrays of artwork assets/previews and optional Render
+  background assets addressed by SHA-256 asset ID.
 - IndexedDB stores: `projects`, `presets`, `scenePresets`, `renderPresets`.
 - Project snapshot сохраняет canonical artwork/box state и Render settings;
   GPU handles, renderer diagnostics, progress and other transient Three.js state
@@ -196,6 +195,8 @@ npm install
 npm run test:unit
 npm run build
 npm run test:e2e
+npm run test:e2e:ci
+npm run test:visual
 npm run test:all
 npm run dev
 ```
@@ -208,8 +209,8 @@ npm run dev
   right-button canvas pan and crop history;
 - `tests/e2e/preview3d.spec.js` — Preview lifecycle, scene presets, WebGL,
   resource cleanup and HTML export;
-- `tests/e2e/render.spec.js` — Render navigation, settings persistence and still
-  export;
+- `tests/e2e/render.spec.js` — Render navigation, settings persistence, preflight,
+  deterministic baselines, context recovery, resource stress and export;
 - `tests/unit/ArtworkModel.test.js`, `ArtworkRenderer.test.js` — transform/crop
   invariants;
 - `tests/unit/projectSchema.test.js`, `projectArchive.test.js` — migrations and
@@ -219,8 +220,8 @@ npm run dev
 Для визуальной проверки использовать desktop Chromium/Edge примерно от
 1024×720. Проверять отдельно: Crop Apply → Undo → Redo, Clear после последующих
 transformations, side handles при zoom, non-proportional resize, dimensions без
-fit artwork, Preview → Render isolation, transparent PNG alpha и повторные 2K/4K
-exports.
+fit artwork, Preview → Render isolation, Export preflight, Diagnostics health,
+transparent PNG alpha и повторные 2K/4K exports.
 
 ## 10. Известное состояние документации
 
@@ -240,7 +241,8 @@ runtime-документы:
 3. Разделить фиксированные системные layers и динамические artwork sublayers.
 4. Добавить right-button canvas pan и side crop handles.
 5. Описать различие Box Dimensions на Create Box и Artwork steps.
-6. Добавить Settings, File/Edit menus, Box Presets, scene presets и diagnostics.
+6. Уточнить в Implemented-документах Settings, File/Edit menus, Box Presets,
+   scene presets, Render preflight и diagnostics.
 7. Устранить противоречие README о material thickness.
 
 `docs/0`, `docs/1`, `docs/2`, `docs/3` answers, `docs/5`, `docs/5a`, `docs/6`,

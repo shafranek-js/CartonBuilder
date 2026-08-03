@@ -85,6 +85,24 @@ describe('RenderSceneModel', () => {
     expect(getRenderArtworkSignature(first)).not.toBe(getRenderArtworkSignature(reversed));
   });
 
+  it('includes packaging finish state in the Render signature', () => {
+    const box = completeBox();
+    const entry = artwork('finish');
+    const print = buildRenderSceneModel({ boxModel: box, artworks: [entry] });
+    const finish = buildRenderSceneModel({
+      boxModel: box,
+      artworks: [{
+        ...entry,
+        outputRole: 'finish',
+        finish: { type: 'foil', maskChannel: 'alpha', foilColor: '#d4af37', intensity: 0.8 },
+      }],
+    });
+
+    expect(finish.artworks[0].outputRole).toBe('finish');
+    expect(finish.artworks[0].finish.type).toBe('foil');
+    expect(getRenderArtworkSignature(finish)).not.toBe(getRenderArtworkSignature(print));
+  });
+
   it('requires at least one visible artwork', () => {
     expect(() => buildRenderSceneModel({
       boxModel: completeBox(),

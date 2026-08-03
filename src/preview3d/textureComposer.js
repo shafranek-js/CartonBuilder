@@ -1,4 +1,5 @@
 import { rasterizeArtwork } from '../artwork/artworkRasterizer.js';
+import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 
 export const PREVIEW_TEXTURE_LIMITS = Object.freeze({
   maxEdge: 4096,
@@ -97,10 +98,10 @@ function drawPanelBleed(source, target, panels, bounds, pixelsPerMm, bleedPixels
   }
 }
 
-function drawArtwork(context, entry, bitmap) {
+function drawArtwork(context, entry, bitmap, { includeOpacity = true } = {}) {
   const artwork = entry.model;
   context.save();
-  context.globalAlpha = artwork.opacity;
+  context.globalAlpha = includeOpacity ? artwork.opacity : 1;
   context.translate(artwork.centerXmm, artwork.centerYmm);
   context.rotate(artwork.rotation * Math.PI / 180);
   if (artwork.crop && artwork.crop.width > 0 && artwork.crop.height > 0) {
@@ -123,6 +124,168 @@ function drawArtwork(context, entry, bitmap) {
   context.restore();
 }
 
+function isPrintEntry(entry) {
+  return entry?.outputRole !== 'finish';
+}
+
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function hexToRgb(hex) {
+  const value = String(hex || '#d4af37').slice(1);
+  return [
+    Number.parseInt(value.slice(0, 2), 16) || 0,
+    Number.parseInt(value.slice(2, 4), 16) || 0,
+    Number.parseInt(value.slice(4, 6), 16) || 0,
+  ];
+}
+
+function baseRoughnessForProfile(profile) {
+  return profile === 'uncoated' ? 0.94 : profile === 'matte' ? 0.82 : profile === 'gloss' ? 0.46 : 0.86;
+}
+
+function drawTransformedArtwork(context, entry, bitmap, bounds, pixelsPerMm, panels, { includeOpacity = false } = {}) {
+  context.save();
+  context.scale(pixelsPerMm, pixelsPerMm);
+  context.translate(-bounds.minX, -bounds.minY);
+  drawPanelUnion(context, panels);
+  context.clip();
+  drawArtwork(context, entry, bitmap, { includeOpacity });
+  context.restore();
+}
+
+function readMaskPixels({ entry, bitmap, width, height, bounds, pixelsPerMm, panels, documentRef }) {
+  const canvas = createCanvas(width, height, documentRef);
+  const context = canvas.getContext('2d', { alpha: true });
+  if (!context?.getImageData) return null;
+  context.clearRect?.(0, 0, width, height);
+  drawTransformedArtwork(context, entry, bitmap, bounds, pixelsPerMm, panels);
+  const image = context.getImageData(0, 0, width, height).data;
+  const { maskChannel, invert } = sanitizeArtworkFinish(entry).finish;
+  const values = new Uint8Array(width * height);
+  for (let index = 0, pixel = 0; index < image.length; index += 4, pixel += 1) {
+    const alpha = image[index + 3] / 255;
+    const luminance = (image[index] * 0.2126 + image[index + 1] * 0.7152 + image[index + 2] * 0.0722) / 255;
+    const useAlpha = maskChannel === 'alpha' || (maskChannel === 'auto' && alpha < 0.999);
+    const value = useAlpha ? alpha : luminance * alpha;
+    // Inversion applies inside the artwork mask only. Transparent pixels are
+    // outside the supplied finish layer and must stay zero, otherwise an
+    // inverted mask would coat the entire dieline/background.
+    const normalized = alpha <= 0 ? 0 : invert ? 1 - value : value;
+    values[pixel] = clampByte(normalized * 255);
+  }
+  canvas.width = 1;
+  canvas.height = 1;
+  return values;
+}
+
+function writeMapCanvas(values, width, height, documentRef, panels, bounds, pixelsPerMm, bleedPixels, channels = 1) {
+  const rawCanvas = createCanvas(width, height, documentRef);
+  const rawContext = rawCanvas.getContext('2d', { alpha: false });
+  if (!rawContext?.putImageData) return rawCanvas;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let index = 0; index < width * height; index += 1) {
+    const value = values[index];
+    const offset = index * 4;
+    if (channels === 3) {
+      data[offset] = value[0];
+      data[offset + 1] = value[1];
+      data[offset + 2] = value[2];
+    } else {
+      data[offset] = value;
+      data[offset + 1] = value;
+      data[offset + 2] = value;
+    }
+    data[offset + 3] = 255;
+  }
+  const imageData = rawContext.createImageData
+    ? rawContext.createImageData(width, height)
+    : typeof ImageData === 'function' ? new ImageData(data, width, height) : null;
+  if (!imageData) return rawCanvas;
+  imageData.data.set(data);
+  rawContext.putImageData(imageData, 0, 0);
+  const outputCanvas = createCanvas(width, height, documentRef);
+  const outputContext = outputCanvas.getContext('2d', { alpha: false });
+  drawPanelBleed(rawCanvas, outputContext, panels, bounds, pixelsPerMm, bleedPixels);
+  outputContext.drawImage(rawCanvas, 0, 0);
+  return outputCanvas;
+}
+
+async function composeFinishMaps({
+  entries,
+  bitmaps,
+  width,
+  height,
+  bounds,
+  pixelsPerMm,
+  panels,
+  documentRef,
+  textureLimits,
+  materialProfile,
+  signal,
+}) {
+  const hasFinishes = entries.some((entry) => entry.outputRole !== 'print' && entry.finish);
+  if (!hasFinishes) return null;
+  const pixelCount = width * height;
+  const clearcoat = new Uint8Array(pixelCount);
+  const clearcoatRoughness = new Uint8Array(pixelCount).fill(255);
+  const metalness = new Uint8Array(pixelCount);
+  const roughness = new Uint8Array(pixelCount).fill(clampByte(baseRoughnessForProfile(materialProfile) * 255));
+  const heightField = new Float32Array(pixelCount);
+  const foilColors = new Array(pixelCount).fill(null);
+  const maskEntries = entries.map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry.outputRole !== 'print' && entry.finish);
+
+  for (const { entry, index } of maskEntries) {
+    throwIfAborted(signal);
+    const finish = sanitizeArtworkFinish(entry).finish;
+    const mask = readMaskPixels({ entry, bitmap: bitmaps[index], width, height, bounds, pixelsPerMm, panels, documentRef });
+    if (!mask) continue;
+    const intensity = Number(finish.intensity) || 0;
+    const foilRgb = hexToRgb(finish.foilColor);
+    for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+      const value = clampByte(mask[pixel] * intensity);
+      if (!value) continue;
+      if (finish.type === 'spot-gloss') {
+        clearcoat[pixel] = Math.max(clearcoat[pixel], value);
+        clearcoatRoughness[pixel] = Math.min(clearcoatRoughness[pixel], clampByte(finish.foilRoughness * 255));
+      } else if (finish.type === 'foil') {
+        metalness[pixel] = Math.max(metalness[pixel], value);
+        roughness[pixel] = Math.min(roughness[pixel], clampByte(finish.foilRoughness * 255));
+        foilColors[pixel] = [...foilRgb, value];
+      } else {
+        const sign = finish.type === 'deboss' ? -1 : 1;
+        heightField[pixel] += sign * (value / 255) * finish.reliefStrength;
+      }
+    }
+  }
+
+  const normal = new Array(pixelCount);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixel = y * width + x;
+      const left = heightField[y * width + Math.max(0, x - 1)];
+      const right = heightField[y * width + Math.min(width - 1, x + 1)];
+      const up = heightField[Math.max(0, y - 1) * width + x];
+      const down = heightField[Math.min(height - 1, y + 1) * width + x];
+      normal[pixel] = [
+        clampByte(128 + (left - right) * 255),
+        clampByte(128 + (up - down) * 255),
+        255,
+      ];
+    }
+  }
+  return {
+    clearcoat: writeMapCanvas(clearcoat, width, height, documentRef, panels, bounds, pixelsPerMm, textureLimits.bleedPixels),
+    clearcoatRoughness: writeMapCanvas(clearcoatRoughness, width, height, documentRef, panels, bounds, pixelsPerMm, textureLimits.bleedPixels),
+    metalness: writeMapCanvas(metalness, width, height, documentRef, panels, bounds, pixelsPerMm, textureLimits.bleedPixels),
+    roughness: writeMapCanvas(roughness, width, height, documentRef, panels, bounds, pixelsPerMm, textureLimits.bleedPixels),
+    normal: writeMapCanvas(normal, width, height, documentRef, panels, bounds, pixelsPerMm, textureLimits.bleedPixels, 3),
+    foilColors,
+  };
+}
+
 export async function composeArtworkTexture({
   boxModel,
   artworks,
@@ -134,6 +297,8 @@ export async function composeArtworkTexture({
   useNativeSourceResolution = false,
   getEntryTargetDpi = null,
   rasterize = rasterizeArtwork,
+  includeFinishMaps = false,
+  materialProfile = 'matte',
   signal,
 }) {
   const entries = (artworks || [])
@@ -201,10 +366,40 @@ export async function composeArtworkTexture({
     rawContext.fillStyle = '#ffffff';
     rawContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
     for (let index = 0; index < entries.length; index += 1) {
-      drawArtwork(rawContext, entries[index], bitmaps[index]);
+      if (isPrintEntry(entries[index])) drawArtwork(rawContext, entries[index], bitmaps[index]);
     }
     rawContext.restore();
     throwIfAborted(signal);
+
+    const materialMaps = includeFinishMaps
+      ? await composeFinishMaps({
+        entries,
+        bitmaps,
+        width,
+        height,
+        bounds,
+        pixelsPerMm,
+        panels,
+        documentRef,
+        textureLimits,
+        materialProfile,
+        signal,
+      })
+      : null;
+
+    if (materialMaps?.foilColors && rawContext.getImageData && rawContext.putImageData) {
+      const base = rawContext.getImageData(0, 0, width, height);
+      for (let pixel = 0; pixel < materialMaps.foilColors.length; pixel += 1) {
+        const foil = materialMaps.foilColors[pixel];
+        if (!foil) continue;
+        const offset = pixel * 4;
+        const alpha = foil[3] / 255;
+        base.data[offset] = clampByte(base.data[offset] * (1 - alpha) + foil[0] * alpha);
+        base.data[offset + 1] = clampByte(base.data[offset + 1] * (1 - alpha) + foil[1] * alpha);
+        base.data[offset + 2] = clampByte(base.data[offset + 2] * (1 - alpha) + foil[2] * alpha);
+      }
+      rawContext.putImageData(base, 0, 0);
+    }
 
     drawPanelBleed(
       rawCanvas,
@@ -221,6 +416,7 @@ export async function composeArtworkTexture({
       height,
       pixelsPerMm,
       dpi: pixelsPerMm * 25.4,
+      materialMaps,
     };
   } finally {
     for (const bitmap of bitmaps) bitmap?.close?.();

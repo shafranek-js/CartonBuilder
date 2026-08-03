@@ -2,6 +2,18 @@ import { BoxScene } from '../preview3d/BoxScene.js';
 import { cloneBoardAppearance, sanitizeBoardAppearance } from './BoardAppearance.js';
 import { RenderPostProcessing } from './RenderPostProcessing.js';
 import { RenderQualityManager } from './RenderQualityManager.js';
+import { getRenderHealth } from './renderPreflight.js';
+
+function getFinishSummary(sceneModel) {
+  return (sceneModel?.artworks || [])
+    .filter((entry) => entry?.visible !== false && entry?.outputRole !== 'print' && entry?.finish)
+    .map((entry, index) => ({
+      index,
+      type: entry.finish.type,
+      outputRole: entry.outputRole,
+      maskChannel: entry.finish.maskChannel,
+    }));
+}
 
 export class WebGLCartonRenderer {
   constructor({
@@ -10,6 +22,7 @@ export class WebGLCartonRenderer {
     boxModel,
     sceneModel = null,
     textureCanvas,
+    materialMaps = null,
     renderSettings,
     boardAppearance,
     backgroundAsset = null,
@@ -19,9 +32,13 @@ export class WebGLCartonRenderer {
     onCameraChange = () => {},
   }) {
     this.sceneModel = sceneModel;
+    this.finishSummary = getFinishSummary(sceneModel);
     this.windowRef = windowRef;
     this.backgroundAsset = backgroundAsset || null;
     this.qualityState = 'interactive';
+    this.contextState = 'ready';
+    this.contextRecoveryCount = 0;
+    this.lastExport = null;
     this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
     this.effects = structuredClone(renderSettings.effects);
     this.settleTimer = null;
@@ -30,6 +47,7 @@ export class WebGLCartonRenderer {
       container,
       boxModel,
       textureCanvas,
+      materialMaps,
       foldProgress: 1,
       cameraProjection: renderSettings.camera.projection,
       scenePreset: 'studio',
@@ -61,9 +79,17 @@ export class WebGLCartonRenderer {
       materialProfile: renderSettings.material.profile,
       geometryMode: 'solid',
       boardAppearance: this.boardAppearance,
+      finishSummary: this.finishSummary,
       windowRef,
-      onContextLost,
-      onContextRestored,
+      onContextLost: () => {
+        this.contextState = 'lost';
+        onContextLost();
+      },
+      onContextRestored: () => {
+        this.contextState = 'restored';
+        this.contextRecoveryCount += 1;
+        onContextRestored();
+      },
       onCameraChange,
     });
     this.scene.setToneMapping('neutral');
@@ -97,6 +123,8 @@ export class WebGLCartonRenderer {
 
   async initialize(sceneModel = this.sceneModel) {
     this.sceneModel = sceneModel;
+    this.finishSummary = getFinishSummary(sceneModel);
+    this.scene.setFinishSummary?.(this.finishSummary);
     this.scene.render();
     return this;
   }
@@ -184,8 +212,13 @@ export class WebGLCartonRenderer {
     return this.scene.resetView(options);
   }
 
-  replaceArtwork(textureCanvas) {
-    this.scene.replaceTexture(textureCanvas);
+  replaceArtwork(textureCanvas, materialMaps = null, sceneModel = null) {
+    if (sceneModel) {
+      this.sceneModel = sceneModel;
+      this.finishSummary = getFinishSummary(sceneModel);
+      this.scene.setFinishSummary?.(this.finishSummary);
+    }
+    this.scene.replaceTexture(textureCanvas, materialMaps);
   }
 
   setBoardAppearance(boardAppearance) {
@@ -238,6 +271,7 @@ export class WebGLCartonRenderer {
 
   renderToPixels(options) {
     const previousQuality = this.qualityState;
+    const startedAt = this.windowRef.performance?.now?.() ?? Date.now();
     this.qualityManager.beginExport();
     const exportOptions = {
       ...options,
@@ -249,8 +283,16 @@ export class WebGLCartonRenderer {
         // transparent black even though the on-screen composer is rendered.
         // If readback contains no pixels at all, fall back to the same scene
         // without post-processing so PNG/JPG export remains usable.
-        if (result.pixels.some((value) => value !== 0)) return result;
-        return this.scene.renderToPixels({ ...options, renderOverride: null });
+        const output = result.pixels.some((value) => value !== 0)
+          ? result
+          : await this.scene.renderToPixels({ ...options, renderOverride: null });
+        const endedAt = this.windowRef.performance?.now?.() ?? Date.now();
+        this.lastExport = {
+          width: output.width,
+          height: output.height,
+          durationMs: Math.max(0, Math.round(endedAt - startedAt)),
+        };
+        return output;
       })
       .finally(() => {
         this.qualityManager.endExport(previousQuality === 'export' ? 'settled' : previousQuality);
@@ -271,7 +313,11 @@ export class WebGLCartonRenderer {
   }
 
   getDiagnostics() {
-    return {
+    const diagnostics = {
+      backend: 'WebGL2',
+      contextState: this.contextState,
+      contextRecoveryCount: this.contextRecoveryCount,
+      lastExport: this.lastExport ? { ...this.lastExport } : null,
       ...this.scene.getResourceInfo(),
       qualityState: this.qualityState,
       geometryMode: this.scene.geometryMode,
@@ -280,6 +326,8 @@ export class WebGLCartonRenderer {
       ...this.postProcessing.getDiagnostics(),
       quality: this.qualityManager.getDiagnostics(),
     };
+    diagnostics.health = getRenderHealth(diagnostics);
+    return diagnostics;
   }
 
   dispose() {

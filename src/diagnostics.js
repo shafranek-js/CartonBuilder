@@ -18,10 +18,10 @@ export function recordDiagnostic(type, detail = {}) {
   if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
 }
 
-export function createDiagnosticsBlob({ boxModel, artwork, workflowStep, windowRef = window }) {
+export function createDiagnosticsBlob({ boxModel, artwork, workflowStep, renderDiagnostics = null, windowRef = window }) {
   const payload = {
     format: 'carton-builder-diagnostics',
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     environment: {
       browser: browserFamily(windowRef.navigator.userAgent),
@@ -32,12 +32,13 @@ export function createDiagnosticsBlob({ boxModel, artwork, workflowStep, windowR
       },
     },
     workflowStep,
-    box: {
+    render: renderDiagnostics ? structuredClone(renderDiagnostics) : null,
+    box: boxModel ? {
       dimensions: { ...boxModel.dimensions },
       panelCount: boxModel.panelCount,
       complete: boxModel.isComplete,
-    },
-    artwork: artwork.hasArtwork ? {
+    } : null,
+    artwork: artwork?.hasArtwork ? {
       mimeType: artwork.source.mimeType,
       widthPx: artwork.source.widthPx,
       heightPx: artwork.source.heightPx,

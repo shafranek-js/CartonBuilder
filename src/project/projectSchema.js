@@ -10,8 +10,9 @@ import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
+import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 9;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 10;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -197,6 +198,44 @@ MIGRATIONS.set(8, (snapshot) => ({
   }),
 }));
 
+function migrateArtworkFinishEntry(entry) {
+  if (!entry || typeof entry !== 'object') return entry;
+  return { ...entry, ...sanitizeArtworkFinish(entry) };
+}
+
+function migrateEditorArtworkFinishes(state) {
+  if (!state || typeof state !== 'object' || !Array.isArray(state.artworks)) return state;
+  return {
+    ...state,
+    artworks: state.artworks.map(migrateArtworkFinishEntry),
+  };
+}
+
+function migrateHistoryArtworkFinishes(history) {
+  if (!history || typeof history !== 'object') return history;
+  const migrateStack = (stack) => (Array.isArray(stack)
+    ? stack.map((entry) => ({
+      ...entry,
+      before: migrateEditorArtworkFinishes(entry.before),
+      after: migrateEditorArtworkFinishes(entry.after),
+    }))
+    : []);
+  return {
+    ...history,
+    undo: migrateStack(history.undo),
+    redo: migrateStack(history.redo),
+  };
+}
+
+MIGRATIONS.set(9, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 10,
+  artworks: Array.isArray(snapshot.artworks)
+    ? snapshot.artworks.map(migrateArtworkFinishEntry)
+    : snapshot.artworks,
+  history: migrateHistoryArtworkFinishes(snapshot.history),
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -247,6 +286,7 @@ export function migrateProjectSnapshot(input) {
       throw new AppError('projectIncomplete');
     }
   }
+  snapshot.artworks = snapshot.artworks.map(migrateArtworkFinishEntry);
   if (
     !Number.isInteger(snapshot.activeArtworkIndex)
     || snapshot.activeArtworkIndex < -1

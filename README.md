@@ -11,8 +11,9 @@ The current workflow is:
 2. **Place Artwork** — load PNG, JPEG, or one page of a PDF; move, scale, rotate,
    inspect effective DPI, and control fixed system layers.
 3. **Preview** — inspect the clipped 2D proof and a folded technical 3D carton.
-4. **Render** — create a reproducible closed-carton presentation and export PNG
-   or JPG stills at 2048 or 4096 pixels on the long edge.
+4. **Render** — create a reproducible closed-carton presentation, apply masked
+   packaging finishes, review export preflight/health diagnostics, and export
+   PNG/JPG stills, turntables or a self-contained GLB.
 
 All artwork processing happens in the browser. The application does not upload
 assets or project data to a server.
@@ -43,6 +44,8 @@ Tests:
 ```bash
 npm run test:unit
 npm run test:e2e
+npm run test:e2e:ci
+npm run test:visual
 npm run test:all
 ```
 
@@ -51,8 +54,8 @@ end-to-end browser workflows. The E2E suite covers PNG and multipage rotated PDF
 input, transforms, layer locking, undo/redo, autosave, `.carton` round-trips,
 localization, responsive resizing, integration events, and all export buttons.
 It also covers all reachable fold trees, net-space UV continuity, lazy 3D
-loading, both camera projections, scene presets, WebGL recovery, and repeated
-texture replacement.
+loading, both camera projections, scene presets, WebGL recovery, Render
+preflight, deterministic Render screenshots and repeated texture replacement.
 
 ## Architecture
 
@@ -66,7 +69,8 @@ texture replacement.
 - `src/preview3d/` — lazy-loaded Three.js fold graph, procedural panel geometry,
   shared artwork texture, cameras, scene presets, picking, and GPU lifecycle.
 - `src/render/` — persisted presentation settings, Render scene descriptor,
-  separate WebGL presentation renderer, presets, and offscreen PNG/JPG export.
+  separate WebGL presentation renderer, presets, preflight/health diagnostics,
+  and offscreen PNG/JPG/turntable/GLB export.
 - `src/ui/` — the existing box-net controller and renderer.
 - `src/i18n.js` — English/Russian runtime strings.
 - `src/diagnostics.js` — bounded local event history and explicit anonymized
@@ -193,12 +197,19 @@ Render also provides Uncoated, Matte, and Gloss board profiles; 1:1, 4:3,
 16:9, and 3:4 frames; environment/light/shadow controls; embedded image,
 solid or transparent backgrounds; optional floor reflection/shadow controls;
 and PNG/JPG still export at preset, custom pixel, or print sizes (cm/in + PPI).
+Packaging finish layers can be marked as Print, Finish, or Print + Finish. Spot
+gloss, metallic foil, emboss and deboss masks are derived from the same artwork
+layers and use alpha/luminance mask selection, intensity, foil color/roughness,
+and relief strength controls. Finish-only layers stay out of technical SVG/PDF
+output. Render builds corresponding PBR maps in flat-net UV space.
 The unified Render export dialog also creates a closed, self-contained binary
-glTF (`.glb`) with embedded artwork textures and either Full PBR or Basic
+glTF (`.glb`) with embedded artwork and finish textures and either Full PBR or Basic
 Compatibility materials, plus a bounded 24/36/72-frame turntable ZIP at
 512/1024/2048 px. GLB export is static and intentionally excludes floor,
 background, shadow catcher, environment and post-processing effects; turntable
 frames preserve the active Render settings and restore the live camera.
+Basic Compatibility shows a warning when finishes are active because it
+simplifies clearcoat, foil and relief for limited PBR viewers.
 Export uses a fixed offscreen render target and does not depend on
 `preserveDrawingBuffer`. The Render canvas overlays the exact export viewport
 and reports its pixel dimensions for the selected output size.
@@ -271,10 +282,11 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-current schema v9 project snapshot. Schema v9 adds the unified output kind,
+current schema v10 project snapshot. Schema v10 adds the unified output kind,
 turntable options and GLB options while retaining camera framing, vertical
 correction, global View Preset references and per-artwork preview/render
-quality. Legacy cropped artwork is normalized to the same visual-equivalent
+quality. It also persists per-layer finish roles and finish parameters. Legacy
+cropped artwork is normalized to the same visual-equivalent
 100% transform baseline.
 
 The existing events are unchanged:
@@ -286,7 +298,8 @@ The existing events are unchanged:
 
 - Technical Preview and Presentation Render are derived views, not second
   artwork editors. Render output is an sRGB presentation image, not a CMYK,
-  ICC, Pantone, overprint, or certified print-proof workflow.
+  ICC, Pantone, overprint, certified print-proof, or production finish
+  separation workflow.
 - There are no flaps, bleed, safe area, material thickness, trapping, crop
   marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
   production validation, collision simulation, or free-angle rotation.

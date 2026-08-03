@@ -44,6 +44,7 @@ export function createSettingsModal({
   triggerButton,
   popoverContainer,
   showToast = () => {},
+  getRenderDiagnostics = () => null,
   windowRef = window,
   documentRef = document,
 }) {
@@ -128,7 +129,7 @@ export function createSettingsModal({
       downloadBlob(
         documentRef,
         windowRef,
-        createDiagnosticsBlob({ windowRef }),
+        createDiagnosticsBlob({ renderDiagnostics: getRenderDiagnostics(), windowRef }),
         'carton-builder-diagnostics.json',
       );
       showToast(t('diagnosticsExported') || 'Diagnostics data exported');

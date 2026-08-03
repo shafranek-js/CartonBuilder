@@ -253,6 +253,33 @@ test('keeps the 3D canvas rendered when Render artwork quality increases', async
   expect(lowQualityCanvas.equals(highQualityCanvas)).toBe(false);
 });
 
+test('persists an artwork finish and warns before Basic GLB export', async ({ page }) => {
+  await openRender(page);
+  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to edit', exact: true }).click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+
+  await page.locator('#artworkFinishRole').selectOption('finish');
+  await page.locator('#artworkFinishType').selectOption('foil');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.getArtworks()[0])).toMatchObject({
+    outputRole: 'finish',
+    finish: { type: 'foil' },
+  });
+
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('#renderFinishSummary')).toContainText('foil');
+
+  await page.locator('#renderPngButton').click();
+  await expect(page.locator('#renderExportDialog')).toBeVisible();
+  await page.locator('#renderExportKind').selectOption('glb');
+  await page.locator('#renderExportGlbMaterialMode').selectOption('basic-compatibility');
+  await expect(page.locator('#renderExportGlbWarning')).toBeVisible();
+});
+
 test('uses a separate closed presentation scene and persists render controls', async ({ page }) => {
   await openRender(page);
   expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().foldProgress)).toBe(0.35);
@@ -412,5 +439,83 @@ test('restores Render settings and workflow step through autosave', async ({ pag
     bevelRadiusMm: 0.2,
     interiorColor: '#abcdef',
     edgeColor: '#123456',
+  });
+});
+
+test.describe('Wave 5 deterministic Render baselines', () => {
+  test.use({
+    viewport: { width: 1280, height: 820 },
+    deviceScaleFactor: 1,
+  });
+
+  test('captures stable studio and transparent Render states', async ({ page }) => {
+    await openRender(page, 'wave5-visual-fixture.png');
+    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+    const canvas = page.locator('#renderCanvas');
+    expect(await canvas.screenshot({ animations: 'disabled', timeout: 30_000 })).toMatchSnapshot('wave5-clean-studio.png', {
+      threshold: 0.15,
+      maxDiffPixelRatio: 0.005,
+    });
+
+    await page.evaluate(async () => {
+      const render = window.cartonBuilderApp.render;
+      const state = render.getState();
+      render.restoreState({
+        ...state,
+        background: { ...state.background, mode: 'transparent' },
+        effects: { ...state.effects, dof: { ...state.effects.dof, enabled: false } },
+      });
+      await render.whenStable();
+    });
+    expect(await canvas.screenshot({ animations: 'disabled', timeout: 30_000 })).toMatchSnapshot('wave5-transparent.png', {
+      threshold: 0.15,
+      maxDiffPixelRatio: 0.005,
+    });
+  });
+
+  test('blocks impossible exports and recovers from a lost graphics context', async ({ page }) => {
+    await openRender(page, 'wave5-lifecycle-fixture.png');
+    await page.locator('#renderDiagnosticsDrawer').locator('summary').click();
+    await expect(page.locator('#renderDiagnosticsOutput')).toContainText('health:');
+    await page.locator('#renderPngButton').click();
+    await expect(page.locator('#renderExportPreflight')).toContainText('Ready');
+    await page.locator('#renderExportDialog button[value="cancel"]').click();
+    const blocked = await page.evaluate(() => window.cartonBuilderApp.render.runExportPreflight({
+      kind: 'image',
+      settings: { ...window.cartonBuilderApp.render.getState(), longEdge: 4096 },
+      diagnostics: { maxTextureSize: 2048, maxRenderbufferSize: 2048 },
+    }));
+    expect(blocked.status).toBe('blocked');
+    expect(blocked.issues.map((entry) => entry.code)).toContain('gpu-limit');
+
+    await page.evaluate(() => document.getElementById('renderCanvas').dispatchEvent(new Event('webglcontextlost', { cancelable: true })));
+    await expect(page.locator('#renderRecovery')).toBeVisible();
+    await page.evaluate(() => document.getElementById('renderCanvas').dispatchEvent(new Event('webglcontextrestored')));
+    await expect(page.locator('#renderRecovery')).toBeHidden({ timeout: 30_000 });
+    await expect.poll(
+      () => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().contextRecoveryCount),
+      { timeout: 30_000 },
+    ).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+    expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(Buffer.alloc(0));
+  });
+
+  test('keeps GPU resources bounded across repeated Render refreshes', async ({ page }) => {
+    test.setTimeout(180_000);
+    await openRender(page, 'wave5-stress-fixture.png');
+    const baseline = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
+    for (let index = 0; index < 6; index += 1) {
+      await page.evaluate(() => window.cartonBuilderApp.render.refreshArtwork());
+      expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+    }
+    await page.waitForTimeout(750);
+    const settledSamples = [];
+    for (let index = 0; index < 2; index += 1) {
+      await page.waitForTimeout(250);
+      settledSamples.push(await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics()));
+    }
+    const after = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
+    expect(after.geometries).toBeLessThanOrEqual(baseline.geometries + 1);
+    expect(settledSamples[1].textures).toBe(settledSamples[0].textures);
   });
 });

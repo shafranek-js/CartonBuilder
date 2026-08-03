@@ -20,6 +20,7 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   NeutralToneMapping,
+  NoColorSpace,
   NoToneMapping,
   Object3D,
   OrthographicCamera,
@@ -82,6 +83,10 @@ function clonePortableMaterial(material, materialMode) {
     return new MeshStandardMaterial({
       color: material.color?.clone?.() || 0xffffff,
       map: clonePortableTexture(material.map),
+      metalnessMap: clonePortableTexture(material.metalnessMap),
+      roughnessMap: clonePortableTexture(material.roughnessMap),
+      normalMap: clonePortableTexture(material.normalMap),
+      normalScale: material.normalScale?.clone?.(),
       roughness: Number.isFinite(material.roughness) ? material.roughness : 0.8,
       metalness: Number.isFinite(material.metalness) ? material.metalness : 0,
       side: material.side,
@@ -229,7 +234,7 @@ function createOutlineGeometry(panel, zOffset) {
   return geometry;
 }
 
-function makeExteriorMaterial(preset, texture) {
+function makeExteriorMaterial(preset, texture, materialMaps = null) {
   if (preset === 'technical') {
     return new MeshBasicMaterial({
       map: texture,
@@ -237,18 +242,30 @@ function makeExteriorMaterial(preset, texture) {
       toneMapped: false,
     });
   }
-  if (preset === 'photorealistic' || preset === 'gloss') {
+  // Any finish map can require the physical material path even when the board
+  // profile itself is Matte: spot gloss and embossed relief need clearcoat or
+  // normal-map inputs that MeshStandardMaterial cannot represent.
+  if (preset === 'photorealistic' || preset === 'gloss' || materialMaps) {
     return new MeshPhysicalMaterial({
       map: texture,
+      metalnessMap: materialMaps?.metalness || null,
+      roughnessMap: materialMaps?.roughness || null,
+      normalMap: materialMaps?.normal || null,
+      clearcoatMap: materialMaps?.clearcoat || null,
+      clearcoatRoughnessMap: materialMaps?.clearcoatRoughness || null,
       side: FrontSide,
-      roughness: preset === 'gloss' ? 0.46 : 0.68,
+      roughness: preset === 'gloss' ? 0.46 : preset === 'uncoated' ? 0.94 : preset === 'matte' ? 0.82 : 0.68,
       metalness: 0,
-      clearcoat: preset === 'gloss' ? 0.25 : 0.05,
-      clearcoatRoughness: preset === 'gloss' ? 0.35 : 0.85,
+      clearcoat: materialMaps?.clearcoat ? 1 : preset === 'gloss' ? 0.25 : 0.05,
+      clearcoatRoughness: materialMaps?.clearcoatRoughness ? 1 : preset === 'gloss' ? 0.35 : 0.85,
+      normalScale: materialMaps?.normal ? new Vector2(0.55, 0.55) : undefined,
     });
   }
   return new MeshStandardMaterial({
     map: texture,
+    metalnessMap: materialMaps?.metalness || null,
+    roughnessMap: materialMaps?.roughness || null,
+    normalMap: materialMaps?.normal || null,
     side: FrontSide,
     roughness: preset === 'uncoated' ? 0.94 : preset === 'matte' ? 0.82 : 0.86,
     metalness: 0,
@@ -319,6 +336,8 @@ export class BoxScene {
     materialProfile = null,
     geometryMode = 'flat',
     boardAppearance = null,
+    materialMaps = null,
+    finishSummary = [],
     windowRef = window,
     onSelection = () => {},
     onCameraChange = () => {},
@@ -343,6 +362,8 @@ export class BoxScene {
     this.materialProfile = materialProfile || this.scenePreset;
     this.geometryMode = geometryMode === 'solid' ? 'solid' : 'flat';
     this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
+    this.finishSummary = Array.isArray(finishSummary) ? structuredClone(finishSummary) : [];
+    this.materialMaps = null;
     this.backgroundMode = ['transparent', 'image'].includes(backgroundMode) ? backgroundMode : 'solid';
     this.backgroundColor = backgroundColor || '#e8eaeb';
     this.backgroundImage = backgroundImage || null;
@@ -362,6 +383,7 @@ export class BoxScene {
     this.pointerStart = null;
     this.suppressCameraChange = 0;
     this.environmentTexture = null;
+    this.environmentRenderTarget = null;
     this.pmremGenerator = null;
 
     this.renderer = new WebGLRenderer({
@@ -373,6 +395,7 @@ export class BoxScene {
     this.renderer.setPixelRatio(Math.min(windowRef.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.shadowMap.type = PCFShadowMap;
+    this.materialMaps = this.createMaterialTextureSet(materialMaps);
 
     this.scene = new Scene();
     this.scene.background = ['transparent', 'image'].includes(this.backgroundMode)
@@ -523,6 +546,37 @@ export class BoxScene {
     this.render();
   }
 
+  createMaterialTextureSet(materialMaps) {
+    if (!materialMaps) return null;
+    const create = (canvas) => {
+      if (!canvas) return null;
+      const texture = new CanvasTexture(canvas);
+      texture.colorSpace = NoColorSpace;
+      texture.wrapS = ClampToEdgeWrapping;
+      texture.wrapT = ClampToEdgeWrapping;
+      texture.magFilter = LinearFilter;
+      texture.minFilter = LinearMipmapLinearFilter;
+      texture.anisotropy = Math.min(this.renderer.capabilities.getMaxAnisotropy(), 8);
+      texture.needsUpdate = true;
+      return texture;
+    };
+    return {
+      clearcoat: create(materialMaps.clearcoat),
+      clearcoatRoughness: create(materialMaps.clearcoatRoughness),
+      metalness: create(materialMaps.metalness),
+      roughness: create(materialMaps.roughness),
+      normal: create(materialMaps.normal),
+    };
+  }
+
+  disposeMaterialTextureSet(materialMaps) {
+    for (const texture of Object.values(materialMaps || {})) texture?.dispose?.();
+  }
+
+  setFinishSummary(summary = []) {
+    this.finishSummary = Array.isArray(summary) ? structuredClone(summary) : [];
+  }
+
   buildBox() {
     if (this.boxRoot) disposeObject3D(this.boxRoot, { disposeTextures: false });
     this.panelObjects.clear();
@@ -613,7 +667,7 @@ export class BoxScene {
     const previousInterior = this.interiorMaterial;
     const previousEdge = this.edgeMaterial;
     this.materialProfile = preset;
-    this.exteriorMaterial = makeExteriorMaterial(preset, this.texture);
+    this.exteriorMaterial = makeExteriorMaterial(preset, this.texture, this.materialMaps);
     this.interiorMaterial = makeInteriorMaterial(preset, this.boardAppearance.interiorColor);
     this.edgeMaterial = new MeshStandardMaterial({
       color: this.boardAppearance.edgeColor,
@@ -913,16 +967,18 @@ export class BoxScene {
     } else if (this.environmentPreset !== 'none') {
       environmentScene = createEnvironmentScene(this.environmentPreset);
     }
-    const previous = this.environmentTexture;
+    const previous = this.environmentRenderTarget;
     if (!environmentScene) {
       this.environmentTexture = null;
+      this.environmentRenderTarget = null;
       this.scene.environment = null;
     } else {
-      this.environmentTexture = this.pmremGenerator.fromScene(environmentScene, 0.04).texture;
+      this.environmentRenderTarget = this.pmremGenerator.fromScene(environmentScene, 0.04);
+      this.environmentTexture = this.environmentRenderTarget.texture;
       if (environmentScene instanceof RoomEnvironment) environmentScene.dispose();
       else disposeEnvironmentScene(environmentScene);
     }
-    previous?.dispose();
+    previous?.dispose?.();
   }
 
   applyEnvironment() {
@@ -1192,6 +1248,8 @@ export class BoxScene {
       dimensions: { ...this.boxModel.dimensions },
       materialProfile: this.materialProfile,
       materialMode,
+      finishCount: this.finishSummary.length,
+      finishTypes: [...new Set(this.finishSummary.map((entry) => entry.type).filter(Boolean))],
       foldProgress: this.foldProgress,
       static: true,
     };
@@ -1421,8 +1479,9 @@ export class BoxScene {
     }
   }
 
-  replaceTexture(textureCanvas) {
+  replaceTexture(textureCanvas, materialMaps = null) {
     const previousTexture = this.texture;
+    const previousMaps = this.materialMaps;
     this.texture = new CanvasTexture(textureCanvas);
     this.texture.colorSpace = SRGBColorSpace;
     this.texture.wrapS = ClampToEdgeWrapping;
@@ -1431,8 +1490,10 @@ export class BoxScene {
     this.texture.minFilter = LinearMipmapLinearFilter;
     this.texture.anisotropy = Math.min(this.renderer.capabilities.getMaxAnisotropy(), 8);
     this.texture.needsUpdate = true;
+    this.materialMaps = this.createMaterialTextureSet(materialMaps);
     this.applyMaterials(this.scenePreset);
     previousTexture?.dispose();
+    this.disposeMaterialTextureSet(previousMaps);
     this.render();
   }
 
@@ -1571,6 +1632,7 @@ export class BoxScene {
     this.edgeMaterial?.dispose();
     this.outlineMaterial?.dispose();
     this.texture?.dispose();
+    this.disposeMaterialTextureSet(this.materialMaps);
     for (const plane of this.backgroundPlanes?.values?.() || []) {
       plane.geometry?.dispose();
       plane.material?.dispose();
@@ -1585,6 +1647,7 @@ export class BoxScene {
       this.floorReflection.getRenderTarget?.()?.dispose?.();
     }
     this.environmentTexture?.dispose();
+    this.environmentRenderTarget?.dispose();
     this.pmremGenerator?.dispose();
     this.renderer.dispose();
   }

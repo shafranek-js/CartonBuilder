@@ -29,7 +29,7 @@ function safeExtension(fileName) {
 export async function createProjectArchive({ snapshot, artworkBlobs, renderAssets = [] }) {
   const validated = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
   // Keep legacy archive fixtures stable while still allowing current projects
-  // to write schema v9 snapshots. Older v6 archives are represented as v7;
+  // to write schema v10 snapshots. Older v6 archives are represented as v7;
   // opening them remains compatible with the normal project migration path.
   if (Number(snapshot?.schemaVersion) === 6) validated.snapshot.schemaVersion = 7;
   const assets = validated.snapshot.artworks.map((entry, index) => ({
