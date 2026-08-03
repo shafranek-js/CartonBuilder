@@ -320,6 +320,71 @@ test('uses a separate closed presentation scene and persists render controls', a
   await expect(page.locator('#renderViewportSummary')).toHaveText('Export viewport: 4096 × 2304px (16:9)');
 });
 
+test('applies floor reflection strength, softness and fade to the live Render scene', async ({ page }) => {
+  await openRender(page);
+
+  const reflection = page.locator('#renderFloorReflectionEnabled');
+  await reflection.check();
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection))
+    .toMatchObject({ enabled: true, visible: true });
+  await page.waitForTimeout(500);
+  const enabledCanvas = await page.locator('#renderCanvas').screenshot();
+
+  await page.locator('#renderFloorReflectionStrength').fill('0.75');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection.strength))
+    .toBe(0.75);
+  await page.waitForTimeout(500);
+  const strongCanvas = await page.locator('#renderCanvas').screenshot();
+  expect(strongCanvas.equals(enabledCanvas)).toBe(false);
+
+  await page.locator('#renderFloorReflectionBlur').fill('0');
+  await page.locator('#renderFloorReflectionFade').fill('4.5');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection))
+    .toMatchObject({ blur: 0, fadeDistance: 4.5 });
+  await page.waitForTimeout(500);
+  const sharpWideFadeCanvas = await page.locator('#renderCanvas').screenshot();
+  expect(sharpWideFadeCanvas.equals(strongCanvas)).toBe(false);
+
+  await reflection.uncheck();
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection.visible))
+    .toBe(false);
+});
+
+test('keeps Render resources stable across 20 floor-effect updates', async ({ page }) => {
+  await openRender(page);
+  const initial = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
+  for (let index = 0; index < 20; index += 1) {
+    await page.locator('#renderFloorReflectionEnabled').check();
+    await page.locator('#renderFloorReflectionStrength').fill(String(Number((0.04 + (index % 8) * 0.04).toFixed(2))));
+    await page.locator('#renderFloorReflectionBlur').fill(String((index % 10) / 10));
+    await page.locator('#renderFloorReflectionFade').fill(String(Number((0.25 + (index % 10) * 0.25).toFixed(2))));
+  }
+  await page.waitForTimeout(500);
+  const final = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
+  expect(final.geometries).toBeLessThanOrEqual(initial.geometries + 1);
+  expect(final.textures).toBeLessThanOrEqual(initial.textures + 1);
+  expect(final.floorReflection).toMatchObject({ enabled: true, visible: true });
+});
+
+test.describe('high-DPI Render', () => {
+  test.use({
+    viewport: { width: 1200, height: 800 },
+    deviceScaleFactor: 2,
+  });
+
+  test('caps the Render drawing buffer at DPR 2', async ({ page }) => {
+    await openRender(page);
+    const sizes = await page.locator('#renderCanvas').evaluate((canvas) => ({
+      cssWidth: canvas.clientWidth,
+      cssHeight: canvas.clientHeight,
+      bufferWidth: canvas.width,
+      bufferHeight: canvas.height,
+    }));
+    expect(sizes.bufferWidth).toBeLessThanOrEqual(sizes.cssWidth * 2);
+    expect(sizes.bufferHeight).toBeLessThanOrEqual(sizes.cssHeight * 2);
+  });
+});
+
 test('exports a PNG with the selected 2048 output dimensions', async ({ page }) => {
   await openRender(page);
   await page.locator('#renderAspect').selectOption('landscape');
@@ -341,6 +406,20 @@ test('exports a PNG with the selected 2048 output dimensions', async ({ page }) 
   expect(bytes.readUInt32BE(20)).toBe(1536);
   expect(bytes.length).toBeGreaterThan(10_000);
   expect(getPngPixelSummary(bytes)).toMatchObject({ varied: true });
+});
+
+test('shows JPG quality only for JPG image exports', async ({ page }) => {
+  await openRender(page);
+  await page.locator('#renderPngButton').click();
+  await expect(page.locator('#renderExportDialog')).toBeVisible();
+  await expect(page.locator('#renderJpegQualityField')).toBeHidden();
+
+  await page.locator('#renderExportFormat').selectOption('jpg');
+  await expect(page.locator('#renderJpegQualityField')).toBeVisible();
+
+  await page.locator('#renderExportKind').selectOption('glb');
+  await expect(page.locator('#renderJpegQualityField')).toBeHidden();
+  await page.locator('#renderExportDialog button[value="cancel"]').click();
 });
 
 test('exports a valid self-contained static GLB with the selected material profile', async ({ page }) => {

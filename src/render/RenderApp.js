@@ -841,6 +841,8 @@ export function createRenderApp({
     if (elements.exportGlbOptions) elements.exportGlbOptions.hidden = kind !== 'glb';
     const printVisible = output.sizingMode === 'print';
     const pixelsVisible = output.sizingMode === 'pixels';
+    const jpegQualityField = elements.exportJpegQuality?.closest('#renderJpegQualityField');
+    if (jpegQualityField) jpegQualityField.hidden = kind !== 'image' || output.format !== 'jpg';
     const printGroup = elements.exportPrintWidth?.closest('.render-export-print');
     const pixelsGroup = elements.exportWidth?.closest('.render-export-pixels');
     if (printGroup) printGroup.hidden = kind !== 'image' || !printVisible;

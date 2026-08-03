@@ -9,7 +9,6 @@ export function createBoxNetApp({
   documentRef = document,
   windowRef = window,
   onContinue = () => {},
-  beforeDimensionReset = () => true,
   onDimensionReset = () => {},
   onLayoutReset = () => {},
   onChange = () => {},

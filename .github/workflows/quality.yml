@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
 
 permissions:
   contents: read
@@ -41,3 +44,79 @@ jobs:
 
       - name: Run Render reliability browser gate
         run: npm run test:visual -- --workers=1
+
+      - name: Run Chromium smoke workflows
+        run: npm run test:e2e:smoke
+
+      - name: Run full Chromium E2E suite
+        run: npm run test:e2e:ci
+
+      - name: Upload Chromium browser artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartonbuilder-chromium-test-results
+          path: test-results/
+          if-no-files-found: ignore
+
+  stress:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Render and Preview stress coverage
+        run: npm run test:e2e:stress
+
+      - name: Upload stress artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartonbuilder-stress-test-results
+          path: test-results/
+          if-no-files-found: ignore
+
+  edge:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Microsoft Edge
+        run: npx playwright install msedge
+
+      - name: Run full Edge E2E suite
+        run: npm run test:e2e:edge
+
+      - name: Upload Edge browser artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartonbuilder-edge-test-results
+          path: test-results/
+          if-no-files-found: ignore

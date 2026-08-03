@@ -2904,7 +2904,8 @@ dialog input {
 }
 
 .render-export-pixels[hidden],
-.render-export-print[hidden] {
+.render-export-print[hidden],
+#renderJpegQualityField[hidden] {
   display: none;
 }
 

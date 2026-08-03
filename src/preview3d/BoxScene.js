@@ -176,6 +176,98 @@ const BACKGROUND_FRAGMENT_SHADER = `
   }
 `;
 
+// Reflector's stock shader always writes an opaque pixel, so setting
+// material.opacity cannot make a floor reflection fade or become subtle. Keep
+// the reflection camera/render target implementation from Reflector, but use a
+// small dedicated compositing shader so the three exposed floor controls have
+// visible, deterministic effects.
+const FLOOR_REFLECTION_SHADER = {
+  name: 'CartonBuilderFloorReflectionShader',
+  uniforms: {
+    color: { value: null },
+    tDiffuse: { value: null },
+    textureMatrix: { value: null },
+    strength: { value: 0 },
+    blur: { value: 0 },
+    fadeDistance: { value: 0.65 },
+    texelSize: { value: new Vector2(1 / 512, 1 / 512) },
+  },
+  vertexShader: /* glsl */ `
+    uniform mat4 textureMatrix;
+    varying vec4 vUv;
+    varying vec2 vPlaneUv;
+
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+
+    void main() {
+      vUv = textureMatrix * vec4(position, 1.0);
+      vPlaneUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      #include <logdepthbuf_vertex>
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform vec3 color;
+    uniform sampler2D tDiffuse;
+    uniform float strength;
+    uniform float blur;
+    uniform float fadeDistance;
+    uniform vec2 texelSize;
+    varying vec4 vUv;
+    varying vec2 vPlaneUv;
+
+    #include <logdepthbuf_pars_fragment>
+
+    float blendOverlay(float base, float blend) {
+      return base < 0.5
+        ? 2.0 * base * blend
+        : 1.0 - 2.0 * (1.0 - base) * (1.0 - blend);
+    }
+
+    vec3 blendOverlay(vec3 base, vec3 blend) {
+      return vec3(
+        blendOverlay(base.r, blend.r),
+        blendOverlay(base.g, blend.g),
+        blendOverlay(base.b, blend.b)
+      );
+    }
+
+    vec4 sampleReflection(vec2 uv) {
+      return texture2D(tDiffuse, clamp(uv, vec2(0.001), vec2(0.999)));
+    }
+
+    void main() {
+      #include <logdepthbuf_fragment>
+
+      vec2 projectedUv = vUv.xy / max(vUv.w, 0.0001);
+      vec2 offset = texelSize * (0.75 + blur * 3.25);
+      vec4 center = sampleReflection(projectedUv);
+      vec4 blurred = center;
+      blurred += sampleReflection(projectedUv + vec2(offset.x, 0.0));
+      blurred += sampleReflection(projectedUv - vec2(offset.x, 0.0));
+      blurred += sampleReflection(projectedUv + vec2(0.0, offset.y));
+      blurred += sampleReflection(projectedUv - vec2(0.0, offset.y));
+      blurred += sampleReflection(projectedUv + offset);
+      blurred += sampleReflection(projectedUv - offset);
+      blurred += sampleReflection(projectedUv + vec2(offset.x, -offset.y));
+      blurred += sampleReflection(projectedUv + vec2(-offset.x, offset.y));
+      blurred /= 9.0;
+      vec3 reflection = mix(center.rgb, blurred.rgb, clamp(blur, 0.0, 1.0));
+
+      float radial = length((vPlaneUv - vec2(0.5)) * 2.0);
+      float fadeEnd = clamp(0.45 + fadeDistance * 0.1, 0.45, 0.95);
+      float fadeStart = fadeEnd * 0.35;
+      float fade = 1.0 - smoothstep(fadeStart, fadeEnd, radial);
+      float alpha = clamp(strength, 0.0, 1.0) * fade;
+
+      gl_FragColor = vec4(blendOverlay(reflection, color), alpha);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }
+  `,
+};
+
 function createEnvironmentScene(preset) {
   const palette = ENVIRONMENT_PALETTES[preset];
   if (!palette) return null;
@@ -722,13 +814,15 @@ export class BoxScene {
       textureHeight: 512,
       clipBias: 0.002,
       color: 0x8d9498,
+      shader: FLOOR_REFLECTION_SHADER,
     });
     reflection.name = 'FloorReflection';
     reflection.rotation.x = -Math.PI / 2;
     reflection.renderOrder = -10;
     reflection.material.transparent = true;
     reflection.material.depthWrite = false;
-    reflection.material.opacity = 0;
+    reflection.material.opacity = 1;
+    reflection.material.uniforms.texelSize.value.set(1 / 512, 1 / 512);
     this.scene.add(reflection);
     this.applyFloorReflectionSettings();
     return reflection;
@@ -740,18 +834,32 @@ export class BoxScene {
       && this.scenePreset !== 'technical'
       && (this.backgroundMode !== 'transparent' || this.floorReflectionSettings.includeInTransparentExport);
     this.floorReflection.visible = enabled;
-    this.floorReflection.material.opacity = enabled ? this.floorReflectionSettings.strength : 0;
+    const uniforms = this.floorReflection.material.uniforms || {};
+    if (uniforms.strength) uniforms.strength.value = enabled ? this.floorReflectionSettings.strength : 0;
+    if (uniforms.blur) uniforms.blur.value = this.floorReflectionSettings.blur;
+    if (uniforms.fadeDistance) uniforms.fadeDistance.value = this.floorReflectionSettings.fadeDistance;
+    this.floorReflection.material.opacity = 1;
     this.floorReflection.material.transparent = true;
   }
 
   setFloorReflection(settings = {}, { render = true } = {}) {
     this.floorReflectionSettings = {
       ...this.floorReflectionSettings,
-      enabled: settings.enabled === true,
-      strength: Math.max(0, Math.min(1, Number(settings.strength) || 0)),
-      blur: Math.max(0, Math.min(1, Number(settings.blur) || 0)),
-      fadeDistance: Math.max(0.05, Math.min(5, Number(settings.fadeDistance) || 0.65)),
-      includeInTransparentExport: settings.includeInTransparentExport === true,
+      ...(Object.hasOwn(settings, 'enabled')
+        ? { enabled: settings.enabled === true }
+        : {}),
+      ...(Object.hasOwn(settings, 'strength')
+        ? { strength: Math.max(0, Math.min(1, Number(settings.strength) || 0)) }
+        : {}),
+      ...(Object.hasOwn(settings, 'blur')
+        ? { blur: Math.max(0, Math.min(1, Number(settings.blur) || 0)) }
+        : {}),
+      ...(Object.hasOwn(settings, 'fadeDistance')
+        ? { fadeDistance: Math.max(0.05, Math.min(5, Number(settings.fadeDistance) || 0.65)) }
+        : {}),
+      ...(Object.hasOwn(settings, 'includeInTransparentExport')
+        ? { includeInTransparentExport: settings.includeInTransparentExport === true }
+        : {}),
     };
     this.applyFloorReflectionSettings();
     if (render) this.render();
@@ -864,7 +972,9 @@ export class BoxScene {
       );
     }
     if (this.floorReflection) {
-      const reflectionExtent = extent * (1 + this.floorReflectionSettings.fadeDistance * 0.35);
+      // Keep a stable margin around the carton; fadeDistance controls the
+      // shader falloff rather than changing the floor geometry itself.
+      const reflectionExtent = extent * 1.35;
       this.floorReflection.scale.set(reflectionExtent, reflectionExtent, 1);
       this.floorReflection.position.set(center.x, bounds.min.y - 0.012, center.z);
     }
@@ -1605,6 +1715,14 @@ export class BoxScene {
       foldProgress: this.foldProgress,
       geometryMode: this.geometryMode,
       thicknessMm: this.boardAppearance.thicknessMm,
+      floorReflection: {
+        enabled: this.floorReflectionSettings.enabled,
+        visible: Boolean(this.floorReflection?.visible),
+        strength: this.floorReflectionSettings.strength,
+        blur: this.floorReflectionSettings.blur,
+        fadeDistance: this.floorReflectionSettings.fadeDistance,
+        includeInTransparentExport: this.floorReflectionSettings.includeInTransparentExport,
+      },
     };
   }
 

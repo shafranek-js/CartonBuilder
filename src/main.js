@@ -132,10 +132,7 @@ const handleRedo = () => {
 };
 
 const handleRemoveArtwork = () => {
-  const removeBtn = document.getElementById('removeArtworkButton');
-  if (removeBtn) {
-    removeBtn.click();
-  }
+  artworkApp?.removeSelectedArtwork?.();
 };
 
 let fileMenu = null;
@@ -318,10 +315,6 @@ const boxApp = createBoxNetApp({
   onContinue: () => {
     updateStepNavigationStates();
     showStep('artwork');
-  },
-  beforeDimensionReset: () => {
-    if (!artworkApp?.hasModifiedArtwork()) return true;
-    return window.confirm(t('dimensionsArtworkReset')) ? 'confirmed' : false;
   },
   onDimensionReset: () => {
     resetArtworkAfterBoxCompletion = true;
