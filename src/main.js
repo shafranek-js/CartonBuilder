@@ -15,6 +15,7 @@ import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
 import { createFileMenu } from './ui/FileMenu.js';
 import { createEditMenu } from './ui/EditMenu.js';
+import { createContactsMenu } from './ui/ContactsMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 import { createRenderApp } from './render/RenderApp.js';
@@ -139,6 +140,7 @@ const handleRemoveArtwork = () => {
 
 let fileMenu = null;
 let editMenu = null;
+let contactsMenu = null;
 
 if (fileMenuTriggerBtn && fileMenuPopover) {
   fileMenu = createFileMenu({
@@ -149,7 +151,10 @@ if (fileMenuTriggerBtn && fileMenuPopover) {
     onSaveProject: handleSaveProject,
     onPlaceArtwork: handlePlaceArtwork,
     onExport: (type) => artworkApp?.exportDeliverable?.(type),
-    onOpen: () => editMenu?.togglePopover(false),
+    onOpen: () => {
+      editMenu?.togglePopover(false);
+      contactsMenu?.togglePopover(false);
+    },
   });
 }
 
@@ -161,7 +166,24 @@ if (editMenuTriggerBtn && editMenuPopover) {
     onRedo: handleRedo,
     onReplaceArtwork: handlePlaceArtwork,
     onRemoveArtwork: handleRemoveArtwork,
-    onOpen: () => fileMenu?.togglePopover(false),
+    onOpen: () => {
+      fileMenu?.togglePopover(false);
+      contactsMenu?.togglePopover(false);
+    },
+  });
+}
+
+const contactsMenuTriggerBtn = document.getElementById('contactsMenuTriggerBtn');
+const contactsMenuPopover = document.getElementById('contactsMenuPopover');
+
+if (contactsMenuTriggerBtn && contactsMenuPopover) {
+  contactsMenu = createContactsMenu({
+    triggerButton: contactsMenuTriggerBtn,
+    popoverContainer: contactsMenuPopover,
+    onOpen: () => {
+      fileMenu?.togglePopover(false);
+      editMenu?.togglePopover(false);
+    },
   });
 }
 

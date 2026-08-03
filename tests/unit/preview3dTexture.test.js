@@ -166,6 +166,30 @@ describe('3D texture composition', () => {
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
+  it('does not rasterize interactive artwork above the composed texture density', async () => {
+    vi.stubGlobal('OffscreenCanvas', CanvasMock);
+    const bitmap = { close: vi.fn() };
+    const interactiveFixture = fixture();
+    interactiveFixture.artworks[0].originalBlob = new Blob(['source'], { type: 'application/pdf' });
+    interactiveFixture.artworks[0].model.source.vector = true;
+    const rasterize = vi.fn().mockResolvedValue({
+      blob: new Blob(['rendered'], { type: 'image/png' }),
+    });
+    const result = await composeArtworkTexture({
+      ...interactiveFixture,
+      purpose: 'render-screen',
+      targetDpi: 2400,
+      getEntryTargetDpi: () => 2400,
+      createImageBitmapFn: vi.fn().mockResolvedValue(bitmap),
+      rasterize,
+    });
+
+    expect(rasterize).toHaveBeenCalledWith(expect.objectContaining({
+      targetDpi: result.dpi,
+      requiredDpi: result.dpi,
+    }));
+  });
+
   it('closes the decoded bitmap after drawing fails', async () => {
     CanvasMock.failDraw = true;
     vi.stubGlobal('OffscreenCanvas', CanvasMock);

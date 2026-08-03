@@ -98,9 +98,10 @@ function getPngPixelSummary(bytes) {
     }
     offset += length + 12;
   }
-  if (colorType !== 6 || !width || !height) return { varied: false, firstPixel: null };
+  const bytesPerPixel = colorType === 6 ? 4 : colorType === 2 ? 3 : 0;
+  if (!bytesPerPixel || !width || !height) return { varied: false, firstPixel: null };
   const inflated = inflateSync(Buffer.concat(imageData));
-  const rowBytes = width * 4;
+  const rowBytes = width * bytesPerPixel;
   let previous = Buffer.alloc(rowBytes);
   let firstPixel = null;
   let varied = false;
@@ -110,9 +111,9 @@ function getPngPixelSummary(bytes) {
     const row = Buffer.from(inflated.subarray(cursor, cursor + rowBytes));
     cursor += rowBytes;
     for (let x = 0; x < rowBytes; x += 1) {
-      const left = x >= 4 ? row[x - 4] : 0;
+      const left = x >= bytesPerPixel ? row[x - bytesPerPixel] : 0;
       const above = previous[x];
-      const upperLeft = x >= 4 ? previous[x - 4] : 0;
+      const upperLeft = x >= bytesPerPixel ? previous[x - bytesPerPixel] : 0;
       if (filter === 1) row[x] = (row[x] + left) & 0xff;
       else if (filter === 2) row[x] = (row[x] + above) & 0xff;
       else if (filter === 3) row[x] = (row[x] + Math.floor((left + above) / 2)) & 0xff;
@@ -124,8 +125,8 @@ function getPngPixelSummary(bytes) {
         row[x] = (row[x] + (pa <= pb && pa <= pc ? left : pb <= pc ? above : upperLeft)) & 0xff;
       } else if (filter !== 0) return { varied: false, firstPixel: null };
     }
-    for (let x = 0; x < rowBytes; x += 4) {
-      const pixel = row.subarray(x, x + 4).toString('hex');
+    for (let x = 0; x < rowBytes; x += bytesPerPixel) {
+      const pixel = row.subarray(x, x + bytesPerPixel).toString('hex');
       if (firstPixel == null) firstPixel = pixel;
       else if (pixel !== firstPixel) varied = true;
     }
@@ -206,7 +207,7 @@ test('shows native raster quality in the editor and per-artwork Render quality c
   await expect(page.locator('#artworkQualitySummary')).toContainText('Raster source: native pixels');
 });
 
-test('re-renders the 3D canvas when Render artwork quality changes', async ({ page }) => {
+test('keeps the 3D canvas rendered when Render artwork quality increases', async ({ page }) => {
   await buildReferenceNet(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await loadVectorArtwork(page);
@@ -219,18 +220,24 @@ test('re-renders the 3D canvas when Render artwork quality changes', async ({ pa
 
   const qualitySelect = page.locator('#renderArtworkQualityList select');
   await expect(qualitySelect).toBeEnabled();
-  await qualitySelect.selectOption('600');
-  await expect(qualitySelect).toBeDisabled();
-  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
-  await expect(qualitySelect).toBeEnabled();
-  const highQualityCanvas = await page.locator('#renderCanvas').screenshot();
-
   await qualitySelect.selectOption('150');
   await expect(qualitySelect).toBeDisabled();
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
   await expect(qualitySelect).toBeEnabled();
   const lowQualityCanvas = await page.locator('#renderCanvas').screenshot();
 
+  await qualitySelect.selectOption('600');
+  await expect(qualitySelect).toBeDisabled();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+  await expect(qualitySelect).toBeEnabled();
+  const highQualityCanvas = await page.locator('#renderCanvas').screenshot();
+
+  await expect(qualitySelect).toHaveValue('600');
+  expect(await page.evaluate(() => (
+    window.cartonBuilderApp.artwork.getArtworks()[0].model.quality.render
+  ))).toBe(600);
+  expect(getPngPixelSummary(lowQualityCanvas).varied).toBe(true);
+  expect(getPngPixelSummary(highQualityCanvas).varied).toBe(true);
   expect(lowQualityCanvas.equals(highQualityCanvas)).toBe(false);
 });
 

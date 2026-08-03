@@ -94,13 +94,31 @@ test('opening one top menu closes the other', async ({ page }) => {
   await expect(page.locator('#fileMenuPopover')).toBeVisible();
   await expect(page.locator('#editMenuPopover')).toBeHidden();
 
+  await page.getByRole('button', { name: 'Contacts', exact: true }).click();
+  await expect(page.locator('#contactsMenuPopover')).toBeVisible();
+  await expect(page.locator('#fileMenuPopover')).toBeHidden();
+  await expect(page.locator('#editMenuPopover')).toBeHidden();
+
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.locator('#editMenuPopover')).toBeVisible();
   await expect(page.locator('#fileMenuPopover')).toBeHidden();
+  await expect(page.locator('#contactsMenuPopover')).toBeHidden();
 
   await page.getByRole('button', { name: 'File', exact: true }).click();
   await expect(page.locator('#fileMenuPopover')).toBeVisible();
   await expect(page.locator('#editMenuPopover')).toBeHidden();
+});
+
+test('shows clickable contact links in the top menu', async ({ page }) => {
+  await page.getByRole('button', { name: 'Contacts', exact: true }).click();
+  const popover = page.locator('#contactsMenuPopover');
+  await expect(popover).toBeVisible();
+  await expect(popover.locator('a')).toHaveCount(3);
+  await expect(popover.locator('a').nth(0)).toHaveAttribute('href', 'mailto:pavel.p.popovic@gmail.com');
+  await expect(popover.locator('a').nth(1)).toHaveAttribute('href', 'https://t.me/Grabovvski');
+  await expect(popover.locator('a').nth(2)).toHaveAttribute('href', 'https://www.linkedin.com/in/grabovsky/');
+  await expect(popover.locator('a').nth(1)).toHaveAttribute('target', '_blank');
+  await expect(popover.locator('a').nth(2)).toHaveAttribute('rel', 'noopener noreferrer');
 });
 
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
