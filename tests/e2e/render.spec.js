@@ -220,6 +220,9 @@ test('keeps the 3D canvas rendered when Render artwork quality increases', async
 
   const qualitySelect = page.locator('#renderArtworkQualityList select');
   await expect(qualitySelect).toBeEnabled();
+  // Change quality after Render has been idle, matching a real user edit and
+  // ensuring no pending activation resize can mask replacement-renderer bugs.
+  await page.waitForTimeout(500);
   await qualitySelect.selectOption('150');
   await expect(qualitySelect).toBeDisabled();
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });

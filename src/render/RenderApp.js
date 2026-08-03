@@ -522,6 +522,10 @@ export function createRenderApp({
             notifyStateChange();
           },
         });
+        // A replacement renderer owns a fresh 1x1 post-processing composer.
+        // Size it immediately; activate()'s resize frame may have run long ago
+        // when artwork quality is changed from an already-open Render step.
+        renderer.resize();
       } else {
         renderer.replaceArtwork(composed.canvas);
         renderer.setBoardAppearance?.(boardAppearance);
