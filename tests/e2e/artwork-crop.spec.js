@@ -40,7 +40,7 @@ async function loadArtwork(page) {
 
 async function openArtwork(page) {
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await loadArtwork(page);
   await expect(page.locator('#cropSection')).toBeVisible();
 }

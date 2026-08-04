@@ -15,7 +15,7 @@ export function createBoxNetApp({
 }) {
   const svg = documentRef.getElementById('workspace');
   const panelCount = documentRef.getElementById('panelCount');
-  const continueButton = documentRef.getElementById('continueButton');
+  const continueButton = null;
   const cancelButton = documentRef.getElementById('cancelButton');
   const toast = documentRef.getElementById('toast');
   const announcer = documentRef.getElementById('announcer');
@@ -119,6 +119,7 @@ export function createBoxNetApp({
   }
 
   function addPanel(panelId, edge) {
+    const wasComplete = model.isComplete;
     const result = model.addPanel(panelId, edge);
     render();
     onChange();
@@ -129,6 +130,11 @@ export function createBoxNetApp({
         count: model.panelCount,
         complete: model.isComplete ? t('boxCompleteSuffix') : '',
       }));
+    }
+    if (!wasComplete && model.isComplete) {
+      windowRef.dispatchEvent(
+        new windowRef.CustomEvent('box-net-complete', { detail: model.toJSON() }),
+      );
     }
 
     return result;
@@ -291,7 +297,7 @@ export function createBoxNetApp({
   setupDimensionScrubber(dimensionIcons.height, 'height', 'vertical');
   setupDimensionScrubber(dimensionIcons.depth, 'depth', 'diagonal');
 
-  continueButton.addEventListener('click', () => {
+  continueButton?.addEventListener('click', () => {
     if (!model.isComplete) return;
     windowRef.dispatchEvent(
       new windowRef.CustomEvent('box-net-complete', { detail: model.toJSON() }),

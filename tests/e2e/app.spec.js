@@ -48,7 +48,7 @@ async function openEditAction(page, buttonSelector) {
 
 async function openArtworkStep(page) {
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('#artworkStep')).toBeVisible();
 }
 
@@ -204,7 +204,7 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   expect(project.suggestedFilename()).toBe('carton-project.carton');
   const projectPath = await project.path();
 
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dPanel')).toBeVisible();
 
@@ -228,7 +228,7 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   expect(pdf.suggestedFilename()).toBe('carton-artwork.pdf');
   expect((await readFile(await pdf.path(), 'utf8')).slice(0, 5)).toBe('%PDF-');
 
-  await page.getByRole('button', { name: 'Back to edit' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await page.locator('#settingsTriggerBtn').click();
   const diagnosticsDownload = page.waitForEvent('download');
   await page.locator('#downloadDiagnosticsBtn').click();
@@ -304,7 +304,7 @@ test('validates dimensions, preserves the current net and emits compatibility ev
   await activate(page, 'Add Back Panel to the top edge of Top Panel');
   await activate(page, 'Add Left Panel to the left edge of Front Panel');
   await activate(page, 'Add Right Panel to the right edge of Back Panel');
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await loadGeneratedPng(page);
   await page.locator('#artworkWorkspace').focus();
   await page.keyboard.press('Shift+ArrowRight');
@@ -372,7 +372,7 @@ test('handles invalid and multi-file input, PDF page selection and rotated vecto
   expect(sourceState.pdfPageRotation).toBe(90);
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.rotation)).toBe(90);
 
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   const downloadPromise = page.waitForEvent('download');
   await (await openMenuExport(page, '2d', '#menuExportPdfBtn')).click();
   const downloaded = await downloadPromise;
@@ -406,7 +406,7 @@ test('keeps model state stable during responsive resize without ResizeObserver',
 test('restores Preview mode from validated autosave and shows the technical-proof notice', async ({ page }) => {
   await openArtworkStep(page);
   await loadGeneratedPng(page);
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('.technical-proof-notice')).toContainText('not PDF/X certified');
 

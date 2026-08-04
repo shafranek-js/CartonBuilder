@@ -54,9 +54,9 @@ async function loadGeneratedPng(page, fileName = 'asymmetric-3d-artwork.png') {
 
 async function openPreview(page) {
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await loadGeneratedPng(page);
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
 }
 
@@ -68,7 +68,7 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
   await page.goto('/');
   await page.setViewportSize({ width: 1440, height: 900 });
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await loadGeneratedPng(page);
 
   expect(preview3dRequests).toHaveLength(0);
@@ -77,7 +77,7 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
     artwork: window.cartonBuilderApp.artwork.artwork.toJSON(),
   }));
 
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dPanel')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
@@ -232,7 +232,7 @@ test('shows the Render frame and format-specific export summaries in Preview', a
 
   await page.getByRole('button', { name: 'Render', exact: true }).click();
   await page.locator('#renderAspect').selectOption('wide');
-  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewExportViewportLabel')).toHaveText('Render frame · 2048 × 1152 px');
 
   const frame = await page.evaluate(() => {
@@ -262,11 +262,11 @@ test('updates the texture after repeated artwork replacement without resource gr
     () => window.cartonBuilderApp.preview3d.getResourceInfo(),
   );
 
-  await page.getByRole('button', { name: 'Back to edit' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   for (let index = 0; index < 20; index += 1) {
     await loadGeneratedPng(page, `3d-replacement-${index}.png`);
   }
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#preview3dPanel')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
   const finalResources = await page.evaluate(
@@ -302,7 +302,7 @@ test('keeps exports available when WebGL 2 is unavailable', async ({ page }) => 
   await expect(page.locator('#menuExportPdfBtn')).toBeVisible();
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Back to edit' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('#artworkStep')).toBeVisible();
 });
 

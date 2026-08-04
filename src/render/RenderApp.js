@@ -1909,7 +1909,7 @@ export function createRenderApp({
     else if (next.output.kind === 'sequence') await exportTurntableAsset();
     else await exportImage(format);
   });
-  elements.back.addEventListener('click', onBackToPreview);
+  elements.back?.addEventListener('click', onBackToPreview);
   elements.retry.addEventListener('click', () => syncScene({ force: true }));
   const handleWindowResize = () => {
     renderer?.resize();

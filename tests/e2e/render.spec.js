@@ -149,9 +149,9 @@ async function readDownload(download) {
 
 async function openRender(page, fileName) {
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await loadArtwork(page, fileName);
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
   await page.locator('#foldProgress').fill('0.35');
@@ -189,7 +189,7 @@ test.beforeEach(async ({ page }) => {
 test('keeps Render disabled until a complete box and artwork exist', async ({ page }) => {
   await expect(page.locator('[data-step-target="render"]')).toBeDisabled();
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('[data-step-target="render"]')).toBeDisabled();
   await loadArtwork(page);
   await expect(page.locator('[data-step-target="render"]')).toBeEnabled();
@@ -211,8 +211,8 @@ test('shows native raster quality in the editor and per-artwork Render quality c
   const selectBox = await qualitySelect.boundingBox();
   expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(selectBox.x);
 
-  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
-  await page.getByRole('button', { name: 'Back to edit', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('#artworkStep')).toBeVisible();
   await expect(page.locator('#artworkPreviewQuality')).toBeDisabled();
   await expect(page.locator('#artworkRenderQuality')).toBeDisabled();
@@ -221,9 +221,9 @@ test('shows native raster quality in the editor and per-artwork Render quality c
 
 test('keeps the 3D canvas rendered when Render artwork quality increases', async ({ page }) => {
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await loadVectorArtwork(page);
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
   await page.locator('[data-step-target="render"]').click();
@@ -258,9 +258,9 @@ test('keeps the 3D canvas rendered when Render artwork quality increases', async
 
 test('persists an artwork finish and warns before Basic GLB export', async ({ page }) => {
   await openRender(page);
-  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
-  await page.getByRole('button', { name: 'Back to edit', exact: true }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('#artworkStep')).toBeVisible();
 
   await page.locator('#artworkFinishRole').selectOption('finish');
@@ -270,7 +270,7 @@ test('persists an artwork finish and warns before Basic GLB export', async ({ pa
     finish: { type: 'foil' },
   });
 
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
   await page.locator('[data-step-target="render"]').click();
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
@@ -310,7 +310,7 @@ test('uses a separate closed presentation scene and persists render controls', a
   });
   await expect(page.locator('#renderViewportSummary')).toHaveText('Export viewport: 4096 × 2304px (16:9)');
 
-  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().foldProgress)).toBe(0.35);
   await page.locator('[data-step-target="render"]').click();
@@ -495,7 +495,7 @@ test('restores Render settings and workflow step through autosave', async ({ pag
   await page.locator('#renderEffectsGtao').uncheck();
   await page.locator('#renderEffectsDof').check();
 
-  await page.getByRole('button', { name: 'Back to Preview', exact: true }).click();
+  await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
   await page.locator('#previewExportHtmlQuality').selectOption('2400');
   await page.locator('[data-step-target="render"]').click();

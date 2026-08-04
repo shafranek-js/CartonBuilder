@@ -248,6 +248,10 @@ function updateStepNavigationStates() {
   if (artworkBtn) artworkBtn.disabled = !isBoxComplete;
   if (previewBtn) previewBtn.disabled = !isBoxComplete || !hasArtwork;
   if (renderBtn) renderBtn.disabled = !isBoxComplete || !hasArtwork;
+
+  if (artworkBtn) artworkBtn.classList.toggle('unlocked', isBoxComplete);
+  if (previewBtn) previewBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork);
+  if (renderBtn) renderBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork);
 }
 
 function showStep(step) {

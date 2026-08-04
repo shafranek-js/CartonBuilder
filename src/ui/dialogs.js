@@ -10,7 +10,7 @@ export function createResultDialog({
   continueButton,
   onExport,
 }) {
-  let returnFocus = continueButton;
+  let returnFocus = continueButton || null;
 
   function populateSummary() {
     const { width, height, depth } = model.dimensions;
@@ -47,8 +47,8 @@ export function createResultDialog({
   function close() {
     if (backdrop.hidden) return;
     backdrop.hidden = true;
-    const focusTarget = returnFocus?.isConnected ? returnFocus : continueButton;
-    focusTarget.focus();
+    const focusTarget = (returnFocus && returnFocus.isConnected) ? returnFocus : dialogSummary.ownerDocument.body;
+    focusTarget?.focus();
   }
 
   function handleKeydown(event) {

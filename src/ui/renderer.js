@@ -219,7 +219,7 @@ export function createBoxNetRenderer({
     }
 
     panelCount.textContent = `${model.panelCount}/6`;
-    continueButton.disabled = !model.isComplete;
+    if (continueButton) continueButton.disabled = !model.isComplete;
 
     if (cancelButton) {
       const isModified = model.panelCount > 1 ||

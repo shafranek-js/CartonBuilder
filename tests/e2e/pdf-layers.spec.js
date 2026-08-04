@@ -78,7 +78,7 @@ test('imports a PDF-based Illustrator file with an .ai extension', async ({ page
   await page.goto('http://127.0.0.1:4173');
   await page.waitForTimeout(1200);
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
 
   await page.locator('#artworkFileInput').setInputFiles({
     name: 'artwork.ai',
@@ -96,7 +96,7 @@ test('exposes PDF optional content layers and re-renders the preview when toggle
   await page.goto('http://127.0.0.1:4173');
   await page.waitForTimeout(1200);
   await buildReferenceNet(page);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.step[data-step-target="artwork"]').click();
 
   await page.locator('#artworkFileInput').setInputFiles({
     name: 'layers.pdf',

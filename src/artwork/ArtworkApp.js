@@ -772,7 +772,7 @@ export function createArtworkApp({
     }
     controls.bgOpacity.disabled = !transformEnabled;
     controls.replace.disabled = !enabled;
-    controls.preview.disabled = artworks.length === 0;
+    if (controls.preview) controls.preview.disabled = artworks.length === 0;
     controls.undo.disabled = history.undoStack.length === 0;
     controls.redo.disabled = history.redoStack.length === 0;
     controls.cropSection.hidden = !enabled;
@@ -2736,14 +2736,14 @@ export function createArtworkApp({
     scheduleSave();
   });
 
-  documentRef.getElementById('backToBoxButton').addEventListener('click', onBack);
-  controls.preview.addEventListener('click', () => {
+  documentRef.getElementById('backToBoxButton')?.addEventListener('click', onBack);
+  controls.preview?.addEventListener('click', () => {
     onPreview(getExportWarnings(boxModel, artwork, t));
   });
   documentRef.getElementById('export3dHtmlButton')?.addEventListener('click', () => {
     exportDeliverable('html');
   });
-  documentRef.getElementById('backToArtworkButton').addEventListener('click', () => {
+  documentRef.getElementById('backToArtworkButton')?.addEventListener('click', () => {
     selected = true;
     render();
     onBackToEditor();
