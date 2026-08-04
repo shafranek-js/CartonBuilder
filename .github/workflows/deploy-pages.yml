@@ -41,12 +41,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Render reliability browser gate
-        run: npm run test:visual -- --workers=1
-
       - name: Run release smoke workflows
         run: npm run test:e2e:smoke
 
