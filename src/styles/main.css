@@ -1403,10 +1403,18 @@ input[type="checkbox"] {
 .tool-section summary {
   cursor: pointer;
   user-select: none;
+  padding: 4px 6px;
+  margin: -4px -6px 9px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tool-section summary:hover {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 details.tool-section:not([open]) > summary {
-  margin-bottom: 0;
+  margin-bottom: -4px;
 }
 
 .file-name {
@@ -2258,10 +2266,6 @@ dialog button {
   margin-bottom: 0;
 }
 
-.scene-sidebar .light-control input[type="range"] {
-  width: 130px;
-}
-
 .preview-settings-panel .tool-section {
   min-width: 0;
 }
@@ -2339,16 +2343,47 @@ dialog button {
   background: #595959;
 }
 
-.fold-control {
+.fold-control,
+.light-control,
+.opacity-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  color: #dcdcdc;
+  font-size: 11px;
+}
+
+.fold-control:last-child,
+.light-control:last-child,
+.opacity-row:last-child {
+  margin-bottom: 0;
+}
+
+.fold-control > span:first-child,
+.light-control > span:first-child,
+.light-control > label:first-child,
+.opacity-row > b:first-child {
+  flex: 0 0 92px;
+  width: 92px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-text, #c8c8c8);
+  font-weight: 400;
 }
 
 .fold-control input[type="range"],
-.light-control input[type="range"] {
+.light-control input[type="range"],
+.opacity-row input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   height: 6px;
   margin: 0;
   padding: 0;
@@ -2359,16 +2394,9 @@ dialog button {
   transition: background 0.1s ease;
 }
 
-.fold-control input[type="range"] {
-  width: clamp(100px, 13vw, 180px);
-}
-
-.light-control input[type="range"] {
-  width: 90px;
-}
-
 .fold-control input[type="range"]::-webkit-slider-runnable-track,
-.light-control input[type="range"]::-webkit-slider-runnable-track {
+.light-control input[type="range"]::-webkit-slider-runnable-track,
+.opacity-row input[type="range"]::-webkit-slider-runnable-track {
   width: 100%;
   height: 6px;
   border: none;
@@ -2377,7 +2405,8 @@ dialog button {
 }
 
 .fold-control input[type="range"]::-webkit-slider-thumb,
-.light-control input[type="range"]::-webkit-slider-thumb {
+.light-control input[type="range"]::-webkit-slider-thumb,
+.opacity-row input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -2394,14 +2423,17 @@ dialog button {
 .fold-control input[type="range"]:hover::-webkit-slider-thumb,
 .fold-control input[type="range"]:focus-visible::-webkit-slider-thumb,
 .light-control input[type="range"]:hover::-webkit-slider-thumb,
-.light-control input[type="range"]:focus-visible::-webkit-slider-thumb {
+.light-control input[type="range"]:focus-visible::-webkit-slider-thumb,
+.opacity-row input[type="range"]:hover::-webkit-slider-thumb,
+.opacity-row input[type="range"]:focus-visible::-webkit-slider-thumb {
   transform: scale(1.25);
   background: var(--accent, #afca42);
   box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .fold-control input[type="range"]::-moz-range-track,
-.light-control input[type="range"]::-moz-range-track {
+.light-control input[type="range"]::-moz-range-track,
+.opacity-row input[type="range"]::-moz-range-track {
   width: 100%;
   height: 6px;
   border: none;
@@ -2410,7 +2442,8 @@ dialog button {
 }
 
 .fold-control input[type="range"]::-moz-range-thumb,
-.light-control input[type="range"]::-moz-range-thumb {
+.light-control input[type="range"]::-moz-range-thumb,
+.opacity-row input[type="range"]::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border: 2px solid var(--panel-bg, #3e3e3e);
@@ -2424,7 +2457,9 @@ dialog button {
 .fold-control input[type="range"]:hover::-moz-range-thumb,
 .fold-control input[type="range"]:focus-visible::-moz-range-thumb,
 .light-control input[type="range"]:hover::-moz-range-thumb,
-.light-control input[type="range"]:focus-visible::-moz-range-thumb {
+.light-control input[type="range"]:focus-visible::-moz-range-thumb,
+.opacity-row input[type="range"]:hover::-moz-range-thumb,
+.opacity-row input[type="range"]:focus-visible::-moz-range-thumb {
   transform: scale(1.25);
   background: var(--accent, #afca42);
   box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
@@ -2438,24 +2473,15 @@ dialog button {
   padding: 0 16px 8px;
 }
 
-.light-control {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #dcdcdc;
+.fold-control output,
+.light-control output,
+.opacity-row output {
+  flex: 0 0 38px;
+  width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #e8e8e8;
   font-size: 11px;
-}
-
-.light-control output {
-  min-width: 30px;
-  color: #e8e8e8;
-  font-variant-numeric: tabular-nums;
-}
-
-.fold-control output {
-  min-width: 38px;
-  color: #e8e8e8;
-  font-variant-numeric: tabular-nums;
 }
 
 .compact-select {
