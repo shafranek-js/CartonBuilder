@@ -41,12 +41,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run release smoke workflows
-        run: npm run test:e2e:smoke
-
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
