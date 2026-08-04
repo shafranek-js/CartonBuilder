@@ -19,6 +19,7 @@ import { createContactsMenu } from './ui/ContactsMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 import { initSectionStatePersistence } from './ui/SectionStateManager.js';
+import { initSliderSteppers } from './ui/SliderStepper.js';
 import { createRenderApp } from './render/RenderApp.js';
 import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
 import { readRenderSettings, writeRenderSettings } from './render/renderSettingsStorage.js';
@@ -27,6 +28,7 @@ import { restoreStartupProject } from './project/firstRunExample.js';
 initializeI18n();
 applyTheme(getSavedTheme());
 initSectionStatePersistence();
+initSliderSteppers();
 
 const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
 const storedRenderSettings = readRenderSettings();

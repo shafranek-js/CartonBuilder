@@ -820,12 +820,14 @@
               <div class="render-view-preset-store">
                 <h3 data-i18n="renderViewPresets">View presets</h3>
                 <div id="renderViewPresetList" class="render-preset-grid render-view-preset-list"></div>
-                <div class="field preset-store-row">
+                <div class="preset-store-row">
                   <select id="renderViewPreset" aria-label="View preset"><option value="" data-i18n="renderViewPresetPlaceholder">View preset…</option></select>
-                  <button id="saveRenderViewPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
-                  <button id="duplicateRenderViewPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
-                  <button id="deleteRenderViewPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
-                  <button id="undoRenderViewPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                  <div class="preset-store-actions">
+                    <button id="saveRenderViewPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                    <button id="duplicateRenderViewPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
+                    <button id="deleteRenderViewPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+                    <button id="undoRenderViewPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                  </div>
                 </div>
               </div>
             </details>
@@ -913,13 +915,19 @@
               <div class="light-control"><span data-i18n="renderBevel">Bevel</span><input id="renderBoardBevel" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="renderBoardBevelValue">0.12 mm</output></div>
               <label class="field"><span data-i18n="renderInteriorColor">Interior</span><input id="renderBoardInteriorColor" type="color" value="#f4f2ec"></label>
               <label class="field"><span data-i18n="renderEdgeColor">Edges</span><input id="renderBoardEdgeColor" type="color" value="#c8c1b5"></label>
-              <div class="field preset-store-row">
+            </details>
+
+            <details open class="tool-section" id="renderNamedPresetSection">
+              <summary data-i18n="renderUserPresetsHeading">Render Presets</summary>
+              <div class="preset-store-row">
                 <select id="renderNamedPreset" aria-label="Named Render preset" data-i18n-aria-label="renderNamedPresetLabel"><option value="" data-i18n="renderNamedPresetPlaceholder">Named preset…</option></select>
-                <button id="saveRenderPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
-                <button id="updateRenderPresetButton" type="button" data-i18n="renderUpdatePreset">Update</button>
-                <button id="duplicateRenderPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
-                <button id="deleteRenderPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
-                <button id="undoRenderPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                <div class="preset-store-actions">
+                  <button id="saveRenderPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                  <button id="updateRenderPresetButton" type="button" data-i18n="renderUpdatePreset">Update</button>
+                  <button id="duplicateRenderPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
+                  <button id="deleteRenderPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+                  <button id="undoRenderPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                </div>
               </div>
               <div id="renderNamedPresetList" class="render-preset-grid render-user-preset-list" aria-label="My render presets"></div>
             </details>

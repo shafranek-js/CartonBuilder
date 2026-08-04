@@ -1,4 +1,5 @@
 import { t } from '../i18n.js';
+import { enhanceSlider } from '../ui/SliderStepper.js';
 import { ARTWORK_RENDER_QUALITY_OPTIONS } from '../artwork/ArtworkModel.js';
 import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
@@ -509,12 +510,30 @@ export function createRenderApp({
       const entry = entries[index];
       const model = entry?.model;
       if (!model?.hasArtwork || entry.visible === false) continue;
-      const row = documentRef.createElement('label');
-      row.className = 'render-artwork-quality-row';
+
+      const card = documentRef.createElement('div');
+      card.className = 'render-artwork-quality-card';
+
+      const headerRow = documentRef.createElement('div');
+      headerRow.className = 'render-artwork-quality-header';
+
+      const icon = documentRef.createElement('span');
+      icon.className = 'render-artwork-quality-icon';
+      icon.textContent = '📄';
+
       const name = documentRef.createElement('span');
       name.className = 'render-artwork-quality-name';
       name.textContent = model.source?.fileName || t('artwork');
       name.title = name.textContent;
+
+      headerRow.append(icon, name);
+
+      const fieldRow = documentRef.createElement('label');
+      fieldRow.className = 'field render-artwork-quality-field';
+
+      const labelSpan = documentRef.createElement('span');
+      labelSpan.textContent = t('renderQuality');
+
       const select = documentRef.createElement('select');
       select.dataset.renderArtworkIndex = String(index);
       select.setAttribute('aria-label', `${t('renderQuality')} ${name.textContent}`);
@@ -535,13 +554,13 @@ export function createRenderApp({
         try {
           await setArtworkQuality('render', value, index);
         } finally {
-          // Rebuild after the async texture replacement has settled so the
-          // control reflects the model that is now displayed in the canvas.
           updateArtworkQualityList();
         }
       });
-      row.append(name, select);
-      elements.artworkQualityList.appendChild(row);
+
+      fieldRow.append(labelSpan, select);
+      card.append(headerRow, fieldRow);
+      elements.artworkQualityList.appendChild(card);
     }
   }
 
@@ -592,6 +611,7 @@ export function createRenderApp({
       intensity.addEventListener('change', () => {
         Promise.resolve(updateArtworkFinish(index, { intensity: Number(intensity.value) / 100 })).catch(() => {});
       });
+      enhanceSlider(intensity);
       row.append(title, type, intensity);
       if (finish.type === 'foil') {
         const color = documentRef.createElement('input');

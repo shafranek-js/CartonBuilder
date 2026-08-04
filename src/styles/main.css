@@ -82,10 +82,10 @@ select {
 select {
   height: 26px;
   padding: 0 24px 0 8px;
-  border: 1px solid var(--panel-border, #5a5a5a);
-  border-radius: 6px;
-  background-color: var(--panel-bg, #3e3e3e);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='none' stroke='%23cccccc' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m1 1 4 4 4-4'/%3E%3C/svg%3E");
+  border: 1px solid var(--panel-border, #484848);
+  border-radius: 5px;
+  background-color: var(--input-bg, #242424);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='none' stroke='%23b0b0b0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m1 1 4 4 4-4'/%3E%3C/svg%3E");
   background-position: right 8px center;
   background-repeat: no-repeat;
   background-size: 10px 6px;
@@ -99,9 +99,14 @@ select {
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-select:hover,
+select:hover {
+  border-color: #666666;
+  background-color: #282828;
+}
+
 select:focus {
-  border-color: var(--accent);
+  border-color: var(--accent, #afca42);
+  background-color: #1e1e1e;
   box-shadow: 0 0 0 2px rgb(175 202 66 / 25%);
 }
 
@@ -111,11 +116,62 @@ select option {
 }
 
 input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--panel-border, #4a4a4a);
   border-radius: 4px;
+  background: #242424;
   cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="checkbox"]:hover {
+  border-color: var(--accent, #afca42);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  border-color: var(--accent, #afca42);
+  box-shadow: 0 0 0 3px rgb(175 202 66 / 25%);
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--accent, #afca42);
+  border-color: var(--accent, #afca42);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #1a1a1a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type="color"] {
+  width: 28px;
+  height: 24px;
+  padding: 2px;
+  border: 1px solid var(--panel-border, #484848);
+  border-radius: 4px;
+  background: #242424;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="color"]:hover {
+  border-color: var(--accent, #afca42);
 }
 
 .app-shell {
@@ -1269,9 +1325,10 @@ input[type="checkbox"] {
   right: calc(-1 * var(--artwork-panel-inset));
   bottom: 0;
   z-index: 10;
-  width: 318px;
+  width: 340px;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   border-left: 1px solid var(--panel-border, #444);
   background: var(--surface, #4e4e4e);
   color: var(--text, #ffffff);
@@ -1449,31 +1506,56 @@ details.tool-section:not([open]) > summary {
   aspect-ratio: 1 / 1;
   min-height: 28px;
   padding: 0;
-  border: 1px solid var(--panel-border, #5a5a5a);
-  border-radius: 6px;
-  background: var(--panel-bg, #3e3e3e);
+  border: 1px solid var(--panel-border, #484848);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #464646 0%, #3a3a3a 100%);
   color: var(--text, #ffffff);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
 }
 
 .tool-icon-btn:hover:not(:disabled),
 .tool-icon-btn:focus-visible:not(:disabled) {
   border-color: var(--accent, #afca42);
-  background: var(--surface, #4e4e4e);
+  background: linear-gradient(180deg, #525252 0%, #444444 100%);
   color: var(--accent, #afca42);
+  box-shadow: 0 0 0 2px rgb(175 202 66 / 20%);
+}
+
+.tool-icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  background: #333333;
 }
 
 .tool-section button,
+.sidebar-button,
 .processing-overlay button,
 dialog button {
-  min-height: 30px;
-  border: 1px solid var(--panel-border, #5a5a5a);
-  border-radius: 4px;
-  background: var(--panel-bg, #3e3e3e);
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--panel-border, #484848);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #464646 0%, #3a3a3a 100%);
   color: var(--text, #ffffff);
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+}
+
+.tool-section button:hover:not(:disabled),
+.sidebar-button:hover:not(:disabled),
+dialog button:hover:not(:disabled) {
+  border-color: var(--accent, #afca42);
+  background: linear-gradient(180deg, #525252 0%, #444444 100%);
+  color: #ffffff;
+}
+
+.tool-section button:active:not(:disabled),
+.sidebar-button:active:not(:disabled),
+dialog button:active:not(:disabled) {
+  transform: translateY(1px);
+  background: #333333;
 }
 
 .tool-section button:disabled {
@@ -1499,31 +1581,44 @@ dialog button {
   gap: 5px;
 }
 
-.control-grid input[type="number"] {
-  width: 75px;
-  max-width: 100%;
+.control-grid input[type="number"],
+.measure-input input,
+.transform-input input,
+.tool-section input[type="text"],
+.tool-section input[type="number"] {
   height: 26px;
-  padding: 2px 6px;
-  border: 1px solid var(--panel-border, #5a5a5a);
-  border-radius: 6px;
-  background: var(--panel-bg, #3e3e3e);
+  padding: 2px 8px;
+  border: 1px solid var(--panel-border, #444444);
+  border-radius: 5px;
+  background: #242424;
   color: var(--text, #ffffff);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.control-grid input[type="number"]:hover {
-  border-color: #888888;
+.control-grid input[type="number"]:hover,
+.measure-input input:hover,
+.transform-input input:hover,
+.tool-section input[type="text"]:hover,
+.tool-section input[type="number"]:hover {
+  border-color: #666666;
+  background: #282828;
 }
 
-.control-grid input[type="number"]:focus {
-  border-color: var(--accent);
+.control-grid input[type="number"]:focus,
+.measure-input input:focus,
+.transform-input input:focus,
+.tool-section input[type="text"]:focus,
+.tool-section input[type="number"]:focus {
+  border-color: var(--accent, #afca42);
+  background: #1e1e1e;
   box-shadow: 0 0 0 2px rgb(175 202 66 / 25%);
 }
 
 .opacity-row {
-  margin-bottom: 7px;
+  margin-bottom: 10px;
 }
 
 .opacity-row:last-child {
@@ -1833,8 +1928,36 @@ dialog button {
   color: var(--text, #ffffff);
 }
 
+.layer-toggle-cell input[type="checkbox"],
+.layer-toggle-cell .sr-only,
+.layer-toggle-input,
+input[type="checkbox"].sr-only {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.layer-toggle-cell input[type="checkbox"]::after,
+.layer-toggle-cell .sr-only::after,
+.layer-toggle-input::after,
+input[type="checkbox"].sr-only::after {
+  display: none !important;
+  content: none !important;
+}
+
 .layer-toggle-cell input:not(:checked) ~ svg {
-  opacity: 0;
+  opacity: 0.25;
 }
 
 .layer-toggle-cell input:checked ~ svg {
@@ -1843,16 +1966,6 @@ dialog button {
 
 .layer-toggle-cell > svg {
   pointer-events: none;
-}
-
-.layer-toggle-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .layer-thumbnail {
@@ -2212,7 +2325,7 @@ dialog button {
 
 .preview-main-row {
   display: grid;
-  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(260px, 330px);
   grid-template-areas: "left canvas right";
   min-height: 0;
 }
@@ -2220,7 +2333,8 @@ dialog button {
 .scene-sidebar {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--surface, #4e4e4e);
   color: var(--text, #ffffff);
   scrollbar-gutter: stable;
@@ -2240,22 +2354,71 @@ dialog button {
   border-left: 1px solid var(--panel-border, #444);
 }
 
-.scene-sidebar .field {
+.field,
+.tool-section .field,
+.scene-sidebar .field,
+.render-sidebar .field {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  width: 100%;
+  min-height: 26px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
   color: #dcdcdc;
   font-size: 11px;
 }
 
-.scene-sidebar .field:last-child {
+.field:last-child,
+.tool-section .field:last-child,
+.scene-sidebar .field:last-child,
+.render-sidebar .field:last-child {
   margin-bottom: 0;
 }
 
-.scene-sidebar .field select {
-  max-width: 150px;
+.field > span,
+.field > label,
+.tool-section .field > span,
+.scene-sidebar .field > span,
+.render-sidebar .field > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-text, #c8c8c8);
+  font-weight: 400;
+}
+
+.field > select,
+.field > input[type="text"],
+.field > input[type="number"],
+.tool-section .field select,
+.tool-section .field input[type="text"],
+.tool-section .field input[type="number"],
+.scene-sidebar .field select,
+.scene-sidebar .field input[type="text"],
+.scene-sidebar .field input[type="number"],
+.render-sidebar .field select,
+.render-sidebar .field input[type="text"],
+.render-sidebar .field input[type="number"] {
+  flex: 0 0 120px;
+  width: 120px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.field > input[type="checkbox"],
+.tool-section .field input[type="checkbox"],
+.scene-sidebar .field input[type="checkbox"],
+.render-sidebar .field input[type="checkbox"],
+.field > input[type="color"],
+.tool-section .field input[type="color"],
+.scene-sidebar .field input[type="color"],
+.render-sidebar .field input[type="color"] {
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .scene-sidebar .light-control {
@@ -2350,8 +2513,9 @@ dialog button {
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-height: 26px;
   box-sizing: border-box;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: #dcdcdc;
   font-size: 11px;
 }
@@ -2366,8 +2530,8 @@ dialog button {
 .light-control > span:first-child,
 .light-control > label:first-child,
 .opacity-row > b:first-child {
-  flex: 0 0 92px;
-  width: 92px;
+  flex: 0 0 78px;
+  width: 78px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2465,6 +2629,62 @@ dialog button {
   box-shadow: 0 0 0 4px rgb(175 202 66 / 25%), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
+.slider-track-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.slider-step-btn,
+button.slider-step-btn,
+.tool-section button.slider-step-btn,
+.render-sidebar button.slider-step-btn,
+.scene-sidebar button.slider-step-btn {
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  max-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid var(--panel-border, #484848) !important;
+  border-radius: 4px !important;
+  background: var(--input-bg, #242424) !important;
+  color: var(--text, #ffffff) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 16px !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, transform 0.1s ease !important;
+}
+
+.slider-step-btn:hover:not(:disabled) {
+  background-color: #383838 !important;
+  border-color: #666666 !important;
+  color: var(--accent, #afca42) !important;
+}
+
+.slider-step-btn:active:not(:disabled) {
+  transform: scale(0.90) !important;
+  background-color: #1e1e1e !important;
+}
+
+.slider-step-btn:disabled {
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
 .light-controls {
   display: flex;
   flex-wrap: wrap;
@@ -2476,9 +2696,10 @@ dialog button {
 .fold-control output,
 .light-control output,
 .opacity-row output {
-  flex: 0 0 38px;
-  width: 38px;
+  flex: 0 0 52px;
+  width: 52px;
   text-align: right;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: #e8e8e8;
   font-size: 11px;
@@ -2757,17 +2978,62 @@ dialog button {
 
 .artwork-quality-fields .field,
 .render-artwork-quality-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  width: 100%;
 }
 
 .artwork-quality-fields select,
 .render-artwork-quality-row select {
-  width: 96px;
-  min-width: 0;
-  max-width: 100%;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  margin-left: auto;
+}
+
+.preset-store-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 6px !important;
+  width: 100% !important;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.preset-store-row select,
+.tool-section .preset-store-row select,
+.render-sidebar .preset-store-row select,
+.scene-sidebar .preset-store-row select,
+div.preset-store-row select {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  line-height: 26px !important;
+  padding: 0 24px 0 8px !important;
+  box-sizing: border-box !important;
+  font-size: 11px !important;
+}
+
+.preset-store-actions {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.preset-store-actions button {
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 0 4px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  font-size: 11px !important;
+  white-space: nowrap !important;
 }
 
 .artwork-finish-section {
@@ -3092,7 +3358,7 @@ dialog input {
 
 .render-main-row {
   display: grid;
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr) minmax(280px, 350px);
   grid-template-areas: "left canvas right";
   flex: 1;
   min-height: 0;
@@ -3147,7 +3413,8 @@ dialog input {
 
 .render-sidebar {
   min-width: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px;
   background: var(--panel-bg);
   scrollbar-gutter: stable;
@@ -3169,12 +3436,59 @@ dialog input {
 
 .render-sidebar .field,
 .render-sidebar .light-control {
-  margin-bottom: 7px;
+  margin-bottom: 10px;
 }
 
 .render-artwork-quality-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.render-artwork-quality-card {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--input-bg, #242424);
+  border: 1px solid var(--panel-border, #3d3d3d);
+  box-sizing: border-box;
+}
+
+.render-artwork-quality-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.render-artwork-quality-icon {
+  flex: 0 0 auto;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.render-artwork-quality-name {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  color: var(--text, #ffffff);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.render-artwork-quality-field {
+  margin-top: 2px !important;
+  margin-bottom: 0 !important;
 }
 
 .render-finish-summary {
@@ -3210,28 +3524,11 @@ dialog input {
   font-size: 11px;
 }
 
-.render-artwork-quality-name {
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text, #fff);
-  font-size: 11px;
-}
-
 .render-viewport-summary {
   margin: 8px 0 0;
   color: var(--text-muted, #b5b5b5);
   font-size: 10px;
   line-height: 1.35;
-}
-
-.preset-store-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 5px;
 }
 
 .diagnostics-output {
