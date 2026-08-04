@@ -151,8 +151,8 @@
               <button type="button" id="removeArtworkButton"></button>
             </div>
 
-            <section class="tool-section layers-tool-section">
-              <h2 data-i18n="layers">Layers</h2>
+            <details open class="tool-section layers-tool-section">
+              <summary data-i18n="layers">Layers</summary>
               <div class="adobe-layers-table">
                 <!-- Artwork Layer -->
                 <div class="adobe-layer-row" data-layer-id="artwork">
@@ -261,12 +261,12 @@
                   <span class="layer-title" data-i18n="highlights">Front/Base highlight</span>
                 </div>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section pdf-layers-section" id="pdfLayersSection" hidden>
-              <h2 data-i18n="pdfLayers">PDF layers</h2>
+            <details open class="tool-section pdf-layers-section" id="pdfLayersSection" hidden>
+              <summary data-i18n="pdfLayers">PDF layers</summary>
               <div class="adobe-layers-table" id="pdfLayersList"></div>
-            </section>
+            </details>
           </aside>
 
           <div class="artwork-canvas-wrap" id="artworkCanvasWrap" aria-busy="false">
@@ -290,8 +290,8 @@
                 <path d="M5 17h14l-1.5-6H18V4H6v7h.5L5 17z"/>
               </svg>
             </button>
-            <section class="tool-section">
-              <h2 data-i18n="transform">Transform</h2>
+            <details open class="tool-section">
+              <summary data-i18n="transform">Transform</summary>
               <div class="transform-layout-row">
                 <svg class="reference-point-svg" id="referencePointGrid" viewBox="0 0 28 28" width="28" height="28" role="group" aria-label="Reference point" data-i18n-aria-label="referencePointLabel">
                   <g class="reference-point-connectors" stroke="currentColor" stroke-width="1.5" stroke-linecap="square">
@@ -299,10 +299,9 @@
                     <line x1="17.5" y1="3.5" x2="21.5" y2="3.5" />
                     <line x1="6.5" y1="24.5" x2="10.5" y2="24.5" />
                     <line x1="17.5" y1="24.5" x2="21.5" y2="24.5" />
-
                     <line x1="3.5" y1="6.5" x2="3.5" y2="10.5" />
-                    <line x1="3.5" y1="17.5" x2="3.5" y2="21.5" />
                     <line x1="24.5" y1="6.5" x2="24.5" y2="10.5" />
+                    <line x1="3.5" y1="17.5" x2="3.5" y2="21.5" />
                     <line x1="24.5" y1="17.5" x2="24.5" y2="21.5" />
                   </g>
 
@@ -373,59 +372,6 @@
                   <span class="transform-unit">%</span>
                 </div>
               </div>
-              <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
-              <div class="artwork-quality-fields" id="artworkQualityFields">
-                <label class="field"><span data-i18n="previewQuality">Preview quality</span>
-                  <select id="artworkPreviewQuality" aria-label="Preview quality" data-i18n-aria-label="previewQuality">
-                    <option value="auto" data-i18n="qualityAuto">Auto</option>
-                    <option value="150">150 DPI</option>
-                    <option value="300">300 DPI</option>
-                    <option value="600">600 DPI</option>
-                  </select>
-                </label>
-                <label class="field"><span data-i18n="renderQuality">Render quality</span>
-                  <select id="artworkRenderQuality" aria-label="Render quality" data-i18n-aria-label="renderQuality">
-                    <option value="auto" data-i18n="qualityAuto">Auto</option>
-                    <option value="150">150 DPI</option>
-                    <option value="300">300 DPI</option>
-                    <option value="600">600 DPI</option>
-                    <option value="1200">1200 DPI</option>
-                    <option value="2400">2400 DPI</option>
-                  </select>
-                </label>
-                <p class="quality-summary" id="artworkQualitySummary" role="status"></p>
-              </div>
-              <section class="artwork-finish-section" id="artworkFinishSection" hidden>
-                <h3 data-i18n="artworkFinishHeading">Presentation finish</h3>
-                <label class="field"><span data-i18n="artworkFinishRole">Output</span>
-                  <select id="artworkFinishRole" aria-label="Artwork output role" data-i18n-aria-label="artworkFinishRole">
-                    <option value="print" data-i18n="artworkFinishPrint">Print artwork</option>
-                    <option value="finish" data-i18n="artworkFinishMask">Finish mask only</option>
-                    <option value="print-and-finish" data-i18n="artworkFinishPrintAndFinish">Print + finish</option>
-                  </select>
-                </label>
-                <label class="field"><span data-i18n="artworkFinishType">Finish</span>
-                  <select id="artworkFinishType" aria-label="Finish type" data-i18n-aria-label="artworkFinishType">
-                    <option value="spot-gloss" data-i18n="artworkFinishSpotGloss">Spot gloss varnish</option>
-                    <option value="foil" data-i18n="artworkFinishFoil">Metallic foil</option>
-                    <option value="emboss" data-i18n="artworkFinishEmboss">Emboss</option>
-                    <option value="deboss" data-i18n="artworkFinishDeboss">Deboss</option>
-                  </select>
-                </label>
-                <label class="field"><span data-i18n="artworkFinishMaskChannel">Mask source</span>
-                  <select id="artworkFinishMaskChannel" aria-label="Finish mask source" data-i18n-aria-label="artworkFinishMaskChannel">
-                    <option value="auto" data-i18n="artworkFinishMaskAuto">Auto</option>
-                    <option value="alpha" data-i18n="artworkFinishMaskAlpha">Transparency</option>
-                    <option value="luminance" data-i18n="artworkFinishMaskLuminance">Brightness</option>
-                  </select>
-                </label>
-                <label class="field"><span data-i18n="artworkFinishInvert">Invert mask</span><input id="artworkFinishInvert" type="checkbox"></label>
-                <div class="light-control"><span data-i18n="artworkFinishIntensity">Intensity</span><input id="artworkFinishIntensity" type="range" min="0" max="100" step="1" value="100"><output id="artworkFinishIntensityValue">100%</output></div>
-                <label class="field"><span data-i18n="artworkFinishFoilColor">Foil color</span><input id="artworkFinishColor" type="color" value="#d4af37"></label>
-                <div class="light-control"><span data-i18n="artworkFinishRoughness">Finish roughness</span><input id="artworkFinishRoughness" type="range" min="4" max="80" step="1" value="22"><output id="artworkFinishRoughnessValue">22%</output></div>
-                <div class="light-control"><span data-i18n="artworkFinishReliefStrength">Relief strength</span><input id="artworkFinishRelief" type="range" min="2" max="100" step="1" value="35"><output id="artworkFinishReliefValue">35%</output></div>
-                <p class="quality-help" data-i18n="artworkFinishHelp">White or opaque areas receive the finish. Duplicate a layer to combine multiple finishes.</p>
-              </section>
               <div class="button-grid icon-button-grid">
                 <button type="button" class="tool-icon-btn" id="fitArtworkButton" disabled title="Fit artwork to dieline" data-i18n-title="fitDieline" aria-label="Fit artwork to dieline" data-i18n-aria-label="fitDieline">
                   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -468,10 +414,68 @@
                   </svg>
                 </button>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section" id="opacitySection" hidden>
-              <h2 data-i18n="opacityPanel">Opacity</h2>
+            <details open class="tool-section" id="artworkQualitySection">
+              <summary data-i18n="renderArtworkQuality">Artwork quality</summary>
+              <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
+              <div class="artwork-quality-fields" id="artworkQualityFields">
+                <label class="field"><span data-i18n="previewQuality">Preview quality</span>
+                  <select id="artworkPreviewQuality" aria-label="Preview quality" data-i18n-aria-label="previewQuality">
+                    <option value="auto" data-i18n="qualityAuto">Auto</option>
+                    <option value="150">150 DPI</option>
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
+                  </select>
+                </label>
+                <label class="field"><span data-i18n="renderQuality">Render quality</span>
+                  <select id="artworkRenderQuality" aria-label="Render quality" data-i18n-aria-label="renderQuality">
+                    <option value="auto" data-i18n="qualityAuto">Auto</option>
+                    <option value="150">150 DPI</option>
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
+                    <option value="1200">1200 DPI</option>
+                    <option value="2400">2400 DPI</option>
+                  </select>
+                </label>
+                <p class="quality-summary" id="artworkQualitySummary" role="status"></p>
+              </div>
+            </details>
+
+            <details open class="tool-section artwork-finish-section" id="artworkFinishSection" hidden>
+              <summary data-i18n="artworkFinishHeading">Presentation finish</summary>
+              <label class="field"><span data-i18n="artworkFinishRole">Output</span>
+                <select id="artworkFinishRole" aria-label="Artwork output role" data-i18n-aria-label="artworkFinishRole">
+                  <option value="print" data-i18n="artworkFinishPrint">Print artwork</option>
+                  <option value="finish" data-i18n="artworkFinishMask">Finish mask only</option>
+                  <option value="print-and-finish" data-i18n="artworkFinishPrintAndFinish">Print + finish</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="artworkFinishType">Finish</span>
+                <select id="artworkFinishType" aria-label="Finish type" data-i18n-aria-label="artworkFinishType">
+                  <option value="spot-gloss" data-i18n="artworkFinishSpotGloss">Spot gloss varnish</option>
+                  <option value="foil" data-i18n="artworkFinishFoil">Metallic foil</option>
+                  <option value="emboss" data-i18n="artworkFinishEmboss">Emboss</option>
+                  <option value="deboss" data-i18n="artworkFinishDeboss">Deboss</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="artworkFinishMaskChannel">Mask source</span>
+                <select id="artworkFinishMaskChannel" aria-label="Finish mask source" data-i18n-aria-label="artworkFinishMaskChannel">
+                  <option value="auto" data-i18n="artworkFinishMaskAuto">Auto</option>
+                  <option value="alpha" data-i18n="artworkFinishMaskAlpha">Transparency</option>
+                  <option value="luminance" data-i18n="artworkFinishMaskLuminance">Brightness</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="artworkFinishInvert">Invert mask</span><input id="artworkFinishInvert" type="checkbox"></label>
+              <div class="light-control"><span data-i18n="artworkFinishIntensity">Intensity</span><input id="artworkFinishIntensity" type="range" min="0" max="100" step="1" value="100"><output id="artworkFinishIntensityValue">100%</output></div>
+              <label class="field"><span data-i18n="artworkFinishFoilColor">Foil color</span><input id="artworkFinishColor" type="color" value="#d4af37"></label>
+              <div class="light-control"><span data-i18n="artworkFinishRoughness">Finish roughness</span><input id="artworkFinishRoughness" type="range" min="4" max="80" step="1" value="22"><output id="artworkFinishRoughnessValue">22%</output></div>
+              <div class="light-control"><span data-i18n="artworkFinishReliefStrength">Relief strength</span><input id="artworkFinishRelief" type="range" min="2" max="100" step="1" value="35"><output id="artworkFinishReliefValue">35%</output></div>
+              <p class="quality-help" data-i18n="artworkFinishHelp">White or opaque areas receive the finish. Duplicate a layer to combine multiple finishes.</p>
+            </details>
+
+            <details open class="tool-section" id="opacitySection" hidden>
+              <summary data-i18n="opacityPanel">Opacity</summary>
               <div class="opacity-row">
                 <b data-i18n="opacity">Artwork</b>
                 <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span>
@@ -480,10 +484,10 @@
                 <b data-i18n="bgOpacity">Bleed</b>
                 <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section" id="cropSection" hidden>
-              <h2 data-i18n="imageCrop">Image Crop</h2>
+            <details open class="tool-section" id="cropSection" hidden>
+              <summary data-i18n="imageCrop">Image Crop</summary>
               <div class="crop-actions" role="group" aria-label="Image crop tools" data-i18n-aria-label="imageCropTools">
                 <button type="button" class="crop-tool-btn" id="cropFrameButton" title="Crop by adjusting frame handles" data-i18n-title="cropFrameTitle" aria-label="Crop by adjusting frame handles" data-i18n-aria-label="cropFrameTitle">
                   <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="13" height="13" rx="1.2"/><path d="M2.5 6.5h3M2.5 6.5v-3M15.5 11.5h-3M15.5 11.5v3"/></svg>
@@ -499,56 +503,56 @@
                 </button>
               </div>
               <div class="crop-status" id="cropStatus" data-i18n="cropIdle">Click Crop or Draw to start.</div>
-            </section>
+            </details>
 
-            <section class="tool-section" id="boxDimensionsSection">
-              <h2 class="box-dim-title">
-                <span data-i18n="boxDimensions">Box Dimensions</span>
-                <button type="button" id="boxConstrainProportionsBtn" class="chain-toggle chain-toggle--box" title="Constrain box proportions" data-i18n-title="constrainBoxProportions" aria-pressed="true">🔗</button>
-              </h2>
-              <div class="box-dim-fields">
-                <div class="box-dim-row">
-                  <label for="artworkBoxWidth" data-i18n="width">Width:</label>
-                  <div class="box-dim-control">
-                    <span class="measure-input"><input id="artworkBoxWidth" type="number" min="0.1" step="0.01"></span>
-                    <svg class="dimension-icon dim-scrubber width-icon" data-dim="width" viewBox="0 0 24 24" aria-hidden="true"
-                         title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)">
-                      <path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+            <details open class="tool-section" id="boxDimensionsSection">
+              <summary data-i18n="boxDimensions">Box Dimensions</summary>
+              <div class="box-dim-fields-wrap">
+                <div class="box-dim-fields">
+                  <div class="box-dim-row">
+                    <label for="artworkBoxWidth" data-i18n="width">Width:</label>
+                    <div class="box-dim-control">
+                      <span class="measure-input"><input id="artworkBoxWidth" type="number" min="0.1" step="0.01"></span>
+                      <svg class="dimension-icon dim-scrubber width-icon" data-dim="width" viewBox="0 0 24 24" aria-hidden="true"
+                           title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)">
+                        <path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
                   </div>
-                </div>
-                <div class="box-dim-row">
-                  <label for="artworkBoxHeight" data-i18n="height">Height:</label>
-                  <div class="box-dim-control">
-                    <span class="measure-input"><input id="artworkBoxHeight" type="number" min="0.1" step="0.01"></span>
-                    <svg class="dimension-icon dim-scrubber height-icon" data-dim="height" viewBox="0 0 24 24" aria-hidden="true"
-                         title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)">
-                      <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </div>
-                </div>
-                <div class="box-dim-row">
-                  <label for="artworkBoxDepth" data-i18n="depth">Depth:</label>
-                  <div class="box-dim-control">
-                    <span class="measure-input"><input id="artworkBoxDepth" type="number" min="0.1" step="0.01"></span>
-                    <svg class="dimension-icon dim-scrubber depth-icon" data-dim="depth" viewBox="0 0 24 24" aria-hidden="true"
-                         title="Drag diagonally to adjust Depth">
-                      <g transform="rotate(45 12 12)">
+                  <div class="box-dim-row">
+                    <label for="artworkBoxHeight" data-i18n="height">Height:</label>
+                    <div class="box-dim-control">
+                      <span class="measure-input"><input id="artworkBoxHeight" type="number" min="0.1" step="0.01"></span>
+                      <svg class="dimension-icon dim-scrubber height-icon" data-dim="height" viewBox="0 0 24 24" aria-hidden="true"
+                           title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)">
                         <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                      </g>
-                    </svg>
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="box-dim-row">
+                    <label for="artworkBoxDepth" data-i18n="depth">Depth:</label>
+                    <div class="box-dim-control">
+                      <span class="measure-input"><input id="artworkBoxDepth" type="number" min="0.1" step="0.01"></span>
+                      <svg class="dimension-icon dim-scrubber depth-icon" data-dim="depth" viewBox="0 0 24 24" aria-hidden="true"
+                           title="Drag diagonally to adjust Depth">
+                        <g transform="rotate(45 12 12)">
+                          <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                      </svg>
+                    </div>
                   </div>
                 </div>
+                <button type="button" id="boxConstrainProportionsBtn" class="chain-toggle chain-toggle--box" title="Constrain box proportions" data-i18n-title="constrainBoxProportions" aria-pressed="true">🔗</button>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section" id="historySection" hidden>
-              <h2 data-i18n="history">History</h2>
+            <details open class="tool-section" id="historySection" hidden>
+              <summary data-i18n="history">History</summary>
               <div class="button-row">
                 <button type="button" id="undoButton" disabled data-i18n="undo" title="Undo action (Ctrl+Z)" data-i18n-title="undoTitle">Undo</button>
                 <button type="button" id="redoButton" disabled data-i18n="redo" title="Redo action (Ctrl+Y or Ctrl+Shift+Z)" data-i18n-title="redoTitle">Redo</button>
               </div>
-            </section>
+            </details>
           </aside>
 
           <div class="panel-edge panel-edge-left" id="panelEdgeLeft" role="button" tabindex="0" aria-expanded="false" aria-label="Show left panel" data-i18n-aria-label="showLeftPanel" hidden></div>
@@ -595,8 +599,8 @@
           </div>
 
           <aside class="scene-sidebar preview-settings-panel preview-settings-panel-left" aria-label="Scene settings" data-i18n-aria-label="sceneSettingsLabel">
-            <section class="tool-section">
-              <h2 data-i18n="scenePresets3d">Scene presets</h2>
+            <details open class="tool-section">
+              <summary data-i18n="scenePresets3d">Scene presets</summary>
               <div class="field">
                 <select id="scenePresetSelect" aria-label="Saved scene presets" data-i18n-aria-label="scenePresetSelectLabel">
                   <option value="">—</option>
@@ -608,10 +612,10 @@
                 <button id="deleteScenePresetBtn" type="button" disabled data-i18n="deletePreset3d">Delete</button>
               </div>
               <span class="sidebar-status" id="scenePresetStatus" role="status" aria-live="polite"></span>
-            </section>
+            </details>
 
-            <section class="tool-section preview-export-section">
-              <h2 data-i18n="previewExportFrameTitle">Export frame</h2>
+            <details open class="tool-section preview-export-section">
+              <summary data-i18n="previewExportFrameTitle">Export frame</summary>
               <p class="quality-help" data-i18n="previewExportFrameHelp">The frame shows the crop used by presentation PNG/JPG exports. The 3D scene remains interactive.</p>
               <label class="field preview-export-quality-field">
                 <span data-i18n="previewExportHtmlQuality">HTML texture quality</span>
@@ -637,10 +641,10 @@
                   <span id="previewExportHtmlSummary"></span>
                 </p>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="sceneStyle3d">Style</h2>
+            <details open class="tool-section">
+              <summary data-i18n="sceneStyle3d">Style</summary>
               <div class="field">
                 <span data-i18n="sceneStyle3d">Style</span>
                 <select id="scenePreset">
@@ -649,10 +653,10 @@
                   <option value="photorealistic" data-i18n="photorealisticPreset3d">Photorealistic</option>
                 </select>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="environment3d">Environment</h2>
+            <details open class="tool-section">
+              <summary data-i18n="environment3d">Environment</summary>
               <div class="field">
                 <span data-i18n="environmentType3d">Type</span>
                 <select id="environment">
@@ -674,13 +678,13 @@
                 <span data-i18n="backgroundColor3d">Background</span>
                 <input id="backgroundColor" type="color" value="#e8eaeb">
               </div>
-            </section>
+            </details>
           </aside>
 
           <aside class="scene-sidebar preview-settings-panel preview-settings-panel-right" aria-label="Camera, lighting, shadow and model settings">
 
-            <section class="tool-section">
-              <h2 data-i18n="camera3d">Camera</h2>
+            <details open class="tool-section">
+              <summary data-i18n="camera3d">Camera</summary>
               <div class="field">
                 <span data-i18n="cameraProjection3d">Projection</span>
                 <select id="cameraProjection">
@@ -703,10 +707,10 @@
                 <output id="cameraFovValue" for="cameraFov">35°</output>
               </div>
               <button class="sidebar-button" id="reset3dViewButton" type="button" data-i18n="resetView3d">Reset View</button>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="lighting3d">Lighting</h2>
+            <details open class="tool-section">
+              <summary data-i18n="lighting3d">Lighting</summary>
               <div class="light-control">
                 <span data-i18n="lightAzimuth3d">Azimuth</span>
                 <input id="lightAzimuth" type="range" min="0" max="360" step="1" value="63">
@@ -727,10 +731,10 @@
                 <input id="hemisphereIntensity" type="range" min="0" max="5" step="0.1" value="1.7">
                 <output id="hemisphereIntensityValue" for="hemisphereIntensity">1.7</output>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="shadows3d">Shadows</h2>
+            <details open class="tool-section">
+              <summary data-i18n="shadows3d">Shadows</summary>
               <div class="field">
                 <span data-i18n="shadowsEnabled3d">Enabled</span>
                 <input id="shadowEnabled" type="checkbox" checked>
@@ -753,10 +757,10 @@
                   <option value="2048">2048</option>
                 </select>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="model3d">Model</h2>
+            <details open class="tool-section">
+              <summary data-i18n="model3d">Model</summary>
               <div class="light-control">
                 <span data-i18n="foldProgress3d">Fold</span>
                 <input id="foldProgress" type="range" min="0" max="1" step="0.01" value="1">
@@ -766,7 +770,7 @@
                 <button id="open3dButton" type="button" data-i18n="open3d">Open</button>
                 <button id="fold3dButton" type="button" data-i18n="fold3d">Fold</button>
               </div>
-            </section>
+            </details>
           </aside>
         </div>
         <p class="technical-proof-notice" data-i18n="technicalProofNotice">Technical proof: the PDF is 1:1 with a CutContour dieline, but it is not PDF/X certified. Verify it with your printer before production.</p>
@@ -803,8 +807,8 @@
           </div>
 
           <aside class="render-sidebar render-settings-panel render-settings-panel-left" aria-label="Render output settings" data-i18n-aria-label="renderSettingsLabel">
-            <section class="tool-section">
-              <h2 data-i18n="renderPresets">Presets</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderPresets">Presets</summary>
               <div class="render-preset-grid render-preset-gallery">
                 <button type="button" class="render-preset-button render-preset-card" data-render-preset="clean-studio"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-clean" aria-hidden="true"></span><span data-i18n="renderPresetCleanStudio">Clean Studio</span></button>
                 <button type="button" class="render-preset-button render-preset-card" data-render-preset="catalogue"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-catalogue" aria-hidden="true"></span><span data-i18n="renderPresetCatalogue">Catalogue</span></button>
@@ -824,16 +828,16 @@
                   <button id="undoRenderViewPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
                 </div>
               </div>
-            </section>
+            </details>
 
-            <section class="tool-section render-artwork-quality-section">
-              <h2 data-i18n="renderArtworkQuality">Artwork quality</h2>
+            <details open class="tool-section render-artwork-quality-section">
+              <summary data-i18n="renderArtworkQuality">Artwork quality</summary>
               <p class="quality-help" data-i18n="renderArtworkQualityHelp">Choose the source quality used by Render and raster exports.</p>
               <div id="renderArtworkQualityList" class="render-artwork-quality-list"></div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderCamera">Camera</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderCamera">Camera</summary>
               <label class="field"><span data-i18n="renderCameraPreset">View</span>
                 <select id="renderCameraPreset">
                   <option value="back" data-i18n="renderCameraBack">Back</option>
@@ -868,10 +872,10 @@
               </details>
               <label class="field"><span data-i18n="renderKeepVerticalsParallel">Keep verticals parallel</span><input id="renderKeepVerticalsParallel" type="checkbox"></label>
               <div class="button-row"><button id="renderFitCameraButton" type="button" data-i18n="renderFitCamera">Fit</button><button id="renderResetCameraButton" type="button" data-i18n="resetView3d">Reset</button></div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderFrame">Frame</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderFrame">Frame</summary>
               <label class="field"><span data-i18n="renderAspect">Aspect</span>
                 <select id="renderAspect">
                   <option value="square">1:1</option>
@@ -884,10 +888,10 @@
                 <select id="renderLongEdge"><option value="2048">2048 px</option><option value="4096">4096 px</option></select>
               </label>
               <p class="render-viewport-summary" id="renderViewportSummary" role="status"></p>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderMaterial">Material</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderMaterial">Material</summary>
               <label class="field"><span data-i18n="renderMaterialProfile">Board finish</span>
                 <select id="renderMaterialProfile">
                   <option value="uncoated" data-i18n="renderMaterialUncoated">Uncoated</option>
@@ -895,16 +899,16 @@
                   <option value="gloss" data-i18n="renderMaterialGloss">Gloss</option>
                 </select>
               </label>
-            </section>
+            </details>
 
-            <section class="tool-section render-finishes-section">
-              <h2 data-i18n="renderFinishes">Finishes</h2>
+            <details open class="tool-section render-finishes-section">
+              <summary data-i18n="renderFinishes">Finishes</summary>
               <p class="quality-help" data-i18n="renderFinishesHelp">Assigned artwork layers are rendered as physical presentation finishes.</p>
               <div id="renderFinishSummary" class="render-finish-summary" role="status"></div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderBoardAppearance">Board appearance</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderBoardAppearance">Board appearance</summary>
               <div class="light-control"><span data-i18n="renderThickness">Thickness</span><input id="renderBoardThickness" type="range" min="0.05" max="2" step="0.01" value="0.35"><output id="renderBoardThicknessValue">0.35 mm</output></div>
               <div class="light-control"><span data-i18n="renderBevel">Bevel</span><input id="renderBoardBevel" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="renderBoardBevelValue">0.12 mm</output></div>
               <label class="field"><span data-i18n="renderInteriorColor">Interior</span><input id="renderBoardInteriorColor" type="color" value="#f4f2ec"></label>
@@ -918,13 +922,13 @@
                 <button id="undoRenderPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
               </div>
               <div id="renderNamedPresetList" class="render-preset-grid render-user-preset-list" aria-label="My render presets"></div>
-            </section>
+            </details>
           </aside>
 
           <aside class="render-sidebar render-settings-panel render-settings-panel-right" aria-label="Render lighting and effects settings">
 
-            <section class="tool-section">
-              <h2 data-i18n="renderLighting">Lighting</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderLighting">Lighting</summary>
               <div class="light-control"><span data-i18n="lightAzimuth3d">Horizontal</span><input id="renderLightAzimuth" type="range" min="0" max="360" step="1" value="63"><output id="renderLightAzimuthValue">63°</output></div>
               <div class="light-control"><span data-i18n="lightElevation3d">Vertical</span><input id="renderLightElevation" type="range" min="5" max="85" step="1" value="48"><output id="renderLightElevationValue">48°</output></div>
               <div class="light-control"><span data-i18n="lightIntensity3d">Brightness</span><input id="renderLightIntensity" type="range" min="0" max="10" step="0.1" value="1.7"><output id="renderLightIntensityValue">1.7</output></div>
@@ -941,10 +945,10 @@
               </label>
               <div class="light-control"><span data-i18n="environmentIntensity3d">Ambient</span><input id="renderEnvironmentIntensity" type="range" min="0" max="5" step="0.05" value="0.4"><output id="renderEnvironmentIntensityValue">0.40</output></div>
               <div class="light-control"><span data-i18n="renderExposure">Exposure</span><input id="renderExposure" type="range" min="0.1" max="3" step="0.05" value="0.85"><output id="renderExposureValue">0.85</output></div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderBackground">Background</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderBackground">Background</summary>
               <label class="field"><span data-i18n="renderBackgroundMode">Mode</span>
                 <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="image" data-i18n="renderBackgroundImage">Image</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
               </label>
@@ -958,27 +962,27 @@
               <div class="light-control"><span data-i18n="renderBackgroundZoom">Zoom</span><input id="renderBackgroundZoom" type="range" min="0.1" max="4" step="0.05" value="1"><output id="renderBackgroundZoomValue">1.00×</output></div>
               <div class="light-control"><span data-i18n="renderBackgroundBrightness">Brightness</span><input id="renderBackgroundBrightness" type="range" min="0" max="2" step="0.05" value="1"><output id="renderBackgroundBrightnessValue">1.00</output></div>
               <div class="light-control"><span data-i18n="renderBackgroundOverlay">Overlay</span><input id="renderBackgroundOverlayOpacity" type="range" min="0" max="1" step="0.01" value="0"><output id="renderBackgroundOverlayOpacityValue">0%</output></div>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="shadows3d">Shadows</h2>
+            <details open class="tool-section">
+              <summary data-i18n="shadows3d">Shadows</summary>
               <label class="field"><span data-i18n="shadowsEnabled3d">Enabled</span><input id="renderShadowEnabled" type="checkbox" checked></label>
               <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.34"><output id="renderShadowIntensityValue">0.34</output></div>
               <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="2"><output id="renderShadowBlurValue">2.0</output></div>
               <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderFloorEffects">Floor effects</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderFloorEffects">Floor effects</summary>
               <label class="field"><span data-i18n="renderFloorReflection">Reflection</span><input id="renderFloorReflectionEnabled" type="checkbox"></label>
               <div class="light-control"><span data-i18n="renderReflectionStrength">Strength</span><input id="renderFloorReflectionStrength" type="range" min="0" max="1" step="0.01" value="0.08"><output id="renderFloorReflectionStrengthValue">0.08</output></div>
               <div class="light-control"><span data-i18n="renderReflectionBlur">Softness</span><input id="renderFloorReflectionBlur" type="range" min="0" max="1" step="0.01" value="0.65"><output id="renderFloorReflectionBlurValue">0.65</output></div>
               <div class="light-control"><span data-i18n="renderReflectionFade">Fade distance</span><input id="renderFloorReflectionFade" type="range" min="0.05" max="5" step="0.05" value="0.65"><output id="renderFloorReflectionFadeValue">0.65</output></div>
               <label class="field"><span data-i18n="renderTransparentReflection">Reflection in transparent PNG</span><input id="renderTransparentReflection" type="checkbox"></label>
-            </section>
+            </details>
 
-            <section class="tool-section">
-              <h2 data-i18n="renderEffects">Effects</h2>
+            <details open class="tool-section">
+              <summary data-i18n="renderEffects">Effects</summary>
               <label class="field"><span data-i18n="renderGtao">GTAO</span><input id="renderEffectsGtao" type="checkbox" checked></label>
               <div class="light-control"><span data-i18n="renderGtaoIntensity">AO intensity</span><input id="renderGtaoIntensity" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderGtaoIntensityValue">0.50</output></div>
               <div class="light-control"><span data-i18n="renderGtaoRadius">AO radius</span><input id="renderGtaoRadius" type="range" min="0.01" max="2" step="0.01" value="0.18"><output id="renderGtaoRadiusValue">0.18</output></div>
@@ -989,7 +993,7 @@
               <div class="light-control"><span data-i18n="renderDofAperture">Aperture</span><input id="renderDofAperture" type="range" min="0" max="0.2" step="0.001" value="0.025"><output id="renderDofApertureValue">0.025</output></div>
               <div class="light-control"><span data-i18n="renderDofMaxBlur">Max blur</span><input id="renderDofMaxBlur" type="range" min="0" max="1" step="0.01" value="0.01"><output id="renderDofMaxBlurValue">0.010</output></div>
               <button id="experimentalPathTracingButton" type="button" data-i18n="renderPathTracing" hidden>High Quality Experimental</button>
-            </section>
+            </details>
 
             <details class="tool-section" id="renderDiagnosticsDrawer">
               <summary data-i18n="renderDiagnostics">Diagnostics</summary>

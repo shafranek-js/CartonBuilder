@@ -2566,7 +2566,8 @@ export function createArtworkApp({
     }
   }
 
-  controls.boxConstrainBtn.addEventListener('click', () => {
+  controls.boxConstrainBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     boxConstrainProportions = !boxConstrainProportions;
     controls.boxConstrainBtn.setAttribute('aria-pressed', String(boxConstrainProportions));
     controls.boxConstrainBtn.textContent = boxConstrainProportions ? '🔗' : '⛓️‍💥';

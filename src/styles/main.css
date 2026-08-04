@@ -1392,10 +1392,21 @@ input[type="checkbox"] {
   padding-right: 32px;
 }
 
-.tool-section h2 {
+.tool-section h2,
+.tool-section summary {
   margin: 0 0 9px;
   color: var(--text, #ffffff);
   font-size: 12px;
+  font-weight: 600;
+}
+
+.tool-section summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+details.tool-section:not([open]) > summary {
+  margin-bottom: 0;
 }
 
 .file-name {
@@ -2736,15 +2747,6 @@ dialog button {
 .artwork-finish-section {
   display: grid;
   gap: 6px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--panel-border, #3a3a3a);
-}
-
-.artwork-finish-section h3 {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .artwork-finish-section .light-control {
@@ -3282,26 +3284,32 @@ dialog input {
 }
 
 /* Box Dimensions panel */
-.box-dim-title {
+.box-dim-fields-wrap {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding-right: 0 !important;
 }
 
-.box-dim-title .chain-toggle--box {
-  flex: 0 0 24px;
-  width: 24px;
-  min-height: 24px;
-  height: 24px;
-  padding: 0;
-  font-size: 13px;
-}
-
-.box-dim-fields {
+.box-dim-fields-wrap .box-dim-fields {
+  flex: 1;
   display: grid;
   gap: 6px;
+}
+
+.box-dim-fields-wrap .chain-toggle--box {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  font-size: 14px;
+  align-self: center;
+}
+
+.box-dim-fields-wrap .chain-toggle--box[aria-pressed="true"] {
+  border-color: rgb(175 202 66 / 42%);
+  background: rgb(175 202 66 / 12%);
+  color: var(--accent, #afca42);
 }
 
 .box-dim-row {
