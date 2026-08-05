@@ -158,7 +158,49 @@ export function createPreview3DApp({
   let animationFrame = null;
   let lastRecoveryKey = '';
   let persistTimer = null;
+  let videoLoopFrame = null;
   const listeners = [];
+
+  function stopVideoLoop() {
+    if (videoLoopFrame != null) {
+      windowRef.cancelAnimationFrame(videoLoopFrame);
+      videoLoopFrame = null;
+    }
+  }
+
+  function startVideoLoopIfNeeded() {
+    stopVideoLoop();
+    const artworks = getArtworks ? getArtworks() : [];
+    const hasVideo = artworks.some((entry) => entry.videoElement || entry.model?.source?.isVideo);
+    if (!hasVideo || !scene || !state.active || disposed) return;
+
+    let lastFrameTime = 0;
+    const tick = async (now) => {
+      if (!state.active || disposed || !scene) return;
+      if (now - lastFrameTime > 30) {
+        lastFrameTime = now;
+        try {
+          const nextComposed = await composeArtworkTexture({
+            boxModel,
+            artworks: getArtworks ? getArtworks() : [],
+            documentRef,
+            purpose: 'preview',
+            raster: false,
+          });
+          if (state.active && scene && nextComposed?.canvas) {
+            scene.replaceTexture(nextComposed.canvas);
+            scene.render();
+          }
+        } catch {
+          // Fallback
+        }
+      }
+      if (state.active && !disposed) {
+        videoLoopFrame = windowRef.requestAnimationFrame(tick);
+      }
+    };
+    videoLoopFrame = windowRef.requestAnimationFrame(tick);
+  }
 
   function schedulePersist() {
     windowRef.clearTimeout(persistTimer);
@@ -417,6 +459,7 @@ export function createPreview3DApp({
       setBusy(false);
       updateControls();
       scene.render();
+      startVideoLoopIfNeeded(composed);
       return true;
     } catch (error) {
       if (error?.name === 'AbortError') return false;
@@ -491,6 +534,7 @@ export function createPreview3DApp({
 
   function deactivate() {
     if (disposed) return;
+    stopVideoLoop();
     cancelAnimation();
     cancelSync();
     setBusy(false);
@@ -504,6 +548,7 @@ export function createPreview3DApp({
   }
 
   function suspend() {
+    stopVideoLoop();
     cancelAnimation();
     cancelSync();
     setBusy(false);

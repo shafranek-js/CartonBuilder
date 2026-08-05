@@ -507,12 +507,29 @@ export function createArtworkApp({
     scheduleSave();
   }
 
+  function ensureVideoElement(entry) {
+    if (entry?.model?.source?.isVideo && !entry.videoElement && entry.originalBlob && typeof document !== 'undefined') {
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(entry.originalBlob);
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.001;pointer-events:none;';
+      if (document.body) document.body.appendChild(video);
+      video.play().catch(() => {});
+      entry.videoElement = video;
+    }
+    return entry?.videoElement || null;
+  }
+
   function getArtworks() {
     return artworks.map((entry) => ({
       model: entry.model,
       originalBlob: entry.originalBlob,
       previewBlob: entry.previewBlob,
       displayBlob: entry.displayBlob || null,
+      videoElement: ensureVideoElement(entry),
       visible: entry.visible,
       ...finishState(entry),
     }));

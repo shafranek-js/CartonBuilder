@@ -100,6 +100,8 @@ function drawPanelBleed(source, target, panels, bounds, pixelsPerMm, bleedPixels
 
 function drawArtwork(context, entry, bitmap, { includeOpacity = true } = {}) {
   const artwork = entry.model;
+  const drawable = entry.videoElement || bitmap;
+  if (!drawable) return;
   context.save();
   context.globalAlpha = includeOpacity ? artwork.opacity : 1;
   context.translate(artwork.centerXmm, artwork.centerYmm);
@@ -114,13 +116,17 @@ function drawArtwork(context, entry, bitmap, { includeOpacity = true } = {}) {
     );
     context.clip();
   }
-  context.drawImage(
-    bitmap,
-    -artwork.unrotatedWidthMm / 2,
-    -artwork.unrotatedHeightMm / 2,
-    artwork.unrotatedWidthMm,
-    artwork.unrotatedHeightMm,
-  );
+  try {
+    context.drawImage(
+      drawable,
+      -artwork.unrotatedWidthMm / 2,
+      -artwork.unrotatedHeightMm / 2,
+      artwork.unrotatedWidthMm,
+      artwork.unrotatedHeightMm,
+    );
+  } catch {
+    // Fallback
+  }
   context.restore();
 }
 
