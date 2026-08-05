@@ -309,6 +309,70 @@ describe('ArtworkModel', () => {
     expect(model.displayedWidthMm).toBeCloseTo(model.unrotatedWidthMm, 5);
     expect(model.displayedHeightMm).toBeCloseTo(model.unrotatedHeightMm, 5);
   });
+
+  it('flips horizontally through the reference point keeping it fixed', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    const centerBefore = { x: model.centerXmm, y: model.centerYmm };
+    const reference = model.getReferencePosition();
+
+    model.flipHorizontal();
+
+    expect(model.flipX).toBe(true);
+    expect(model.flipY).toBe(false);
+    expect(model.centerXmm).toBeCloseTo(2 * reference.x - centerBefore.x, 5);
+    expect(model.centerYmm).toBeCloseTo(centerBefore.y, 5);
+    expect(model.getReferencePosition().x).toBeCloseTo(reference.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(reference.y, 5);
+  });
+
+  it('flips vertically around an off-center reference point', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.setReferencePoint('bottom-right');
+    const reference = model.getReferencePosition();
+    const centerBefore = { x: model.centerXmm, y: model.centerYmm };
+
+    model.flipVertical();
+
+    expect(model.flipY).toBe(true);
+    expect(model.centerYmm).toBeCloseTo(2 * reference.y - centerBefore.y, 5);
+    expect(model.centerXmm).toBeCloseTo(centerBefore.x, 5);
+    expect(model.getReferencePosition().y).toBeCloseTo(reference.y, 5);
+  });
+
+  it('mirrors the visible crop rect when flipped', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.applyCrop({ x: 20, y: 10, width: 80, height: 40 });
+
+    model.flipHorizontal();
+    expect(model.visibleLocalRect).toEqual({
+      x: model.unrotatedWidthMm - 20 - 80,
+      y: 10,
+      width: 80,
+      height: 40,
+    });
+    expect(model.visibleLocalRectRaw).toEqual({ x: 20, y: 10, width: 80, height: 40 });
+
+    model.flipVertical();
+    expect(model.visibleLocalRect.y).toBeCloseTo(model.unrotatedHeightMm - 10 - 40, 5);
+  });
+
+  it('round-trips flip state through serialization', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.flipHorizontal().flipVertical();
+
+    const restored = new ArtworkModel(model.toJSON());
+    expect(restored.flipX).toBe(true);
+    expect(restored.flipY).toBe(true);
+    expect(restored.toJSON()).toEqual(model.toJSON());
+  });
+
+  it('resets flip flags on resetTransform', () => {
+    const model = new ArtworkModel().load(source, bounds);
+    model.flipHorizontal().flipVertical();
+    model.resetTransform();
+    expect(model.flipX).toBe(false);
+    expect(model.flipY).toBe(false);
+  });
 });
 
 describe('ViewportModel', () => {

@@ -400,6 +400,20 @@
                     <path d="M21 3v5h-5" />
                   </svg>
                 </button>
+                <button type="button" class="tool-icon-btn" id="flipHorizontalButton" disabled title="Flip artwork horizontally" data-i18n-title="flipHorizontal" aria-label="Flip artwork horizontally" data-i18n-aria-label="flipHorizontal">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="3" x2="12" y2="21" />
+                    <path d="M8 6l-5 5 5 5" />
+                    <path d="M16 6l5 5-5 5" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="flipVerticalButton" disabled title="Flip artwork vertically" data-i18n-title="flipVertical" aria-label="Flip artwork vertically" data-i18n-aria-label="flipVertical">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <path d="M6 8l5-5 5 5" />
+                    <path d="M6 16l5 5 5-5" />
+                  </svg>
+                </button>
                 <button type="button" class="tool-icon-btn" id="resetArtworkButton" disabled title="Reset transform and scale" data-i18n-title="resetTransform" aria-label="Reset transform and scale" data-i18n-aria-label="resetTransform">
                   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
@@ -558,7 +572,6 @@
       <section class="workflow-step preview-step" id="previewStep" hidden>
         <div class="preview-toolbar">
           <span class="preview-warning" id="previewWarning" role="status" aria-live="polite"></span>
-          <button id="previewVideoAudioBtn" class="audio-toggle-btn" type="button" title="Toggle video audio">🔈 Sound: Off</button>
           <button id="openRenderButton" type="button" data-i18n="openRender">Render</button>
           <button id="export3dHtmlButton" type="button" data-i18n="export3dHtml">Export HTML</button>
           <a class="preview-showcase-link" id="previewShowcaseLink" href="./showcase/calmdownol/index.html" target="_blank" rel="noopener" data-i18n="viewShowcase">View live example</a>
@@ -769,7 +782,6 @@
         <div class="render-toolbar">
           <span class="render-status" id="renderStatus" role="status" aria-live="polite"></span>
           <div class="render-toolbar-actions">
-            <button id="renderVideoAudioBtn" class="audio-toggle-btn" type="button" title="Toggle video audio">🔈 Sound: Off</button>
             <button id="renderPngButton" type="button" data-i18n="renderPng">Render PNG</button>
             <button id="renderJpgButton" type="button" data-i18n="renderJpg">Render JPG</button>
           </div>

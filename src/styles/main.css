@@ -1526,8 +1526,17 @@ details.tool-section:not([open]) > summary {
 }
 
 .icon-button-grid {
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.icon-button-grid .tool-icon-btn {
+  min-height: 24px;
+}
+
+.icon-button-grid .tool-icon-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .tool-icon-btn {

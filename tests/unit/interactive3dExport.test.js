@@ -3,6 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { createInteractive3dHtml } from '../../src/export/interactive3dExport.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 
+if (!globalThis.FileReader) {
+  class FakeFileReader {
+    readAsDataURL(blob) {
+      blob.arrayBuffer().then((buffer) => {
+        this.result = `data:${blob.type};base64,${Buffer.from(buffer).toString('base64')}`;
+        this.onload?.({ target: this });
+      }).catch((error) => this.onerror?.(error));
+    }
+  }
+  globalThis.FileReader = FakeFileReader;
+}
+
 function buildCompleteBox() {
   const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
   model.addPanel('front', 'bottom');
@@ -111,5 +123,82 @@ describe('createInteractive3dHtml', () => {
       artworks: [],
       composeTexture: stubTextureComposer(),
     })).rejects.toThrow(/preview is required/i);
+  });
+
+  it('embeds every video artwork with its placement so each side animates', async () => {
+    const videoBlobA = new Blob(['video-a'], { type: 'video/mp4' });
+    const videoBlobB = new Blob(['video-b'], { type: 'video/mp4' });
+    const entries = [
+      {
+        model: {
+          hasArtwork: true,
+          quality: { render: 'auto' },
+          source: { isVideo: true, mimeType: 'video/mp4' },
+          centerXmm: 10,
+          centerYmm: 20,
+          initialWidthMm: 100,
+          initialHeightMm: 50,
+          scaleX: 1.5,
+          scaleY: 1.25,
+          rotation: 90,
+          opacity: 0.8,
+          crop: { x: 1, y: 2, width: 40, height: 30 },
+        },
+        visible: true,
+        previewBlob: fakePreview,
+        originalBlob: videoBlobA,
+      },
+      {
+        model: {
+          hasArtwork: true,
+          quality: { render: 'auto' },
+          source: { isVideo: true, mimeType: 'video/mp4' },
+          centerXmm: 5,
+          centerYmm: 7,
+          initialWidthMm: 80,
+          initialHeightMm: 60,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          opacity: 1,
+          crop: null,
+        },
+        visible: true,
+        previewBlob: fakePreview,
+        originalBlob: videoBlobB,
+      },
+    ];
+    const composeTexture = async () => ({
+      canvas: { toDataURL: () => 'data:image/png;base64,VIDEOBASE' },
+      width: 1024,
+      height: 768,
+      pixelsPerMm: 3,
+    });
+    const blob = await createInteractive3dHtml({
+      boxModel: buildCompleteBox(),
+      artworks: entries,
+      composeTexture,
+    });
+    const html = await blob.text();
+
+    expect(html).toContain('"videos"');
+    expect(html).toMatch(/data:video\/mp4;base64,[^"]*dmlkZW8tYQ/);
+    expect(html).toMatch(/data:video\/mp4;base64,[^"]*dmlkZW8tYg/);
+    expect(html).toMatch(/"rotation":90/);
+    expect(html).toContain('"initialWidthMm":80');
+    expect(html).toContain('"textureSize":{"width":1024,"height":768}');
+    expect(html).toContain('"pixelsPerMm":3');
+
+    expect(html).toContain('videoAudioController');
+    expect(html).toContain('userData.panelId');
+    expect(html).toContain('function setVideoAudioForPanel');
+
+    expect(html).toContain('id="panelToggle"');
+    expect(html).toContain('id="autoRotate"');
+    expect(html).toContain('id="bottomControls"');
+    expect(html).toContain('<div id="panel" hidden>');
+    expect(html).toContain('let theta = 0;');
+    expect(html).toContain('let phi = Math.PI / 2;');
+    expect(html).toContain('autoRotateEnabled = true;');
   });
 });

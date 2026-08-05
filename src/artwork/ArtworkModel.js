@@ -124,6 +124,8 @@ export class ArtworkModel {
     this.scaleX = 1;
     this.scaleY = 1;
     this.rotation = 0;
+    this.flipX = false;
+    this.flipY = false;
     this.opacity = 1;
     this.bgOpacity = 0.28;
     this.referencePoint = 'center';
@@ -156,9 +158,19 @@ export class ArtworkModel {
   }
 
   get visibleLocalRect() {
-    return this.crop
-      ? { ...this.crop }
-      : { x: 0, y: 0, width: this.unrotatedWidthMm, height: this.unrotatedHeightMm };
+    if (!this.crop) return { x: 0, y: 0, width: this.unrotatedWidthMm, height: this.unrotatedHeightMm };
+    const { x, y, width, height } = this.crop;
+    return {
+      x: this.flipX ? this.unrotatedWidthMm - x - width : x,
+      y: this.flipY ? this.unrotatedHeightMm - y - height : y,
+      width,
+      height,
+    };
+  }
+
+  get visibleLocalRectRaw() {
+    if (!this.crop) return { x: 0, y: 0, width: this.unrotatedWidthMm, height: this.unrotatedHeightMm };
+    return { ...this.crop };
   }
 
   get visibleUnrotatedWidthMm() {
@@ -232,6 +244,7 @@ export class ArtworkModel {
       mediaBox: source.mediaBox ? { ...source.mediaBox } : null,
       sha256: source.sha256 || '',
       pdfLayers,
+      isVideo: Boolean(source.isVideo || source.mimeType?.startsWith('video/')),
     };
     this.pdfLayerVisibility = source.pdfLayerVisibility && typeof source.pdfLayerVisibility === 'object'
       ? { ...source.pdfLayerVisibility }
@@ -318,8 +331,8 @@ export class ArtworkModel {
   getReferenceOffset() {
     const fraction = REFERENCE_FRACTIONS[this.referencePoint] || REFERENCE_FRACTIONS.center;
     return {
-      x: fraction.x * this.displayedWidthMm / 2,
-      y: fraction.y * this.displayedHeightMm / 2,
+      x: (this.flipX ? -fraction.x : fraction.x) * this.displayedWidthMm / 2,
+      y: (this.flipY ? -fraction.y : fraction.y) * this.displayedHeightMm / 2,
     };
   }
 
@@ -335,6 +348,22 @@ export class ArtworkModel {
   setReferencePoint(point) {
     if (!REFERENCE_POINTS.includes(point)) return this;
     this.referencePoint = point;
+    return this;
+  }
+
+  flipHorizontal() {
+    const reference = this.getReferencePosition();
+    this.flipX = !this.flipX;
+    this.centerXmm = 2 * reference.x - this.centerXmm;
+    this.modified = true;
+    return this;
+  }
+
+  flipVertical() {
+    const reference = this.getReferencePosition();
+    this.flipY = !this.flipY;
+    this.centerYmm = 2 * reference.y - this.centerYmm;
+    this.modified = true;
     return this;
   }
 
@@ -456,6 +485,8 @@ export class ArtworkModel {
     this.setScaleY(1);
     const reference = this.getReferencePosition();
     this.rotation = this.source?.pdfPageRotation || 0;
+    this.flipX = false;
+    this.flipY = false;
     this.setReferencePosition(reference.x, reference.y);
     this.opacity = 1;
     this.bgOpacity = 0.28;
@@ -484,6 +515,8 @@ export class ArtworkModel {
       scaleY: this.scaleY,
       scale: this.scaleX === this.scaleY ? this.scaleX : undefined,
       rotation: this.rotation,
+      flipX: this.flipX,
+      flipY: this.flipY,
       opacity: this.opacity,
       bgOpacity: this.bgOpacity,
       referencePoint: this.referencePoint,
@@ -497,6 +530,9 @@ export class ArtworkModel {
   restore(state) {
     if (!state?.source) return this.clear();
     this.source = cloneSource(state.source);
+    if (this.source) {
+      this.source.isVideo = Boolean(this.source.isVideo || this.source.mimeType?.startsWith('video/'));
+    }
     this.centerXmm = finiteNumber(state.centerXmm, 'centerXmm');
     this.centerYmm = finiteNumber(state.centerYmm, 'centerYmm');
     this.initialWidthMm = positiveNumber(state.initialWidthMm, 'initialWidthMm');
@@ -510,6 +546,8 @@ export class ArtworkModel {
       this.scaleY = this.scaleX;
     }
     this.rotation = normalizeQuarterTurn(state.rotation);
+    this.flipX = Boolean(state.flipX);
+    this.flipY = Boolean(state.flipY);
     this.opacity = Math.min(1, Math.max(0, finiteNumber(state.opacity, 'opacity')));
     this.bgOpacity = state.bgOpacity != null
       ? Math.min(1, Math.max(0, finiteNumber(state.bgOpacity, 'bgOpacity')))

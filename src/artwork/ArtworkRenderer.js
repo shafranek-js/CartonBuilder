@@ -40,7 +40,12 @@ export function getCropCorners(artwork, crop) {
 }
 
 export function getArtworkRotationTransform(artwork) {
-  return `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`;
+  const sx = artwork.flipX ? -1 : 1;
+  const sy = artwork.flipY ? -1 : 1;
+  if (sx === 1 && sy === 1) {
+    return `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`;
+  }
+  return `translate(${artwork.centerXmm} ${artwork.centerYmm}) scale(${sx} ${sy}) rotate(${artwork.rotation}) translate(${-artwork.centerXmm} ${-artwork.centerYmm})`;
 }
 
 function appendImage(documentRef, parent, artwork, previewUrl, opacity, clipPath, artworkIndex) {
@@ -136,7 +141,7 @@ function appendCropFrame(documentRef, parent, artwork, crop, handleSize) {
       width: handleSize,
       height: handleSize,
       'data-crop-corner': i,
-      style: `cursor: ${getScreenCursor(cornerKeys[i], artwork.rotation)};`,
+      style: `cursor: ${getScreenCursor(cornerKeys[i], artwork.rotation, artwork)};`,
     }));
   }
   const sides = [
@@ -153,7 +158,7 @@ function appendCropFrame(documentRef, parent, artwork, crop, handleSize) {
       width: handleSize,
       height: handleSize,
       'data-crop-edge': side.key,
-      style: `cursor: ${getSideCursor(side.key, artwork.rotation)};`,
+      style: `cursor: ${getSideCursor(side.key, artwork.rotation, artwork)};`,
     }));
   }
   parent.appendChild(group);
@@ -200,18 +205,32 @@ function appendSnapGuides(documentRef, parent, guides) {
   }
 }
 
-function getScreenCursor(key, rotation) {
+function getScreenCursor(key, rotation, artwork) {
   const corners = ['nw', 'ne', 'se', 'sw'];
-  const baseIndex = corners.indexOf(key);
+  let baseIndex = corners.indexOf(key);
+  if (artwork?.flipX) {
+    if (baseIndex === 0) baseIndex = 1;
+    else if (baseIndex === 1) baseIndex = 0;
+    else if (baseIndex === 2) baseIndex = 3;
+    else if (baseIndex === 3) baseIndex = 2;
+  }
+  if (artwork?.flipY) {
+    if (baseIndex === 0) baseIndex = 3;
+    else if (baseIndex === 3) baseIndex = 0;
+    else if (baseIndex === 1) baseIndex = 2;
+    else if (baseIndex === 2) baseIndex = 1;
+  }
   const normalizedRotation = ((Number(rotation) % 360) + 360) % 360;
   const shift = Math.round(normalizedRotation / 90) % 4;
   const screenCorner = corners[(baseIndex + shift) % 4];
   return (screenCorner === 'nw' || screenCorner === 'se') ? 'nwse-resize' : 'nesw-resize';
 }
 
-function getSideCursor(key, rotation) {
+function getSideCursor(key, rotation, artwork) {
   const sides = ['n', 'e', 's', 'w'];
-  const baseIndex = sides.indexOf(key);
+  let baseIndex = sides.indexOf(key);
+  if (artwork?.flipX && (baseIndex === 1 || baseIndex === 3)) baseIndex = 4 - baseIndex;
+  if (artwork?.flipY && (baseIndex === 0 || baseIndex === 2)) baseIndex = 2 - baseIndex;
   const normalizedRotation = ((Number(rotation) % 360) + 360) % 360;
   const shift = Math.round(normalizedRotation / 90) % 4;
   const screenSide = sides[(baseIndex + shift) % 4];
@@ -220,9 +239,9 @@ function getSideCursor(key, rotation) {
 
 function appendSelection(documentRef, parent, artwork, onPointerStart, handleSize, color) {
   const group = svgElement(documentRef, 'g', {
-    transform: `rotate(${artwork.rotation} ${artwork.centerXmm} ${artwork.centerYmm})`,
+    transform: getArtworkRotationTransform(artwork),
   });
-  const rect = getCropRect(artwork, artwork.visibleLocalRect);
+  const rect = getCropRect(artwork, artwork.visibleLocalRectRaw);
   const { x, y, width, height } = rect;
   const frameAttrs = { class: 'selection-frame', x, y, width, height };
   if (color) frameAttrs.style = `stroke:${color};`;
@@ -236,7 +255,7 @@ function appendSelection(documentRef, parent, artwork, onPointerStart, handleSiz
     { key: 'sw', x, y: y + height, sx: -1, sy: 1 },
   ];
   for (const handle of handles) {
-    const cursorStyle = getScreenCursor(handle.key, artwork.rotation);
+    const cursorStyle = getScreenCursor(handle.key, artwork.rotation, artwork);
     const node = svgElement(documentRef, 'rect', {
       class: 'resize-handle',
       x: handle.x - half,
@@ -262,7 +281,7 @@ function appendSelection(documentRef, parent, artwork, onPointerStart, handleSiz
     { key: 'w', x, y: y + height / 2, axis: 'x' },
   ];
   for (const handle of sideHandles) {
-    const cursorStyle = getSideCursor(handle.key, artwork.rotation);
+    const cursorStyle = getSideCursor(handle.key, artwork.rotation, artwork);
     const node = svgElement(documentRef, 'rect', {
       class: 'resize-handle resize-side-handle',
       x: handle.x - half,

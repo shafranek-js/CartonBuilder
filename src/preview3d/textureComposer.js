@@ -100,12 +100,14 @@ function drawPanelBleed(source, target, panels, bounds, pixelsPerMm, bleedPixels
 
 function drawArtwork(context, entry, bitmap, { includeOpacity = true } = {}) {
   const artwork = entry.model;
-  const drawable = entry.videoElement || bitmap;
+  const video = entry.videoElement;
+  const drawable = video && video.readyState >= 2 ? video : bitmap;
   if (!drawable) return;
   context.save();
   context.globalAlpha = includeOpacity ? artwork.opacity : 1;
   context.translate(artwork.centerXmm, artwork.centerYmm);
   context.rotate(artwork.rotation * Math.PI / 180);
+  context.scale(artwork.flipX ? -1 : 1, artwork.flipY ? -1 : 1);
   if (artwork.crop && artwork.crop.width > 0 && artwork.crop.height > 0) {
     context.beginPath();
     context.rect(
@@ -367,21 +369,6 @@ export async function composeArtworkTexture({
       }
       bitmaps.push(bitmap);
     }
-    throwIfAborted(signal);
-
-    rawContext.save();
-    rawContext.scale(pixelsPerMm, pixelsPerMm);
-    rawContext.translate(-bounds.minX, -bounds.minY);
-    drawPanelUnion(rawContext, panels);
-    rawContext.clip();
-    rawContext.fillStyle = '#ffffff';
-    rawContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
-    for (let index = 0; index < entries.length; index += 1) {
-      if (isPrintEntry(entries[index])) drawArtwork(rawContext, entries[index], bitmaps[index]);
-    }
-    rawContext.restore();
-    throwIfAborted(signal);
-
     const materialMaps = includeFinishMaps
       ? await composeFinishMaps({
         entries,
@@ -397,32 +384,50 @@ export async function composeArtworkTexture({
         signal,
       })
       : null;
+    throwIfAborted(signal);
 
-    if (materialMaps?.foilColors && rawContext.getImageData && rawContext.putImageData) {
-      const base = rawContext.getImageData(0, 0, width, height);
-      for (let pixel = 0; pixel < materialMaps.foilColors.length; pixel += 1) {
-        const foil = materialMaps.foilColors[pixel];
-        if (!foil) continue;
-        const offset = pixel * 4;
-        const alpha = foil[3] / 255;
-        base.data[offset] = clampByte(base.data[offset] * (1 - alpha) + foil[0] * alpha);
-        base.data[offset + 1] = clampByte(base.data[offset + 1] * (1 - alpha) + foil[1] * alpha);
-        base.data[offset + 2] = clampByte(base.data[offset + 2] * (1 - alpha) + foil[2] * alpha);
+    const redrawCanvas = () => {
+      rawContext.save();
+      rawContext.scale(pixelsPerMm, pixelsPerMm);
+      rawContext.translate(-bounds.minX, -bounds.minY);
+      drawPanelUnion(rawContext, panels);
+      rawContext.clip();
+      rawContext.fillStyle = '#ffffff';
+      rawContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+      for (let index = 0; index < entries.length; index += 1) {
+        if (isPrintEntry(entries[index])) drawArtwork(rawContext, entries[index], bitmaps[index]);
       }
-      rawContext.putImageData(base, 0, 0);
-    }
+      rawContext.restore();
 
-    drawPanelBleed(
-      rawCanvas,
-      outputContext,
-      panels,
-      bounds,
-      pixelsPerMm,
-      textureLimits.bleedPixels,
-    );
-    outputContext.drawImage(rawCanvas, 0, 0);
+      if (materialMaps?.foilColors && rawContext.getImageData && rawContext.putImageData) {
+        const base = rawContext.getImageData(0, 0, width, height);
+        for (let pixel = 0; pixel < materialMaps.foilColors.length; pixel += 1) {
+          const foil = materialMaps.foilColors[pixel];
+          if (!foil) continue;
+          const offset = pixel * 4;
+          const alpha = foil[3] / 255;
+          base.data[offset] = clampByte(base.data[offset] * (1 - alpha) + foil[0] * alpha);
+          base.data[offset + 1] = clampByte(base.data[offset + 1] * (1 - alpha) + foil[1] * alpha);
+          base.data[offset + 2] = clampByte(base.data[offset + 2] * (1 - alpha) + foil[2] * alpha);
+        }
+        rawContext.putImageData(base, 0, 0);
+      }
+
+      drawPanelBleed(
+        rawCanvas,
+        outputContext,
+        panels,
+        bounds,
+        pixelsPerMm,
+        textureLimits.bleedPixels,
+      );
+      outputContext.drawImage(rawCanvas, 0, 0);
+    };
+
+    redrawCanvas();
     return {
       canvas: outputCanvas,
+      redrawCanvas,
       width,
       height,
       pixelsPerMm,

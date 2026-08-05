@@ -20,12 +20,17 @@ const VIEWER_SCRIPT = `
   const closeButton = document.getElementById('close');
   const resetButton = document.getElementById('reset');
   const bgColorInput = document.getElementById('bgColor');
-  const audioToggle = document.getElementById('audioToggle');
+  const panelEl = document.getElementById('panel');
+  const panelToggle = document.getElementById('panelToggle');
+  const autoRotateBtn = document.getElementById('autoRotate');
 
   const nodes = new Map(DATA.nodes.map((node) => [node.id, node]));
 
   let foldProgress = 1;
   let animationFrame = null;
+  let videoAudioController = null;
+  let autoRotateEnabled = true;
+  let lastRotateTime = 0;
 
   const DEFAULT_BACKGROUND = '#e8e8e8';
 
@@ -47,33 +52,183 @@ const VIEWER_SCRIPT = `
   let renderer;
 
   let radius = 300;
-  let theta = 0.65;
-  let phi = 1.15;
+  let theta = 0;
+  let phi = Math.PI / 2;
   const target = new THREE.Vector3(0, 0, 0);
 
   let texture;
-  if (DATA.videoData) {
-    const video = document.createElement('video');
-    video.src = DATA.videoData;
-    video.autoplay = true;
-    video.loop = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.setAttribute('playsinline', '');
-    video.play().catch(() => {});
+  let videoTextureFrame = null;
+  let videoLoopVideo = null;
 
-    if (audioToggle) {
-      audioToggle.style.display = 'inline-block';
-      audioToggle.addEventListener('click', () => {
-        video.muted = !video.muted;
-        if (!video.muted) video.play().catch(() => {});
-        audioToggle.textContent = video.muted ? '🔈 Sound: Off' : '🔊 Sound: On';
-        audioToggle.style.color = video.muted ? 'inherit' : '#afca42';
-      });
+  function stopVideoTextureLoop() {
+    if (videoTextureFrame != null) {
+      if (videoLoopVideo && typeof videoLoopVideo.cancelVideoFrameCallback === 'function') {
+        videoLoopVideo.cancelVideoFrameCallback(videoTextureFrame);
+      } else {
+        cancelAnimationFrame(videoTextureFrame);
+      }
+      videoTextureFrame = null;
+    }
+    videoLoopVideo = null;
+  }
+
+  function drawVideoFrames(ctx, videos, baseImage, ppm, bb) {
+    ctx.drawImage(baseImage, 0, 0);
+    for (const item of videos) {
+      const artwork = item.artwork;
+      const video = item.video;
+      if (!artwork || !video.videoWidth) continue;
+      const uw = artwork.initialWidthMm * artwork.scaleX;
+      const uh = artwork.initialHeightMm * artwork.scaleY;
+      ctx.save();
+      ctx.scale(ppm, ppm);
+      ctx.translate(-bb.minX, -bb.minY);
+      ctx.globalAlpha = artwork.opacity;
+      ctx.translate(artwork.centerXmm, artwork.centerYmm);
+      ctx.rotate(artwork.rotation * Math.PI / 180);
+      ctx.scale(artwork.flipX ? -1 : 1, artwork.flipY ? -1 : 1);
+      if (artwork.crop && artwork.crop.width > 0 && artwork.crop.height > 0) {
+        ctx.beginPath();
+        ctx.rect(
+          -uw / 2 + (artwork.crop.x || 0),
+          -uh / 2 + (artwork.crop.y || 0),
+          artwork.crop.width,
+          artwork.crop.height,
+        );
+        ctx.clip();
+      }
+      try {
+        ctx.drawImage(video, -uw / 2, -uh / 2, uw, uh);
+      } catch { /* frame not ready */ }
+      ctx.restore();
+    }
+    if (texture) texture.needsUpdate = true;
+  }
+
+  if (DATA.videos && DATA.videos.length) {
+    // Composite every video frame onto the composed base texture so each
+    // artwork keeps its exact placement (position, rotation, scale, crop).
+    const cw = DATA.textureSize.width;
+    const ch = DATA.textureSize.height;
+    const composeCanvas = document.createElement('canvas');
+    composeCanvas.width = cw;
+    composeCanvas.height = ch;
+    const ctx = composeCanvas.getContext('2d', { willReadFrequently: false });
+
+    const baseImage = new Image();
+    baseImage.src = DATA.texture;
+    const ppm = DATA.pixelsPerMm || 1;
+    const bb = DATA.bounds;
+
+    const videos = DATA.videos.map((item) => {
+      const video = document.createElement('video');
+      video.src = item.videoData;
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.preload = 'auto';
+      return { video, artwork: item.artwork || null };
+    });
+
+    let videoAudioSourceIndex = null;
+
+    function panelIdForVideo(item) {
+      const a = item.artwork;
+      if (!a) return null;
+      const halfW = Math.abs(a.initialWidthMm * a.scaleX) / 2;
+      const halfH = Math.abs(a.initialHeightMm * a.scaleY) / 2;
+      const minX = a.centerXmm - halfW;
+      const maxX = a.centerXmm + halfW;
+      const minY = a.centerYmm - halfH;
+      const maxY = a.centerYmm + halfH;
+      let best = null;
+      let bestOverlap = 0;
+      for (const node of DATA.nodes) {
+        const r = node.rect;
+        const overlapX = Math.max(0, Math.min(maxX, r.x + node.width) - Math.max(minX, r.x));
+        const overlapY = Math.max(0, Math.min(maxY, r.y + node.height) - Math.max(minY, r.y));
+        const overlap = overlapX * overlapY;
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          best = node.id;
+        }
+      }
+      return best;
     }
 
-    texture = new THREE.VideoTexture(video);
+    function startLoop() {
+      stopVideoTextureLoop();
+      const active = videoAudioSourceIndex != null ? videos[videoAudioSourceIndex] : null;
+      if (!active) {
+        // No active video: render a single static frame and stop.
+        drawVideoFrames(ctx, videos, baseImage, ppm, bb);
+        return;
+      }
+      const driver = active.video;
+      if (typeof driver.requestVideoFrameCallback === 'function') {
+        videoLoopVideo = driver;
+        const onVideoFrame = () => {
+          drawVideoFrames(ctx, videos, baseImage, ppm, bb);
+          if (videoAudioSourceIndex != null) {
+            videoTextureFrame = driver.requestVideoFrameCallback(onVideoFrame);
+          }
+        };
+        videoTextureFrame = driver.requestVideoFrameCallback(onVideoFrame);
+      } else {
+        const tick = () => {
+          drawVideoFrames(ctx, videos, baseImage, ppm, bb);
+          if (videoAudioSourceIndex != null) {
+            videoTextureFrame = requestAnimationFrame(tick);
+          }
+        };
+        videoTextureFrame = requestAnimationFrame(tick);
+      }
+    }
+
+    // All videos play together (synchronised), but only the sound source has
+    // audio. When no sound source is set, every video is paused and muted.
+    function applyVideoState() {
+      const playing = videoAudioSourceIndex != null;
+      for (let i = 0; i < videos.length; i++) {
+        videos[i].video.muted = i !== videoAudioSourceIndex;
+        if (playing) videos[i].video.play().catch(() => {});
+        else videos[i].video.pause();
+      }
+      startLoop();
+    }
+
+    // Clicking a panel with a video starts playback on every panel (sound on
+    // the clicked one); clicking the sound panel again stops everything;
+    // clicking another panel moves the sound there while videos keep playing.
+    function setVideoAudioForPanel(panelId) {
+      const index = videos.findIndex((item) => panelIdForVideo(item) === panelId);
+      if (index === -1) return;
+      videoAudioSourceIndex = index === videoAudioSourceIndex ? null : index;
+      applyVideoState();
+    }
+
+    videoAudioController = {
+      setPanel: setVideoAudioForPanel,
+    };
+
+    baseImage.onload = () => {
+      // Videos start stopped (paused, muted). A panel click starts them.
+      applyVideoState();
+    };
+    baseImage.onerror = () => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cw, ch);
+      applyVideoState();
+    };
+
+    const hintEl = document.getElementById('hint');
+    if (hintEl) hintEl.textContent += ' · click a side to play its video';
+
+    texture = new THREE.CanvasTexture(composeCanvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
   } else {
     const textureImage = new Image();
     textureImage.src = DATA.texture;
@@ -123,6 +278,7 @@ const VIEWER_SCRIPT = `
     const exterior = new THREE.Mesh(geometry, frontMaterial);
     exterior.matrixAutoUpdate = false;
     exterior.castShadow = true;
+    exterior.userData.panelId = node.id;
     const interior = new THREE.Mesh(geometry, backMaterial);
     interior.matrixAutoUpdate = false;
     scene.add(exterior, interior);
@@ -133,8 +289,12 @@ const VIEWER_SCRIPT = `
 
   function computeBoxExtents() {
     const transforms = computeTransforms(1);
+    let minX = Infinity;
+    let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
     let maxRadius = 0;
     const corner = new THREE.Vector3();
     for (const node of DATA.nodes) {
@@ -144,16 +304,28 @@ const VIEWER_SCRIPT = `
       const hh = node.height / 2;
       for (const point of [[-hw, -hh, 0], [hw, -hh, 0], [hw, hh, 0], [-hw, hh, 0]]) {
         corner.set(point[0], point[1], point[2]).applyMatrix4(matrix);
+        if (corner.x < minX) minX = corner.x;
+        if (corner.x > maxX) maxX = corner.x;
         if (corner.y < minY) minY = corner.y;
         if (corner.y > maxY) maxY = corner.y;
+        if (corner.z < minZ) minZ = corner.z;
+        if (corner.z > maxZ) maxZ = corner.z;
         const radial = Math.hypot(corner.x, corner.z);
         if (radial > maxRadius) maxRadius = radial;
       }
     }
-    return { minY, maxY, maxRadius: Math.max(1, maxRadius) };
+    return {
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
+      centerZ: (minZ + maxZ) / 2,
+      minY,
+      maxY,
+      maxRadius: Math.max(1, maxRadius),
+    };
   }
 
   const extents = computeBoxExtents();
+  target.set(extents.centerX, extents.centerY, extents.centerZ);
   const boxRadius = extents.maxRadius;
   const shadowExtent = boxRadius * 2.2;
 
@@ -348,6 +520,15 @@ const VIEWER_SCRIPT = `
       pair[1].matrix.copy(matrix);
     }
 
+    if (autoRotateEnabled) {
+      const now = performance.now();
+      const delta = lastRotateTime ? (now - lastRotateTime) / 1000 : 0;
+      lastRotateTime = now;
+      theta += delta * 0.6;
+    } else {
+      lastRotateTime = 0;
+    }
+
     camera.position.set(
       target.x + radius * Math.sin(phi) * Math.sin(theta),
       target.y + radius * Math.cos(phi),
@@ -378,13 +559,20 @@ const VIEWER_SCRIPT = `
   }
 
   let dragMode = null;
+  let downX = 0;
+  let downY = 0;
+  let dragged = false;
   canvas.addEventListener('pointerdown', (event) => {
+    downX = event.clientX;
+    downY = event.clientY;
+    dragged = false;
     if (event.button === 1 || event.button === 2 || event.shiftKey) dragMode = 'pan';
     else dragMode = 'orbit';
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener('pointermove', (event) => {
     if (!dragMode) return;
+    if (Math.abs(event.clientX - downX) > 4 || Math.abs(event.clientY - downY) > 4) dragged = true;
     if (dragMode === 'orbit') {
       theta -= event.movementX * 0.008;
       phi = Math.max(0.08, Math.min(Math.PI - 0.08, phi - event.movementY * 0.008));
@@ -394,7 +582,23 @@ const VIEWER_SCRIPT = `
       target.y += event.movementY * factor;
     }
   });
-  canvas.addEventListener('pointerup', () => { dragMode = null; });
+  canvas.addEventListener('pointerup', (event) => {
+    if (!dragged && videoAudioController) {
+      const rect = canvas.getBoundingClientRect();
+      const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      const raycaster = new THREE.Raycaster();
+      const pointerVec = new THREE.Vector2(ndcX, ndcY);
+      raycaster.setFromCamera(pointerVec, camera);
+      const pickable = [];
+      for (const pair of meshes.values()) pickable.push(pair[0]);
+      const hits = raycaster.intersectObjects(pickable, false);
+      if (hits.length && hits[0].object.userData.panelId) {
+        videoAudioController.setPanel(hits[0].object.userData.panelId);
+      }
+    }
+    dragMode = null;
+  });
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
@@ -409,11 +613,18 @@ const VIEWER_SCRIPT = `
   openButton.addEventListener('click', () => animateFold(0));
   closeButton.addEventListener('click', () => animateFold(1));
   resetButton.addEventListener('click', () => {
-    theta = 0.65;
-    phi = 1.15;
-    target.set(0, 0, 0);
+    theta = 0;
+    phi = Math.PI / 2;
+    target.set(extents.centerX, extents.centerY, extents.centerZ);
     radius = boxRadius * 2.4;
     rebuildCamera();
+  });
+  panelToggle.addEventListener('click', () => {
+    panelEl.hidden = !panelEl.hidden;
+  });
+  autoRotateBtn.addEventListener('click', () => {
+    autoRotateEnabled = !autoRotateEnabled;
+    autoRotateBtn.textContent = autoRotateEnabled ? 'Auto-rotate: On' : 'Auto-rotate: Off';
   });
   cameraToggle.addEventListener('click', () => {
     projection = projection === 'perspective' ? 'orthographic' : 'perspective';
@@ -522,6 +733,39 @@ export async function createInteractive3dHtml({
   });
   const textureUrl = await canvasToDataUrl(composed.canvas);
 
+  const videos = [];
+  const videoEntries = entries.filter((entry) => (
+    entry.model?.source?.isVideo
+    || entry.model?.source?.mimeType?.startsWith('video/')
+    || entry.originalBlob?.type?.startsWith('video/')
+  ));
+  for (const videoEntry of videoEntries) {
+    if (!videoEntry.originalBlob) continue;
+    const videoData = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(videoEntry.originalBlob);
+    });
+    const artwork = videoEntry.model;
+    videos.push({
+      videoData,
+      artwork: {
+        centerXmm: artwork.centerXmm,
+        centerYmm: artwork.centerYmm,
+        initialWidthMm: artwork.initialWidthMm,
+        initialHeightMm: artwork.initialHeightMm,
+        scaleX: artwork.scaleX,
+        scaleY: artwork.scaleY,
+        rotation: artwork.rotation,
+        opacity: artwork.opacity,
+        flipX: artwork.flipX,
+        flipY: artwork.flipY,
+        crop: artwork.crop ? { ...artwork.crop } : null,
+      },
+    });
+  }
+
   const data = {
     rootId: graph.rootId,
     bounds: {
@@ -535,6 +779,12 @@ export async function createInteractive3dHtml({
     },
     nodes,
     texture: textureUrl,
+    textureSize: {
+      width: composed.width,
+      height: composed.height,
+    },
+    pixelsPerMm: composed.pixelsPerMm,
+    ...(videos.length ? { videos } : {}),
   };
 
   const threeModuleDataUrl = `data:text/javascript;base64,${toBase64(inlineThreeModule(threeModuleSource, threeCoreSource))}`;
@@ -551,7 +801,45 @@ export async function createInteractive3dHtml({
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; font-family: Arial, Helvetica, sans-serif; background: #e8e8e8; color: #e8eaed; }
   #viewer { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; background: #e8e8e8; }
-  #panel { position: fixed; top: 12px; left: 12px; padding: 10px 12px; background: rgb(20 22 25 / 85%); border: 1px solid #3a3f46; border-radius: 8px; font-size: 13px; display: grid; gap: 8px; min-width: 200px; user-select: none; }
+  #panelToggle {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 20;
+    padding: 6px 12px;
+    border: 1px solid #4a5058;
+    border-radius: 6px;
+    background: rgb(20 22 25 / 85%);
+    color: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  #panelToggle:hover { background: #383e46; }
+  #panel {
+    position: fixed;
+    top: 48px;
+    left: 12px;
+    padding: 10px 12px;
+    background: rgb(20 22 25 / 85%);
+    border: 1px solid #3a3f46;
+    border-radius: 8px;
+    font-size: 13px;
+    display: grid;
+    gap: 8px;
+    min-width: 200px;
+    user-select: none;
+  }
+  #panel[hidden] { display: none; }
+  #bottomControls {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    gap: 8px;
+  }
   #panel h1 { margin: 0; font-size: 13px; font-weight: 600; }
   #bgRow { display: flex; align-items: center; gap: 8px; }
   #bgRow input[type="color"] {
@@ -693,7 +981,12 @@ export async function createInteractive3dHtml({
 </head>
 <body>
 <canvas id="viewer"></canvas>
-<div id="panel">
+<button id="panelToggle" type="button">⚙ Controls</button>
+<div id="bottomControls">
+  <button id="autoRotate" type="button">Auto-rotate: On</button>
+  <button id="reset" type="button">Reset view</button>
+</div>
+<div id="panel" hidden>
   <h1>CartonBuilder — folded box</h1>
   <div id="foldRow">
     <label for="fold">Fold</label>
@@ -703,9 +996,7 @@ export async function createInteractive3dHtml({
   <div id="buttons">
     <button id="open" type="button">Open</button>
     <button id="close" type="button">Fold</button>
-    <button id="reset" type="button">Reset view</button>
     <button id="camera" type="button">Camera: perspective</button>
-    <button id="audioToggle" type="button" style="display:none;">🔈 Sound: Off</button>
   </div>
   <div id="bgRow">
     <label for="bgColor">Background</label>

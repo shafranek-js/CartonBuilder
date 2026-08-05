@@ -245,6 +245,8 @@ export function createArtworkApp({
     center: documentRef.getElementById('centerArtworkButton'),
     rotateLeft: documentRef.getElementById('rotateLeftButton'),
     rotateRight: documentRef.getElementById('rotateRightButton'),
+    flipHorizontal: documentRef.getElementById('flipHorizontalButton'),
+    flipVertical: documentRef.getElementById('flipVerticalButton'),
     reset: documentRef.getElementById('resetArtworkButton'),
     undo: documentRef.getElementById('undoButton'),
     redo: documentRef.getElementById('redoButton'),
@@ -508,16 +510,22 @@ export function createArtworkApp({
   }
 
   function ensureVideoElement(entry) {
-    if (entry?.model?.source?.isVideo && !entry.videoElement && entry.originalBlob && typeof document !== 'undefined') {
+    const isVideo = Boolean(
+      entry?.model?.source?.isVideo
+      || entry?.model?.source?.mimeType?.startsWith('video/')
+      || entry?.originalBlob?.type?.startsWith('video/')
+      || entry?.model?.source?.fileName?.match(/\.(mp4|webm|ogv)$/i)
+    );
+    if (isVideo && !entry.videoElement && entry.originalBlob && typeof document !== 'undefined') {
       const video = document.createElement('video');
       video.src = URL.createObjectURL(entry.originalBlob);
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
       video.setAttribute('playsinline', '');
+      video.preload = 'auto';
       video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.001;pointer-events:none;';
       if (document.body) document.body.appendChild(video);
-      video.play().catch(() => {});
       entry.videoElement = video;
     }
     return entry?.videoElement || null;
@@ -779,7 +787,7 @@ export function createArtworkApp({
     for (const control of [
       controls.x, controls.y, controls.width, controls.height, controls.opacity,
       controls.remove, controls.fit, controls.fill, controls.center,
-      controls.rotateLeft, controls.rotateRight, controls.reset,
+      controls.rotateLeft, controls.rotateRight, controls.flipHorizontal, controls.flipVertical, controls.reset,
     ]) {
       control.disabled = !transformEnabled;
     }
@@ -2375,6 +2383,8 @@ export function createArtworkApp({
   controls.center.addEventListener('click', () => command('Center artwork', () => artwork.centerOnDieline(boxModel.getBounds())));
   controls.rotateLeft.addEventListener('click', () => command('Rotate artwork', () => artwork.rotateQuarterTurns(-1), { fitViewport: true }));
   controls.rotateRight.addEventListener('click', () => command('Rotate artwork', () => artwork.rotateQuarterTurns(1), { fitViewport: true }));
+  controls.flipHorizontal.addEventListener('click', () => command('Flip artwork horizontally', () => artwork.flipHorizontal()));
+  controls.flipVertical.addEventListener('click', () => command('Flip artwork vertically', () => artwork.flipVertical()));
   controls.reset.addEventListener('click', () => command('Reset artwork', () => {
     artwork.resetTransform();
     artwork.centerOnDieline(boxModel.getBounds());

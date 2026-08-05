@@ -159,47 +159,135 @@ export function createPreview3DApp({
   let lastRecoveryKey = '';
   let persistTimer = null;
   let videoLoopFrame = null;
+  let videoLoopVideo = null;
   const listeners = [];
 
   function stopVideoLoop() {
     if (videoLoopFrame != null) {
-      windowRef.cancelAnimationFrame(videoLoopFrame);
+      if (videoLoopVideo && typeof videoLoopVideo.cancelVideoFrameCallback === 'function') {
+        videoLoopVideo.cancelVideoFrameCallback(videoLoopFrame);
+      } else {
+        windowRef.cancelAnimationFrame(videoLoopFrame);
+      }
       videoLoopFrame = null;
     }
+    videoLoopVideo = null;
   }
 
-  function startVideoLoopIfNeeded() {
-    stopVideoLoop();
-    const artworks = getArtworks ? getArtworks() : [];
-    const hasVideo = artworks.some((entry) => entry.videoElement || entry.model?.source?.isVideo);
-    if (!hasVideo || !scene || !state.active || disposed) return;
+  let currentRedraw = null;
+  let lastComposed = null;
 
-    let lastFrameTime = 0;
-    const tick = async (now) => {
+  function startVideoLoopIfNeeded(composed) {
+    stopVideoLoop();
+    lastComposed = composed;
+    if (composed?.redrawCanvas) currentRedraw = composed.redrawCanvas;
+    const artworks = getArtworks ? getArtworks() : [];
+    const videoEntry = activeSoundModel
+      ? artworks.find((entry) => entry.model === activeSoundModel) || null
+      : null;
+    if (!videoEntry || !scene || !state.active || disposed) return;
+
+    const video = videoEntry.videoElement;
+    let hasVideoCb = false;
+
+    const tick = () => {
       if (!state.active || disposed || !scene) return;
-      if (now - lastFrameTime > 30) {
-        lastFrameTime = now;
-        try {
-          const nextComposed = await composeArtworkTexture({
-            boxModel,
-            artworks: getArtworks ? getArtworks() : [],
-            documentRef,
-            purpose: 'preview',
-            raster: false,
-          });
-          if (state.active && scene && nextComposed?.canvas) {
-            scene.replaceTexture(nextComposed.canvas);
-            scene.render();
-          }
-        } catch {
-          // Fallback
-        }
+      if (currentRedraw) {
+        currentRedraw();
+        if (scene.texture) scene.texture.needsUpdate = true;
+        scene.render();
       }
-      if (state.active && !disposed) {
+      if (state.active && !disposed && !hasVideoCb) {
         videoLoopFrame = windowRef.requestAnimationFrame(tick);
       }
     };
-    videoLoopFrame = windowRef.requestAnimationFrame(tick);
+
+    if (video && typeof video.requestVideoFrameCallback === 'function') {
+      hasVideoCb = true;
+      videoLoopVideo = video;
+      const onVideoFrame = () => {
+        if (!state.active || disposed || !scene) return;
+        tick();
+        if (state.active && !disposed) {
+          videoLoopFrame = video.requestVideoFrameCallback(onVideoFrame);
+        }
+      };
+      videoLoopFrame = video.requestVideoFrameCallback(onVideoFrame);
+    } else {
+      videoLoopFrame = windowRef.requestAnimationFrame(tick);
+    }
+  }
+
+  let activeSoundModel = null;
+
+  function getVideoEntries() {
+    return (getArtworks ? getArtworks() : []).filter((entry) => entry.videoElement);
+  }
+
+  function findPanelIdForEntry(entry) {
+    const model = entry.model;
+    if (!model || !Number.isFinite(model.centerXmm) || !Number.isFinite(model.centerYmm)) return null;
+    const halfW = model.unrotatedWidthMm / 2;
+    const halfH = model.unrotatedHeightMm / 2;
+    const minX = model.centerXmm - halfW;
+    const maxX = model.centerXmm + halfW;
+    const minY = model.centerYmm - halfH;
+    const maxY = model.centerYmm + halfH;
+    let best = null;
+    let bestOverlap = 0;
+    for (const panel of boxModel.getPanels()) {
+      const overlapX = Math.max(0, Math.min(maxX, panel.x + panel.width) - Math.max(minX, panel.x));
+      const overlapY = Math.max(0, Math.min(maxY, panel.y + panel.height) - Math.max(minY, panel.y));
+      const overlap = overlapX * overlapY;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        best = panel.id;
+      }
+    }
+    return best;
+  }
+
+  // All videos play together (synchronised), but only the sound source has
+  // audio. When no sound source is set, every video is paused and muted.
+  function applyVideoState() {
+    const videos = getVideoEntries();
+    const playing = activeSoundModel !== null;
+    for (const entry of videos) {
+      const video = entry.videoElement;
+      if (!video) continue;
+      video.muted = entry.model !== activeSoundModel;
+      if (playing) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    }
+    if (playing) startVideoLoopIfNeeded(lastComposed);
+    else stopVideoLoop();
+  }
+
+  // Clicking a panel with a video starts playback on every panel (sound on
+  // the clicked one); clicking the sound panel again stops everything;
+  // clicking another panel moves the sound there while videos keep playing.
+  function selectVideoForPanel(panelId) {
+    const onPanel = getVideoEntries().filter((entry) => findPanelIdForEntry(entry) === panelId);
+    if (!onPanel.length) return;
+    const candidate = onPanel[0].model;
+    if (candidate === activeSoundModel) {
+      activeSoundModel = null;
+    } else {
+      activeSoundModel = candidate;
+    }
+    applyVideoState();
+  }
+
+  // Videos start stopped (paused, muted). They play on a panel click.
+  function initVideoState() {
+    const videos = getVideoEntries();
+    if (activeSoundModel && !videos.some((entry) => entry.model === activeSoundModel)) {
+      activeSoundModel = null;
+    }
+    applyVideoState();
   }
 
   function schedulePersist() {
@@ -443,6 +531,7 @@ export function createPreview3DApp({
           onSelection: (panelId) => {
             state.selectedPanelId = panelId;
             updateControls();
+            selectVideoForPanel(panelId);
           },
           onContextLost: () => showRecovery('webglContextLost3d'),
           onContextRestored: () => {
@@ -460,6 +549,7 @@ export function createPreview3DApp({
       updateControls();
       scene.render();
       startVideoLoopIfNeeded(composed);
+      initVideoState();
       return true;
     } catch (error) {
       if (error?.name === 'AbortError') return false;

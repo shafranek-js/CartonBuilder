@@ -103,6 +103,7 @@ export async function createPreviewBlob({
       context.globalAlpha = entry.model.opacity;
       context.translate(entry.model.centerXmm, entry.model.centerYmm);
       context.rotate(entry.model.rotation * Math.PI / 180);
+      context.scale(entry.model.flipX ? -1 : 1, entry.model.flipY ? -1 : 1);
       if (entry.model.crop) {
         context.beginPath();
         context.rect(
