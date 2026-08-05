@@ -37,4 +37,16 @@ describe('video texture processing', () => {
     expect(processed.isVideo).toBe(true);
     expect(processed.previewBlob).toBeInstanceOf(Blob);
   });
+
+  it('toggles audio state on video elements correctly', () => {
+    const video = { muted: true, play: async () => {} };
+    function toggleAudio(v) {
+      v.muted = !v.muted;
+      return v.muted;
+    }
+    expect(toggleAudio(video)).toBe(false);
+    expect(video.muted).toBe(false);
+    expect(toggleAudio(video)).toBe(true);
+    expect(video.muted).toBe(true);
+  });
 });

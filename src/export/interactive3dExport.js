@@ -20,6 +20,7 @@ const VIEWER_SCRIPT = `
   const closeButton = document.getElementById('close');
   const resetButton = document.getElementById('reset');
   const bgColorInput = document.getElementById('bgColor');
+  const audioToggle = document.getElementById('audioToggle');
 
   const nodes = new Map(DATA.nodes.map((node) => [node.id, node]));
 
@@ -50,13 +51,38 @@ const VIEWER_SCRIPT = `
   let phi = 1.15;
   const target = new THREE.Vector3(0, 0, 0);
 
-  const textureImage = new Image();
-  textureImage.src = DATA.texture;
-  const texture = new THREE.Texture(textureImage);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  textureImage.onload = () => { texture.needsUpdate = true; };
-  textureImage.onerror = () => { console.error('texture failed to load'); };
+  let texture;
+  if (DATA.videoData) {
+    const video = document.createElement('video');
+    video.src = DATA.videoData;
+    video.autoplay = true;
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.play().catch(() => {});
+
+    if (audioToggle) {
+      audioToggle.style.display = 'inline-block';
+      audioToggle.addEventListener('click', () => {
+        video.muted = !video.muted;
+        if (!video.muted) video.play().catch(() => {});
+        audioToggle.textContent = video.muted ? '🔈 Sound: Off' : '🔊 Sound: On';
+        audioToggle.style.color = video.muted ? 'inherit' : '#afca42';
+      });
+    }
+
+    texture = new THREE.VideoTexture(video);
+    texture.colorSpace = THREE.SRGBColorSpace;
+  } else {
+    const textureImage = new Image();
+    textureImage.src = DATA.texture;
+    texture = new THREE.Texture(textureImage);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    textureImage.onload = () => { texture.needsUpdate = true; };
+    textureImage.onerror = () => { console.error('texture failed to load'); };
+  }
 
   const frontMaterial = new THREE.MeshPhysicalMaterial({
     map: texture,
@@ -679,6 +705,7 @@ export async function createInteractive3dHtml({
     <button id="close" type="button">Fold</button>
     <button id="reset" type="button">Reset view</button>
     <button id="camera" type="button">Camera: perspective</button>
+    <button id="audioToggle" type="button" style="display:none;">🔈 Sound: Off</button>
   </div>
   <div id="bgRow">
     <label for="bgColor">Background</label>
