@@ -353,7 +353,12 @@ export async function composeArtworkTexture({
         });
         renderBlob = rendered.blob;
       }
-      const bitmap = await createImageBitmapFn(renderBlob, { imageOrientation: 'from-image' });
+      let bitmap;
+      try {
+        bitmap = await createImageBitmapFn(renderBlob, { imageOrientation: 'from-image' });
+      } catch {
+        bitmap = await createImageBitmapFn(renderBlob);
+      }
       bitmaps.push(bitmap);
     }
     throwIfAborted(signal);
