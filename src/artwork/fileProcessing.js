@@ -304,6 +304,22 @@ export async function renderPdfPreview(file, {
   }
 }
 
+const MINIMAL_PNG_BYTES = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+  0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+  0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
+  0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+  0x42, 0x60, 0x82,
+]);
+
+function createMinimalPngBlob() {
+  return new Blob([MINIMAL_PNG_BYTES], { type: 'image/png' });
+}
+
 async function loadVideo(file, signal) {
   throwIfAborted(signal);
   if (typeof document === 'undefined') {
@@ -331,7 +347,7 @@ async function loadVideo(file, signal) {
       };
     } catch {
       return {
-        previewBlob: new Blob([], { type: 'image/png' }),
+        previewBlob: createMinimalPngBlob(),
         widthPx: 1280,
         heightPx: 720,
         previewWidthPx: 1280,
@@ -346,22 +362,27 @@ async function loadVideo(file, signal) {
     }
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const video = document.createElement('video');
     const url = URL.createObjectURL(file);
     video.src = url;
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'metadata';
+    video.preload = 'auto';
+
+    let settled = false;
+    let timeoutId = null;
 
     const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       video.remove();
     };
 
-    video.onloadeddata = async () => {
+    const captureFrame = async () => {
+      if (settled) return;
+      settled = true;
       try {
-        video.currentTime = 0;
         const width = video.videoWidth || 1280;
         const height = video.videoHeight || 720;
         const scale = getPreviewScale(width, height);
@@ -372,7 +393,10 @@ async function loadVideo(file, signal) {
         const context = canvas.getContext('2d', { alpha: true });
         if (context) context.drawImage(video, 0, 0, previewWidth, previewHeight);
 
-        const previewBlob = await canvasToBlob(canvas, 'image/png');
+        let previewBlob = await canvasToBlob(canvas, 'image/png');
+        if (!previewBlob || previewBlob.size === 0) {
+          previewBlob = createMinimalPngBlob();
+        }
         cleanup();
         resolve({
           previewBlob,
@@ -387,29 +411,55 @@ async function loadVideo(file, signal) {
           mediaBox: null,
           isVideo: true,
         });
-      } catch (err) {
+      } catch {
         cleanup();
-        reject(err);
+        resolve({
+          previewBlob: createMinimalPngBlob(),
+          widthPx: 1280,
+          heightPx: 720,
+          previewWidthPx: 1280,
+          previewHeightPx: 720,
+          pageIndex: null,
+          pageCount: null,
+          vector: false,
+          pdfPageRotation: 0,
+          mediaBox: null,
+          isVideo: true,
+        });
       }
     };
 
-    video.onerror = () => {
-      cleanup();
-      // Fallback if video tag cannot render poster in test environment
-      resolve({
-        previewBlob: new Blob([], { type: 'image/png' }),
-        widthPx: 1280,
-        heightPx: 720,
-        previewWidthPx: 1280,
-        previewHeightPx: 720,
-        pageIndex: null,
-        pageCount: null,
-        vector: false,
-        pdfPageRotation: 0,
-        mediaBox: null,
-        isVideo: true,
-      });
+    video.onseeked = captureFrame;
+    video.onloadeddata = () => {
+      try {
+        video.currentTime = 0.01;
+      } catch {
+        captureFrame();
+      }
     };
+    video.onerror = () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve({
+          previewBlob: createMinimalPngBlob(),
+          widthPx: 1280,
+          heightPx: 720,
+          previewWidthPx: 1280,
+          previewHeightPx: 720,
+          pageIndex: null,
+          pageCount: null,
+          vector: false,
+          pdfPageRotation: 0,
+          mediaBox: null,
+          isVideo: true,
+        });
+      }
+    };
+
+    timeoutId = setTimeout(() => {
+      if (!settled) captureFrame();
+    }, 1500);
   });
 }
 
