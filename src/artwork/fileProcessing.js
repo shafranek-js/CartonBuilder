@@ -429,13 +429,16 @@ async function loadVideo(file, signal) {
       }
     };
 
-    video.onseeked = captureFrame;
-    video.onloadeddata = () => {
+    video.onloadedmetadata = () => {
       try {
-        video.currentTime = 0.01;
+        video.currentTime = 0.001;
       } catch {
         captureFrame();
       }
+    };
+    video.onseeked = captureFrame;
+    video.oncanplay = () => {
+      if (!settled && video.videoWidth > 0) captureFrame();
     };
     video.onerror = () => {
       if (!settled) {

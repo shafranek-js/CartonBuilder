@@ -99,7 +99,12 @@ async function rasterizeImageBlob(blob, {
   if (typeof createImageBitmapFn !== 'function') {
     return { blob, width: null, height: null, actualDpi: null, limited: false };
   }
-  const bitmap = await createImageBitmapFn(blob, { imageOrientation: 'from-image' });
+  let bitmap;
+  try {
+    bitmap = await createImageBitmapFn(blob, { imageOrientation: 'from-image' });
+  } catch {
+    bitmap = await createImageBitmapFn(blob);
+  }
   try {
     if (signal?.aborted) throw new DOMException('Artwork rasterization aborted.', 'AbortError');
     const dimensions = getRasterDimensions({
@@ -178,7 +183,8 @@ export async function rasterizeArtwork({
     };
   }
 
-  const sourceBlob = entry.originalBlob || entry.previewBlob;
+  const isVideo = Boolean(artwork.source?.isVideo || artwork.source?.mimeType?.startsWith('video/'));
+  const sourceBlob = (isVideo ? entry.previewBlob : entry.originalBlob) || entry.previewBlob || entry.originalBlob;
   if (!sourceBlob) throw new Error('Artwork raster source is required.');
   const rendered = await rasterizeImageBlob(sourceBlob, {
     widthMm,
