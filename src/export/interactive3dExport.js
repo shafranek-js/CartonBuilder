@@ -647,6 +647,10 @@ function escapeScriptClosing(source) {
   return source.replace(/<\/script/gi, '<\\/script');
 }
 
+function trimNumber(value) {
+  return String(Math.round(value * 10) / 10);
+}
+
 function toBase64(source) {
   return btoa(unescape(encodeURIComponent(source)));
 }
@@ -792,12 +796,21 @@ export async function createInteractive3dHtml({
   const roomEnvironment = inlineRoomEnvironment(roomEnvironmentSource);
   const moduleScript = `import * as THREE from '${threeModuleDataUrl}';\n${roomEnvironment}\n${viewer}`;
 
+  const dims = boxModel.dimensions;
+  const dimText = `${trimNumber(dims.width)}×${trimNumber(dims.height)}×${trimNumber(dims.depth)} mm`;
+  const exportTitle = `Carton ${dimText}`;
+  const exportDescription = 'Interactive 3D carton preview — drag to rotate, click a face to play video with sound.';
+
   const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CartonBuilder — folded box</title>
+<title>${exportTitle}</title>
+<meta name="description" content="${exportDescription}">
+<meta property="og:title" content="${exportTitle}">
+<meta property="og:type" content="website">
+<meta property="og:description" content="${exportDescription}">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; font-family: Arial, Helvetica, sans-serif; background: #e8e8e8; color: #e8eaed; }
   #viewer { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; background: #e8e8e8; }

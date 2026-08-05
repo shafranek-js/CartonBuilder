@@ -117,6 +117,25 @@ describe('createInteractive3dHtml', () => {
     expect(options.targetDpi).toBe(1200);
   });
 
+  it('includes Open Graph tags with box dimensions in the head', async () => {
+    const blob = await createInteractive3dHtml({
+      boxModel: buildCompleteBox(),
+      artworks: fakeEntries(),
+      composeTexture: async () => ({
+        canvas: { toDataURL: () => 'data:image/png;base64,OG' },
+        width: 1,
+        height: 1,
+        pixelsPerMm: 1,
+      }),
+    });
+    const html = await blob.text();
+
+    expect(html).toContain('<title>Carton 150×90×40 mm</title>');
+    expect(html).toContain('property="og:title" content="Carton 150×90×40 mm"');
+    expect(html).toContain('property="og:description"');
+    expect(html).toContain('property="og:type" content="website"');
+  });
+
   it('rejects when no artwork preview is available', async () => {
     await expect(createInteractive3dHtml({
       boxModel: buildCompleteBox(),

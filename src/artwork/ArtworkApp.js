@@ -2770,6 +2770,9 @@ export function createArtworkApp({
   documentRef.getElementById('export3dHtmlButton')?.addEventListener('click', () => {
     exportDeliverable('html');
   });
+  documentRef.getElementById('publish3dHtmlButton')?.addEventListener('click', () => {
+    publishHtmlExport();
+  });
   documentRef.getElementById('backToArtworkButton')?.addEventListener('click', () => {
     selected = true;
     render();
@@ -2917,6 +2920,83 @@ export function createArtworkApp({
       console.error(error);
       showError(error, fallback);
       return false;
+    }
+  }
+
+  function readPublishSettings() {
+    const defaults = { owner: 'shafranek-js', repo: 'CartonBuilder', token: '' };
+    try {
+      const raw = windowRef.localStorage?.getItem('carton.publish.settings');
+      return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+    } catch {
+      return defaults;
+    }
+  }
+
+  function savePublishSettings(settings) {
+    try {
+      windowRef.localStorage?.setItem('carton.publish.settings', JSON.stringify(settings));
+    } catch { /* ignore */ }
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = documentRef.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      documentRef.body.appendChild(textarea);
+      textarea.select();
+      try { documentRef.execCommand('copy'); } catch { /* ignore */ }
+      textarea.remove();
+    }
+  }
+
+  async function publishHtmlExport() {
+    try {
+      clearError();
+      const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
+      const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
+      const renderState = sanitizeRenderSettings(getRenderState());
+      const blob = await createInteractive3dHtml({
+        boxModel,
+        artworks: exportArtworks,
+        htmlQuality: renderState.quality.html,
+        documentRef,
+      });
+
+      let settings = readPublishSettings();
+      if (!settings.token) {
+        const token = windowRef.prompt?.(t('publishTokenPrompt'));
+        if (!token) return;
+        settings = { ...settings, token };
+        savePublishSettings(settings);
+      }
+      if (!settings.owner || !settings.repo) {
+        const owner = windowRef.prompt?.(t('publishOwnerPrompt'), settings.owner || '');
+        const repo = windowRef.prompt?.(t('publishRepoPrompt'), settings.repo || '');
+        if (!owner || !repo) return;
+        settings = { ...settings, owner, repo };
+        savePublishSettings(settings);
+      }
+
+      const { publishInteractiveHtml } = await import('../export/publishExport.js');
+      const filename = `carton-${Date.now()}.html`;
+      const { pageUrl } = await publishInteractiveHtml({
+        blob,
+        filename,
+        token: settings.token,
+        owner: settings.owner,
+        repo: settings.repo,
+      });
+
+      await copyToClipboard(pageUrl);
+      showToast(`${t('publishSuccess')}: ${pageUrl}`);
+    } catch (error) {
+      console.error(error);
+      showToast(t('publishFailed'));
     }
   }
 
