@@ -3,13 +3,20 @@ import { processArtworkFile, PREVIEW_LIMITS } from './fileProcessing.js';
 import { validateArtworkFile } from './fileValidation.js';
 
 function buildLoadResult(file, loaded) {
+  const isVideo = Boolean(
+    loaded?.isVideo
+    || loaded?.mimeType?.startsWith('video/')
+    || file?.type?.startsWith('video/')
+    || file?.name?.match(/\.(mp4|webm|ogv)$/i)
+  );
+
   return {
     originalBlob: file,
     previewBlob: loaded.previewBlob,
     source: {
       id: crypto.randomUUID(),
       fileName: file.name || `artwork.${loaded.extension}`,
-      mimeType: loaded.mimeType,
+      mimeType: loaded.mimeType || file.type || 'video/mp4',
       byteLength: file.size,
       widthPx: loaded.widthPx,
       heightPx: loaded.heightPx,
@@ -23,6 +30,7 @@ function buildLoadResult(file, loaded) {
       sha256: loaded.sha256,
       pdfLayers: loaded.pdfLayers || null,
       pdfLayerVisibility: loaded.pdfLayerVisibility || null,
+      isVideo,
     },
   };
 }
@@ -117,7 +125,10 @@ export async function loadArtworkFile(file, {
   processFile = processArtworkFile,
 } = {}) {
   await validateArtworkFile(file);
-  if (preferWorker && workerSupported) {
+  const isVideoFile = Boolean(
+    file?.type?.startsWith('video/') || file?.name?.match(/\.(mp4|webm|ogv)$/i),
+  );
+  if (preferWorker && workerSupported && !isVideoFile) {
     try {
       return await loadArtworkWithWorker(file, { choosePage, signal, workerFactory });
     } catch (error) {
