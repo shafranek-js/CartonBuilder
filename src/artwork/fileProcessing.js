@@ -390,8 +390,12 @@ async function loadVideo(file, signal) {
         const previewHeight = Math.max(1, Math.round(height * scale));
 
         const canvas = createCanvas(previewWidth, previewHeight);
-        const context = canvas.getContext('2d', { alpha: true });
-        if (context) context.drawImage(video, 0, 0, previewWidth, previewHeight);
+        const context = canvas.getContext('2d', { alpha: false });
+        if (context) {
+          context.fillStyle = '#1e1e1e';
+          context.fillRect(0, 0, previewWidth, previewHeight);
+          context.drawImage(video, 0, 0, previewWidth, previewHeight);
+        }
 
         let previewBlob = await canvasToBlob(canvas, 'image/png');
         if (!previewBlob || previewBlob.size === 0) {
@@ -429,17 +433,37 @@ async function loadVideo(file, signal) {
       }
     };
 
-    video.onloadedmetadata = () => {
-      try {
-        video.currentTime = 0.001;
-      } catch {
+    if ('requestVideoFrameCallback' in video) {
+      video.requestVideoFrameCallback(() => {
         captureFrame();
+      });
+    }
+
+    video.onloadeddata = () => {
+      video.play().then(() => {
+        setTimeout(() => {
+          video.pause();
+          captureFrame();
+        }, 100);
+      }).catch(() => {
+        try {
+          video.currentTime = 0.001;
+        } catch {
+          captureFrame();
+        }
+      });
+    };
+
+    video.onseeked = () => {
+      setTimeout(captureFrame, 50);
+    };
+
+    video.oncanplay = () => {
+      if (!settled && video.videoWidth > 0) {
+        setTimeout(captureFrame, 50);
       }
     };
-    video.onseeked = captureFrame;
-    video.oncanplay = () => {
-      if (!settled && video.videoWidth > 0) captureFrame();
-    };
+
     video.onerror = () => {
       if (!settled) {
         settled = true;
@@ -460,9 +484,11 @@ async function loadVideo(file, signal) {
       }
     };
 
+    video.load();
+
     timeoutId = setTimeout(() => {
       if (!settled) captureFrame();
-    }, 1500);
+    }, 2000);
   });
 }
 
