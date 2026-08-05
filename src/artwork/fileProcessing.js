@@ -367,8 +367,10 @@ async function loadVideo(file, signal) {
     const url = URL.createObjectURL(file);
     video.src = url;
     video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
+    video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.001;pointer-events:none;';
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(video);
+    }
 
     let settled = false;
     let timeoutId = null;
