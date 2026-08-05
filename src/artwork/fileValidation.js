@@ -6,6 +6,9 @@ const SUPPORTED_TYPES = Object.freeze({
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'application/pdf': 'pdf',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
 });
 
 function hasBytes(bytes, expected, offset = 0) {
@@ -22,6 +25,15 @@ export function detectArtworkType(bytes) {
   if (hasBytes(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
     return 'application/pdf';
   }
+  if (hasBytes(bytes, [0x47, 0x49, 0x46, 0x38])) {
+    return 'image/gif';
+  }
+  if (hasBytes(bytes, [0x1a, 0x45, 0xdf, 0xa3])) {
+    return 'video/webm';
+  }
+  if (hasBytes(bytes, [0x66, 0x74, 0x79, 0x70], 4)) {
+    return 'video/mp4';
+  }
   return null;
 }
 
@@ -35,13 +47,16 @@ export async function validateArtworkFile(file) {
   if (!detectedType || !SUPPORTED_TYPES[detectedType]) {
     throw new AppError('artworkFileUnsupported');
   }
-  const isPdfAlias = detectedType === 'application/pdf'
-    && (file.type === 'application/octet-stream' || file.type === 'application/postscript');
+  const isMediaAlias = (
+    (detectedType === 'application/pdf' && (file.type === 'application/octet-stream' || file.type === 'application/postscript'))
+    || (detectedType === 'video/mp4' && (file.type === 'video/quicktime' || file.type === 'application/octet-stream'))
+    || (detectedType === 'video/webm' && file.type === 'application/octet-stream')
+  );
   if (
     file.type
     && file.type !== detectedType
     && !(file.type === 'image/jpg' && detectedType === 'image/jpeg')
-    && !isPdfAlias
+    && !isMediaAlias
   ) {
     throw new AppError('artworkFileTypeMismatch');
   }

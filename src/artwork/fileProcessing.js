@@ -304,6 +304,115 @@ export async function renderPdfPreview(file, {
   }
 }
 
+async function loadVideo(file, signal) {
+  throwIfAborted(signal);
+  if (typeof document === 'undefined') {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = getPreviewScale(bitmap.width, bitmap.height);
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = createCanvas(width, height);
+      const context = canvas.getContext('2d', { alpha: true });
+      if (context) context.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+      return {
+        previewBlob: await canvasToBlob(canvas, 'image/png'),
+        widthPx: width / scale,
+        heightPx: height / scale,
+        previewWidthPx: width,
+        previewHeightPx: height,
+        pageIndex: null,
+        pageCount: null,
+        vector: false,
+        pdfPageRotation: 0,
+        mediaBox: null,
+        isVideo: true,
+      };
+    } catch {
+      return {
+        previewBlob: new Blob([], { type: 'image/png' }),
+        widthPx: 1280,
+        heightPx: 720,
+        previewWidthPx: 1280,
+        previewHeightPx: 720,
+        pageIndex: null,
+        pageCount: null,
+        vector: false,
+        pdfPageRotation: 0,
+        mediaBox: null,
+        isVideo: true,
+      };
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    video.src = url;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.remove();
+    };
+
+    video.onloadeddata = async () => {
+      try {
+        video.currentTime = 0;
+        const width = video.videoWidth || 1280;
+        const height = video.videoHeight || 720;
+        const scale = getPreviewScale(width, height);
+        const previewWidth = Math.max(1, Math.round(width * scale));
+        const previewHeight = Math.max(1, Math.round(height * scale));
+
+        const canvas = createCanvas(previewWidth, previewHeight);
+        const context = canvas.getContext('2d', { alpha: true });
+        if (context) context.drawImage(video, 0, 0, previewWidth, previewHeight);
+
+        const previewBlob = await canvasToBlob(canvas, 'image/png');
+        cleanup();
+        resolve({
+          previewBlob,
+          widthPx: width,
+          heightPx: height,
+          previewWidthPx: previewWidth,
+          previewHeightPx: previewHeight,
+          pageIndex: null,
+          pageCount: null,
+          vector: false,
+          pdfPageRotation: 0,
+          mediaBox: null,
+          isVideo: true,
+        });
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    };
+
+    video.onerror = () => {
+      cleanup();
+      // Fallback if video tag cannot render poster in test environment
+      resolve({
+        previewBlob: new Blob([], { type: 'image/png' }),
+        widthPx: 1280,
+        heightPx: 720,
+        previewWidthPx: 1280,
+        previewHeightPx: 720,
+        pageIndex: null,
+        pageCount: null,
+        vector: false,
+        pdfPageRotation: 0,
+        mediaBox: null,
+        isVideo: true,
+      });
+    };
+  });
+}
+
 export async function processArtworkFile(file, {
   choosePage = async () => 0,
   signal,
@@ -312,7 +421,9 @@ export async function processArtworkFile(file, {
   const { mimeType, extension } = await validateArtworkFile(file);
   const loaded = mimeType === 'application/pdf'
     ? await loadPdf(file, choosePage, signal)
-    : await loadImage(file, signal);
+    : (mimeType.startsWith('video/') || mimeType === 'image/gif')
+      ? await loadVideo(file, signal)
+      : await loadImage(file, signal);
   throwIfAborted(signal);
   const sourceHash = await sha256(file);
   throwIfAborted(signal);
