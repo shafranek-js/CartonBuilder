@@ -177,6 +177,22 @@ describe('3D texture composition', () => {
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
+  it('redraws the baked static layer without touching the closed bitmap', async () => {
+    vi.stubGlobal('OffscreenCanvas', CanvasMock);
+    const bitmap = { close: vi.fn() };
+    const result = await composeArtworkTexture({
+      ...fixture(),
+      createImageBitmapFn: vi.fn().mockResolvedValue(bitmap),
+    });
+    expect(bitmap.close).toHaveBeenCalledOnce();
+
+    // Redraw must not throw even though the source bitmap is already closed;
+    // static artwork is served from the baked static layer, so live video
+    // frames can be composited on top without losing the other artworks.
+    expect(() => result.redrawCanvas()).not.toThrow();
+    expect(() => result.redrawCanvas()).not.toThrow();
+  });
+
   it('composes finish maps in the same flat-net texture space', async () => {
     vi.stubGlobal('OffscreenCanvas', CanvasMock);
     const bitmap = { close: vi.fn() };

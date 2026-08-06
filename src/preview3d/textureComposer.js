@@ -136,6 +136,14 @@ function isPrintEntry(entry) {
   return entry?.outputRole !== 'finish';
 }
 
+function isVideoEntry(entry) {
+  return Boolean(
+    entry?.model?.source?.isVideo
+    || entry?.model?.source?.mimeType?.startsWith('video/')
+    || entry?.originalBlob?.type?.startsWith('video/')
+  );
+}
+
 function clampByte(value) {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
@@ -332,6 +340,11 @@ export async function composeArtworkTexture({
   const rawContext = rawCanvas.getContext('2d', { alpha: true });
   const outputCanvas = createCanvas(width, height, documentRef);
   const outputContext = outputCanvas.getContext('2d', { alpha: true });
+  // Static artworks are baked once while their bitmaps are alive; the redraw
+  // loop then draws this layer plus live video frames on top. This keeps
+  // static artwork visible even after the bitmaps are closed.
+  const staticLayerCanvas = createCanvas(width, height, documentRef);
+  const staticLayerContext = staticLayerCanvas.getContext('2d', { alpha: true });
   const bitmaps = [];
 
   try {
@@ -386,17 +399,35 @@ export async function composeArtworkTexture({
       : null;
     throwIfAborted(signal);
 
+    const bakeStaticLayer = () => {
+      staticLayerContext.save();
+      staticLayerContext.scale(pixelsPerMm, pixelsPerMm);
+      staticLayerContext.translate(-bounds.minX, -bounds.minY);
+      drawPanelUnion(staticLayerContext, panels);
+      staticLayerContext.clip();
+      staticLayerContext.fillStyle = '#ffffff';
+      staticLayerContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+      for (let index = 0; index < entries.length; index += 1) {
+        if (isPrintEntry(entries[index])) drawArtwork(staticLayerContext, entries[index], bitmaps[index]);
+      }
+      staticLayerContext.restore();
+    };
+
     const redrawCanvas = () => {
+      rawContext.save();
+      rawContext.clearRect(0, 0, width, height);
+      rawContext.drawImage(staticLayerCanvas, 0, 0);
       rawContext.save();
       rawContext.scale(pixelsPerMm, pixelsPerMm);
       rawContext.translate(-bounds.minX, -bounds.minY);
       drawPanelUnion(rawContext, panels);
       rawContext.clip();
-      rawContext.fillStyle = '#ffffff';
-      rawContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
       for (let index = 0; index < entries.length; index += 1) {
-        if (isPrintEntry(entries[index])) drawArtwork(rawContext, entries[index], bitmaps[index]);
+        if (isPrintEntry(entries[index]) && isVideoEntry(entries[index])) {
+          drawArtwork(rawContext, entries[index], bitmaps[index]);
+        }
       }
+      rawContext.restore();
       rawContext.restore();
 
       if (materialMaps?.foilColors && rawContext.getImageData && rawContext.putImageData) {
@@ -424,6 +455,7 @@ export async function composeArtworkTexture({
       outputContext.drawImage(rawCanvas, 0, 0);
     };
 
+    bakeStaticLayer();
     redrawCanvas();
     return {
       canvas: outputCanvas,
