@@ -20,6 +20,14 @@ describe('render camera state', () => {
     expect(state.distance).toBeCloseTo(4, 6);
   });
 
+  it('accepts Vector3-like objects with x/y/z components', () => {
+    const position = { x: 2.8284271247461903, y: 0, z: 2.8284271247461903 };
+    const target = { x: 0, y: 0, z: 0 };
+    const state = cameraHeadingElevation(position, target);
+    expect(state.heading).toBeCloseTo(45, 6);
+    expect(state.distance).toBeCloseTo(4, 6);
+  });
+
   it('normalizes a view preset relative to carton bounds', () => {
     const normalized = normalizeCameraPresetState({
       position: [0, 0, 6],

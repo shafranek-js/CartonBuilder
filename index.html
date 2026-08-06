@@ -872,7 +872,7 @@
                 <label class="field"><span data-i18n="renderCameraFrameHeight">Frame height</span><input id="renderCameraFrameHeight" type="number" min="0.01" step="0.1"></label>
               </details>
               <label class="field"><span data-i18n="renderKeepVerticalsParallel">Keep verticals parallel</span><input id="renderKeepVerticalsParallel" type="checkbox"></label>
-              <div class="button-row"><button id="renderFitCameraButton" type="button" data-i18n="renderFitCamera">Fit</button><button id="renderResetCameraButton" type="button" data-i18n="resetView3d">Reset</button></div>
+              <div class="button-row"><button id="renderFitCameraButton" type="button" data-i18n="renderFitCamera">Fit</button><button id="renderMirrorCameraButton" type="button" data-i18n="renderMirrorCamera">Mirror</button><button id="renderResetCameraButton" type="button" data-i18n="resetView3d">Reset</button></div>
             </details>
 
             <details open class="tool-section">
@@ -914,6 +914,13 @@
               <div class="light-control"><span data-i18n="renderBevel">Bevel</span><input id="renderBoardBevel" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="renderBoardBevelValue">0.12 mm</output></div>
               <label class="field"><span data-i18n="renderInteriorColor">Interior</span><input id="renderBoardInteriorColor" type="color" value="#f4f2ec"></label>
               <label class="field"><span data-i18n="renderEdgeColor">Edges</span><input id="renderBoardEdgeColor" type="color" value="#c8c1b5"></label>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderQuality">Quality</summary>
+              <label class="field"><span data-i18n="renderQualityInteractive">Viewport</span><select id="renderQualityInteractive"><option value="fast" data-i18n="renderQualityFast">Fast</option><option value="balanced" data-i18n="renderQualityBalanced">Balanced</option><option value="high" data-i18n="renderQualityHigh">High</option></select></label>
+              <label class="field"><span data-i18n="renderQualityExport">Export</span><select id="renderQualityExport"><option value="fast" data-i18n="renderQualityFast">Fast</option><option value="balanced" data-i18n="renderQualityBalanced">Balanced</option><option value="high" data-i18n="renderQualityHigh">High</option></select></label>
+              <label class="field"><span data-i18n="renderQualityHtml">HTML export</span><select id="renderQualityHtml"><option value="auto" data-i18n="qualityAuto">Auto</option><option value="600">600 DPI</option><option value="1200">1200 DPI</option><option value="2400">2400 DPI</option></select></label>
             </details>
 
             <details open class="tool-section" id="renderNamedPresetSection">
@@ -969,6 +976,8 @@
               <div class="light-control"><span data-i18n="renderBackgroundZoom">Zoom</span><input id="renderBackgroundZoom" type="range" min="0.1" max="4" step="0.05" value="1"><output id="renderBackgroundZoomValue">1.00×</output></div>
               <div class="light-control"><span data-i18n="renderBackgroundBrightness">Brightness</span><input id="renderBackgroundBrightness" type="range" min="0" max="2" step="0.05" value="1"><output id="renderBackgroundBrightnessValue">1.00</output></div>
               <div class="light-control"><span data-i18n="renderBackgroundOverlay">Overlay</span><input id="renderBackgroundOverlayOpacity" type="range" min="0" max="1" step="0.01" value="0"><output id="renderBackgroundOverlayOpacityValue">0%</output></div>
+              <label class="field"><span data-i18n="renderBackgroundOverlayColor">Overlay color</span><input id="renderBackgroundOverlayColor" type="color" value="#000000"></label>
+              <div class="light-control"><span data-i18n="renderBackgroundBlur">Blur</span><input id="renderBackgroundBlur" type="range" min="0" max="40" step="0.5" value="0"><output id="renderBackgroundBlurValue">0 px</output></div>
             </details>
 
             <details open class="tool-section">
@@ -977,6 +986,7 @@
               <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.34"><output id="renderShadowIntensityValue">0.34</output></div>
               <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="2"><output id="renderShadowBlurValue">2.0</output></div>
               <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
+              <label class="field"><span data-i18n="renderShadowMapSize">Shadow map</span><select id="renderShadowMapSize"><option value="512">512 px</option><option value="1024">1024 px</option><option value="2048">2048 px</option></select></label>
             </details>
 
             <details open class="tool-section">
@@ -999,6 +1009,10 @@
               <div class="light-control"><span data-i18n="renderDofFocusDistance">Focus distance</span><input id="renderDofFocusDistance" type="range" min="0.01" max="10" step="0.01" value="1"><output id="renderDofFocusDistanceValue">1.00</output></div>
               <div class="light-control"><span data-i18n="renderDofAperture">Aperture</span><input id="renderDofAperture" type="range" min="0" max="0.2" step="0.001" value="0.025"><output id="renderDofApertureValue">0.025</output></div>
               <div class="light-control"><span data-i18n="renderDofMaxBlur">Max blur</span><input id="renderDofMaxBlur" type="range" min="0" max="1" step="0.01" value="0.01"><output id="renderDofMaxBlurValue">0.010</output></div>
+              <label class="field"><span data-i18n="renderAaInteractive">AA viewport</span><select id="renderAaInteractive"><option value="native" data-i18n="renderAaNative">Native</option><option value="smaa">SMAA</option><option value="taa">TAA</option></select></label>
+              <label class="field"><span data-i18n="renderAaSettled">AA settled</span><select id="renderAaSettled"><option value="native" data-i18n="renderAaNative">Native</option><option value="smaa">SMAA</option><option value="taa">TAA</option></select></label>
+              <label class="field"><span data-i18n="renderAaExport">AA export</span><select id="renderAaExport"><option value="native" data-i18n="renderAaNative">Native</option><option value="smaa">SMAA</option><option value="taa">TAA</option></select></label>
+              <div class="light-control"><span data-i18n="renderAaTaaSamples">TAA samples</span><input id="renderAaTaaSamples" type="range" min="1" max="64" step="1" value="16"><output id="renderAaTaaSamplesValue">16</output></div>
               <button id="experimentalPathTracingButton" type="button" data-i18n="renderPathTracing" hidden>High Quality Experimental</button>
             </details>
 
@@ -1047,6 +1061,7 @@
             <div class="render-export-pixels"><label class="field"><span data-i18n="renderExportWidth">Width</span><input id="renderExportWidth" type="number" min="256" max="4096" step="1"></label><label class="field"><span data-i18n="renderExportHeight">Height</span><input id="renderExportHeight" type="number" min="256" max="4096" step="1"></label></div>
             <div class="render-export-print"><label class="field"><span data-i18n="renderExportUnit">Unit</span><select id="renderExportUnit"><option value="cm">cm</option><option value="in">in</option></select></label><label class="field"><span data-i18n="renderExportWidth">Width</span><input id="renderExportPrintWidth" type="number" min="1" max="200" step="0.1"></label><label class="field"><span data-i18n="renderExportHeight">Height</span><input id="renderExportPrintHeight" type="number" min="1" max="200" step="0.1"></label><label class="field"><span data-i18n="renderExportPpi">PPI</span><input id="renderExportPpi" type="number" min="30" max="1200" step="1"></label></div>
             <label class="field" id="renderJpegQualityField"><span data-i18n="renderJpegQuality">JPG quality</span><input id="renderJpegQuality" type="range" min="0.5" max="1" step="0.01" value="0.94"><output id="renderJpegQualityValue">94%</output></label>
+            <label class="field"><span data-i18n="renderExportLockAspect">Lock aspect</span><input id="renderExportLockAspect" type="checkbox" checked></label>
           </div>
           <div id="renderExportSequenceOptions" hidden>
             <label class="field"><span data-i18n="renderTurntableFrames">Frames</span><select id="renderExportSequenceFrames"><option value="24">24</option><option value="36">36</option><option value="72">72</option></select></label>

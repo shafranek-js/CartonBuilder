@@ -34,10 +34,17 @@ export function cameraLensLabel(fov) {
   return preset ? String(preset) : 'custom';
 }
 
+function vectorComponent(value, index) {
+  if (value == null) return NaN;
+  const axis = ['x', 'y', 'z'][index];
+  const direct = Array.isArray(value) ? undefined : value[axis];
+  return Number(direct ?? value[index]);
+}
+
 export function cameraHeadingElevation(position, target = [0, 0, 0]) {
-  const dx = Number(position?.[0]) - Number(target?.[0]);
-  const dy = Number(position?.[1]) - Number(target?.[1]);
-  const dz = Number(position?.[2]) - Number(target?.[2]);
+  const dx = vectorComponent(position, 0) - vectorComponent(target, 0);
+  const dy = vectorComponent(position, 1) - vectorComponent(target, 1);
+  const dz = vectorComponent(position, 2) - vectorComponent(target, 2);
   const horizontal = Math.hypot(dx, dz);
   return {
     heading: normalizeDegrees(Math.atan2(dx, dz) * RAD_TO_DEG),

@@ -41,6 +41,7 @@ import { generateNeutralRenderThumbnail } from './PresetThumbnailService.js';
 import {
   cameraPositionFromHeading,
   normalizeCameraPresetState,
+  normalizeDegrees,
 } from './cameraState.js';
 import {
   deleteRenderViewPreset,
@@ -174,6 +175,7 @@ export function createRenderApp({
     frameHeight: documentRef.getElementById('renderCameraFrameHeight'),
     verticalCorrection: documentRef.getElementById('renderKeepVerticalsParallel'),
     fitCamera: documentRef.getElementById('renderFitCameraButton'),
+    mirrorCamera: documentRef.getElementById('renderMirrorCameraButton'),
     resetCamera: documentRef.getElementById('renderResetCameraButton'),
     viewPreset: documentRef.getElementById('renderViewPreset'),
     viewPresetList: documentRef.getElementById('renderViewPresetList'),
@@ -211,12 +213,16 @@ export function createRenderApp({
     backgroundBrightnessValue: documentRef.getElementById('renderBackgroundBrightnessValue'),
     backgroundOverlayOpacity: documentRef.getElementById('renderBackgroundOverlayOpacity'),
     backgroundOverlayOpacityValue: documentRef.getElementById('renderBackgroundOverlayOpacityValue'),
+    backgroundOverlayColor: documentRef.getElementById('renderBackgroundOverlayColor'),
+    backgroundBlur: documentRef.getElementById('renderBackgroundBlur'),
+    backgroundBlurValue: documentRef.getElementById('renderBackgroundBlurValue'),
     shadowEnabled: documentRef.getElementById('renderShadowEnabled'),
     shadowIntensity: documentRef.getElementById('renderShadowIntensity'),
     shadowIntensityValue: documentRef.getElementById('renderShadowIntensityValue'),
     shadowBlur: documentRef.getElementById('renderShadowBlur'),
     shadowBlurValue: documentRef.getElementById('renderShadowBlurValue'),
     transparentShadow: documentRef.getElementById('renderTransparentShadow'),
+    shadowMapSize: documentRef.getElementById('renderShadowMapSize'),
     floorReflectionEnabled: documentRef.getElementById('renderFloorReflectionEnabled'),
     floorReflectionStrength: documentRef.getElementById('renderFloorReflectionStrength'),
     floorReflectionStrengthValue: documentRef.getElementById('renderFloorReflectionStrengthValue'),
@@ -245,6 +251,14 @@ export function createRenderApp({
     effectsDofApertureValue: documentRef.getElementById('renderDofApertureValue'),
     effectsDofMaxBlur: documentRef.getElementById('renderDofMaxBlur'),
     effectsDofMaxBlurValue: documentRef.getElementById('renderDofMaxBlurValue'),
+    aaInteractive: documentRef.getElementById('renderAaInteractive'),
+    aaSettled: documentRef.getElementById('renderAaSettled'),
+    aaExport: documentRef.getElementById('renderAaExport'),
+    aaTaaSamples: documentRef.getElementById('renderAaTaaSamples'),
+    aaTaaSamplesValue: documentRef.getElementById('renderAaTaaSamplesValue'),
+    qualityInteractive: documentRef.getElementById('renderQualityInteractive'),
+    qualityExport: documentRef.getElementById('renderQualityExport'),
+    qualityHtml: documentRef.getElementById('renderQualityHtml'),
     namedPreset: documentRef.getElementById('renderNamedPreset'),
     namedPresetList: documentRef.getElementById('renderNamedPresetList'),
     saveNamedPreset: documentRef.getElementById('saveRenderPresetButton'),
@@ -283,6 +297,7 @@ export function createRenderApp({
     exportGlbMaterialMode: documentRef.getElementById('renderExportGlbMaterialMode'),
     exportGlbIncludeCamera: documentRef.getElementById('renderExportGlbIncludeCamera'),
     exportGlbWarning: documentRef.getElementById('renderExportGlbWarning'),
+    exportLockAspect: documentRef.getElementById('renderExportLockAspect'),
     exportImageOptions: documentRef.getElementById('renderExportImageOptions'),
     exportSequenceOptions: documentRef.getElementById('renderExportSequenceOptions'),
     exportGlbOptions: documentRef.getElementById('renderExportGlbOptions'),
@@ -855,6 +870,7 @@ export function createRenderApp({
     if (elements.exportGlbTextureSize) elements.exportGlbTextureSize.value = String(output.glb.textureSize);
     if (elements.exportGlbMaterialMode) elements.exportGlbMaterialMode.value = output.glb.materialMode;
     if (elements.exportGlbIncludeCamera) elements.exportGlbIncludeCamera.checked = output.glb.includeCamera;
+    if (elements.exportLockAspect) elements.exportLockAspect.checked = output.lockAspect;
     const kind = output.kind;
     if (elements.exportImageOptions) elements.exportImageOptions.hidden = kind !== 'image';
     if (elements.exportSequenceOptions) elements.exportSequenceOptions.hidden = kind !== 'sequence';
@@ -968,6 +984,12 @@ export function createRenderApp({
       elements.backgroundOverlayOpacityValue.value = `${Math.round(state.background.image.overlayOpacity * 100)}%`;
       setRangeProgress(elements.backgroundOverlayOpacity, state.background.image.overlayOpacity);
     }
+    if (elements.backgroundOverlayColor) elements.backgroundOverlayColor.value = state.background.image.overlayColor;
+    if (elements.backgroundBlur) {
+      elements.backgroundBlur.value = String(state.background.image.blur);
+      if (elements.backgroundBlurValue) elements.backgroundBlurValue.value = `${state.background.image.blur.toFixed(1)} px`;
+      setRangeProgress(elements.backgroundBlur, state.background.image.blur);
+    }
     elements.shadowEnabled.checked = state.shadows.enabled;
     elements.shadowIntensity.value = String(state.shadows.intensity);
     elements.shadowIntensityValue.value = state.shadows.intensity.toFixed(2);
@@ -976,6 +998,7 @@ export function createRenderApp({
     elements.shadowBlurValue.value = state.shadows.blur.toFixed(1);
     setRangeProgress(elements.shadowBlur, state.shadows.blur);
     elements.transparentShadow.checked = state.shadows.includeInTransparentExport;
+    if (elements.shadowMapSize) elements.shadowMapSize.value = String(state.shadows.mapSize);
     if (elements.floorReflectionEnabled) elements.floorReflectionEnabled.checked = state.floor.reflection.enabled;
     if (elements.floorReflectionStrength) {
       elements.floorReflectionStrength.value = String(state.floor.reflection.strength);
@@ -1035,6 +1058,18 @@ export function createRenderApp({
       if (elements.effectsDofMaxBlurValue) elements.effectsDofMaxBlurValue.value = effects.dof.maxBlur.toFixed(3);
       setRangeProgress(elements.effectsDofMaxBlur, effects.dof.maxBlur);
     }
+    if (elements.aaInteractive) elements.aaInteractive.value = effects.antialiasing.interactive;
+    if (elements.aaSettled) elements.aaSettled.value = effects.antialiasing.settled;
+    if (elements.aaExport) elements.aaExport.value = effects.antialiasing.export;
+    if (elements.aaTaaSamples) {
+      elements.aaTaaSamples.value = String(effects.antialiasing.taaSamples);
+      if (elements.aaTaaSamplesValue) elements.aaTaaSamplesValue.value = String(effects.antialiasing.taaSamples);
+      setRangeProgress(elements.aaTaaSamples, effects.antialiasing.taaSamples);
+    }
+    const quality = state.quality;
+    if (elements.qualityInteractive) elements.qualityInteractive.value = quality.interactive;
+    if (elements.qualityExport) elements.qualityExport.value = quality.export;
+    if (elements.qualityHtml) elements.qualityHtml.value = quality.html;
     if (elements.namedPreset) elements.namedPreset.value = activeNamedPresetId;
     updateNamedPresetOptions();
     updateViewPresetOptions();
@@ -1703,6 +1738,33 @@ export function createRenderApp({
       next.activeViewPresetId = '';
     });
   });
+  elements.mirrorCamera?.addEventListener('click', () => {
+    const camera = getState().camera;
+    const target = Array.isArray(camera.target) && camera.target.length === 3
+      ? [...camera.target]
+      : [0, 0, 0];
+    const mirroredPosition = [
+      2 * target[0] - camera.position[0],
+      camera.position[1],
+      camera.position[2],
+    ];
+    const mirroredHeading = normalizeDegrees(
+      Math.atan2(mirroredPosition[0] - target[0], mirroredPosition[2] - target[2]) * 180 / Math.PI,
+    );
+    const distance = Math.max(0.01, Math.hypot(
+      mirroredPosition[0] - target[0],
+      mirroredPosition[1] - target[1],
+      mirroredPosition[2] - target[2],
+    ));
+    change((next) => {
+      next.camera.preset = 'custom';
+      next.camera.heading = mirroredHeading;
+      next.camera.position = mirroredPosition;
+      next.camera.target = target;
+      next.camera.cameraDistance = distance;
+      next.activeViewPresetId = '';
+    });
+  });
   elements.viewPreset?.addEventListener('change', (event) => applyViewPreset(event.target.value));
   elements.saveViewPreset?.addEventListener('click', saveCurrentViewPreset);
   elements.deleteViewPreset?.addEventListener('click', removeCurrentViewPreset);
@@ -1747,10 +1809,13 @@ export function createRenderApp({
   elements.backgroundZoom?.addEventListener('input', (event) => change((next) => { next.background.image.zoom = Number(event.target.value); }));
   elements.backgroundBrightness?.addEventListener('input', (event) => change((next) => { next.background.image.brightness = Number(event.target.value); }));
   elements.backgroundOverlayOpacity?.addEventListener('input', (event) => change((next) => { next.background.image.overlayOpacity = Number(event.target.value); }));
+  elements.backgroundOverlayColor?.addEventListener('input', (event) => change((next) => { next.background.image.overlayColor = event.target.value; }));
+  elements.backgroundBlur?.addEventListener('input', (event) => change((next) => { next.background.image.blur = Number(event.target.value); }));
   elements.shadowEnabled.addEventListener('change', (event) => change((next) => { next.shadows.enabled = event.target.checked; }));
   elements.shadowIntensity.addEventListener('input', (event) => change((next) => { next.shadows.intensity = Number(event.target.value); }));
   elements.shadowBlur.addEventListener('input', (event) => change((next) => { next.shadows.blur = Number(event.target.value); }));
   elements.transparentShadow.addEventListener('change', (event) => change((next) => { next.shadows.includeInTransparentExport = event.target.checked; }));
+  elements.shadowMapSize?.addEventListener('change', (event) => change((next) => { next.shadows.mapSize = Number(event.target.value); }));
   elements.floorReflectionEnabled?.addEventListener('change', (event) => change((next) => { next.floor.reflection.enabled = event.target.checked; }));
   elements.floorReflectionStrength?.addEventListener('input', (event) => change((next) => { next.floor.reflection.strength = Number(event.target.value); }));
   elements.floorReflectionBlur?.addEventListener('input', (event) => change((next) => { next.floor.reflection.blur = Number(event.target.value); }));
@@ -1769,6 +1834,13 @@ export function createRenderApp({
   elements.effectsDofFocusDistance?.addEventListener('input', (event) => change((next) => { next.effects.dof.focusDistance = Number(event.target.value); }));
   elements.effectsDofAperture?.addEventListener('input', (event) => change((next) => { next.effects.dof.aperture = Number(event.target.value); }));
   elements.effectsDofMaxBlur?.addEventListener('input', (event) => change((next) => { next.effects.dof.maxBlur = Number(event.target.value); }));
+  elements.aaInteractive?.addEventListener('change', (event) => change((next) => { next.effects.antialiasing.interactive = event.target.value; }));
+  elements.aaSettled?.addEventListener('change', (event) => change((next) => { next.effects.antialiasing.settled = event.target.value; }));
+  elements.aaExport?.addEventListener('change', (event) => change((next) => { next.effects.antialiasing.export = event.target.value; }));
+  elements.aaTaaSamples?.addEventListener('input', (event) => change((next) => { next.effects.antialiasing.taaSamples = Number(event.target.value); }));
+  elements.qualityInteractive?.addEventListener('change', (event) => change((next) => { next.quality.interactive = event.target.value; }));
+  elements.qualityExport?.addEventListener('change', (event) => change((next) => { next.quality.export = event.target.value; }));
+  elements.qualityHtml?.addEventListener('change', (event) => change((next) => { next.quality.html = event.target.value; }));
   elements.namedPreset?.addEventListener('change', applyNamedPreset);
   elements.saveNamedPreset?.addEventListener('click', saveNamedPreset);
   elements.updateNamedPreset?.addEventListener('click', updateNamedPreset);
@@ -1878,6 +1950,12 @@ export function createRenderApp({
     state = sanitizeRenderSettings(next);
     updateExportDialog();
   });
+  elements.exportLockAspect?.addEventListener('change', (event) => {
+    const next = clone(state);
+    next.output.lockAspect = event.target.checked;
+    state = sanitizeRenderSettings(next);
+    updateExportDialog();
+  });
   elements.exportForm?.addEventListener('submit', async (event) => {
     if (event.submitter?.value !== 'confirm') return;
     event.preventDefault();
@@ -1903,6 +1981,7 @@ export function createRenderApp({
       : Number(elements.exportGlbTextureSize?.value || next.output.glb.textureSize);
     next.output.glb.materialMode = elements.exportGlbMaterialMode?.value || next.output.glb.materialMode;
     next.output.glb.includeCamera = elements.exportGlbIncludeCamera?.checked !== false;
+    next.output.lockAspect = elements.exportLockAspect?.checked !== false;
     updateState(next);
     elements.exportDialog.close();
     if (next.output.kind === 'glb') await exportGlbAsset();
