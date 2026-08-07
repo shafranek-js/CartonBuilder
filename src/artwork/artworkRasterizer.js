@@ -1,4 +1,5 @@
 import { renderPdfWithLayers } from './fileLoader.js';
+import { getOverprintMode } from './overprintSettings.js';
 
 export const ARTWORK_QUALITY_DPI = Object.freeze([150, 300, 600, 1200, 2400]);
 export const ARTWORK_INTERACTIVE_QUALITY_DPI = Object.freeze([150, 300, 600]);
@@ -146,6 +147,7 @@ export async function rasterizeArtwork({
   documentRef = globalThis.document,
   createImageBitmapFn = globalThis.createImageBitmap,
   renderPdf = renderPdfWithLayers,
+  overprint = false,
 } = {}) {
   const artwork = entry?.model || entry;
   if (!artwork?.hasArtwork || !artwork.source) throw new Error('Artwork source is required.');
@@ -168,6 +170,12 @@ export async function rasterizeArtwork({
       dpi: safeDpi,
       targetWidthMm: widthMm,
       signal,
+      overprint: false,
+      cacheKey: artwork.source.sha256 || '',
+      pageBox: artwork.source.pageBox || 'CropBox',
+      passwordKey: artwork.source.sha256 || '',
+      session: artwork.source.id || null,
+      overprintMode: getOverprintMode(),
     });
     return {
       blob: rendered.previewBlob,
@@ -209,10 +217,12 @@ export function getArtworkRasterSignature(entry, purpose = 'preview') {
     id: source.id || '',
     sha256: source.sha256 || '',
     pageIndex: source.pageIndex || 0,
+    pageBox: source.pageBox || 'CropBox',
     visibility: artwork?.pdfLayerVisibility || null,
     widthMm: artwork?.unrotatedWidthMm || 0,
     heightMm: artwork?.unrotatedHeightMm || 0,
     quality,
     purpose,
+    overprint: getOverprintMode(),
   });
 }

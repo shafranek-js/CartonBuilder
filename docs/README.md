@@ -53,6 +53,9 @@ README не заменяет runtime specification. Research и roadmap не я�
 | Planned | [`7. CartonBuilder 3D Rendering Research and Implementation Roadmap.md`](7.%20CartonBuilder%203D%20Rendering%20Research%20and%20Implementation%20Roadmap.md) | Roadmap дальнейших Render milestones и path tracing gate | maintainer Render |
 | Historical/Research | [`8. 3D and HTML Inside PDF Research.md`](8.%203D%20and%20HTML%20Inside%20PDF%20Research.md) | Исследование PDF/HTML packaging и export boundaries | maintainer export; только контекст |
 | Implemented | [`9. render-runtime-specification.md`](9.%20render-runtime-specification.md) | Нормативный контракт Presentation Render, effects и image/3D export | maintainer `src/render` |
+| Historical/Research | [`10. mupdf-capability-spike.md`](10.%20mupdf-capability-spike.md) | Decision record: stock mupdf.js не симулирует overprint; нужен custom WASM wrapper | maintainer `src/artwork`, `src/pdf-renderer` |
+| Implemented | [`11. mupdf-overprint-runtime-specification.md`](11.%20mupdf-overprint-runtime-specification.md) | Нормативный контракт рендера PDF/AI через MuPDF.js (Phase 1) | maintainer `src/pdf-renderer`, `src/artwork` |
+| Historical/Research | [`Техническое задание по внедрению MuPDF.js для PDF-AI Overprint Preview.htm`](Техническое%20задание%20по%20внедрению%20MuPDF.js%20для%20PDF-AI%20Overprint%20Preview.htm) | Входное ТЗ: внедрение MuPDF.js для PDF/AI Overprint Preview | maintainer `src/pdf-renderer` |
 | Implemented | [`../handoff.md`](../handoff.md) | Точка передачи текущего состояния и backlog документации | текущий maintainer; обновлять при handoff |
 
 ## Правило «что считать Implemented»

@@ -5,3 +5,9 @@ playwright-report/
 test-results/
 coverage/
 *.log
+
+# MuPDF build toolchain (clone mupdf source + submodules ~320 MB)
+scratch/mupdf-src/
+scratch/frames/
+scratch/raw_video_frames/
+Вакула.mp4

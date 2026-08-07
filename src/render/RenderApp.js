@@ -1336,6 +1336,18 @@ export function createRenderApp({
     return state.quality.html;
   }
 
+  function applySettings({ renderSettings, boardAppearance } = {}) {
+    activeNamedPresetId = '';
+    setActiveRenderPresetId('');
+    activeViewPresetId = '';
+    setActiveRenderViewPresetId('');
+    const next = clone(sanitizeRenderSettings(renderSettings || state));
+    next.activeViewPresetId = '';
+    next.viewPresetBaseId = state.viewPresetBaseId || '';
+    restoreState(next, boardAppearance);
+    return true;
+  }
+
   async function loadNamedPresets() {
     try {
       namedPresets = await getRenderPresets();
@@ -2004,6 +2016,7 @@ export function createRenderApp({
     activate,
     deactivate,
     restoreState,
+    applySettings,
     setHtmlExportQuality,
     resetForProject,
     exportImage,

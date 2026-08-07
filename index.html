@@ -25,6 +25,12 @@
             </button>
             <div class="file-menu-popover" id="editMenuPopover" hidden></div>
           </div>
+          <div class="file-menu-wrap">
+            <button type="button" class="file-menu-trigger-btn" id="viewMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="View Menu" data-i18n-title="viewMenu">
+              <span data-i18n="view">View</span>
+            </button>
+            <div class="file-menu-popover" id="viewMenuPopover" hidden></div>
+          </div>
         </div>
 
         <div class="stepper-center-steps">
@@ -260,6 +266,16 @@
 
             <details open class="tool-section pdf-layers-section" id="pdfLayersSection" hidden>
               <summary data-i18n="pdfLayers">PDF layers</summary>
+              <div class="pdf-page-box-row">
+                <label for="pageBoxSelect" data-i18n="pageBox">Page area</label>
+                <select id="pageBoxSelect" class="page-box-select" data-i18n-aria-label="pageBox">
+                  <option value="CropBox" data-i18n="pageBoxCropBox">CropBox</option>
+                  <option value="MediaBox" data-i18n="pageBoxMediaBox">MediaBox</option>
+                  <option value="BleedBox" data-i18n="pageBoxBleedBox">BleedBox</option>
+                  <option value="TrimBox" data-i18n="pageBoxTrimBox">TrimBox</option>
+                  <option value="ArtBox" data-i18n="pageBoxArtBox">ArtBox</option>
+                </select>
+              </div>
               <div class="adobe-layers-table" id="pdfLayersList"></div>
             </details>
           </aside>
@@ -1035,6 +1051,31 @@
           <div class="dialog-actions">
             <button value="cancel" data-i18n="cancel">Cancel</button>
             <button class="primary-action" value="confirm" data-i18n="openPage">Open page</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="passwordDialog" aria-labelledby="passwordDialogTitle">
+        <form method="dialog">
+          <h2 id="passwordDialogTitle" data-i18n="pdfPasswordTitle">PDF is password protected</h2>
+          <p data-i18n="pdfPasswordHint">Enter the password to open this PDF.</p>
+          <label><span data-i18n="pdfPasswordLabel">Password</span>
+            <input id="pdfPasswordInput" type="password" autocomplete="off">
+          </label>
+          <div class="dialog-actions">
+            <button value="cancel" data-i18n="cancel">Cancel</button>
+            <button class="primary-action" value="confirm" data-i18n="pdfPasswordUnlock">Unlock</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="separationsDialog" aria-labelledby="separationsDialogTitle">
+        <form method="dialog">
+          <h2 id="separationsDialogTitle" data-i18n="separations">Separations</h2>
+          <p class="separations-hint" data-i18n="separationsHint">Show or hide individual ink plates. Works when Overprint Preview is on.</p>
+          <div class="separations-table" id="separationsList"></div>
+          <div class="dialog-actions">
+            <button class="primary-action" value="confirm" data-i18n="close">Close</button>
           </div>
         </form>
       </dialog>

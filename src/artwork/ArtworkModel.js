@@ -31,6 +31,12 @@ function normalizeQuarterTurn(value) {
   return normalized;
 }
 
+const PAGE_BOXES = ['MediaBox', 'CropBox', 'BleedBox', 'TrimBox', 'ArtBox'];
+
+function normalizePageBox(value) {
+  return PAGE_BOXES.includes(value) ? value : 'CropBox';
+}
+
 function cloneSource(source) {
   return source ? { ...source } : null;
 }
@@ -130,6 +136,7 @@ export class ArtworkModel {
     this.bgOpacity = 0.28;
     this.referencePoint = 'center';
     this.pdfLayerVisibility = null;
+    this.pdfSeparationVisibility = null;
     this.quality = { ...DEFAULT_ARTWORK_QUALITY };
     this.crop = null;
     this.modified = false;
@@ -242,12 +249,16 @@ export class ArtworkModel {
       previewHeightPx: Number(source.previewHeightPx || heightPx),
       pdfPageRotation: normalizeQuarterTurn(source.pdfPageRotation || 0),
       mediaBox: source.mediaBox ? { ...source.mediaBox } : null,
+      pageBox: normalizePageBox(source.pageBox),
       sha256: source.sha256 || '',
       pdfLayers,
       isVideo: Boolean(source.isVideo || source.mimeType?.startsWith('video/')),
     };
     this.pdfLayerVisibility = source.pdfLayerVisibility && typeof source.pdfLayerVisibility === 'object'
       ? { ...source.pdfLayerVisibility }
+      : null;
+    this.pdfSeparationVisibility = source.pdfSeparationVisibility && typeof source.pdfSeparationVisibility === 'object'
+      ? { ...source.pdfSeparationVisibility }
       : null;
     this.rotation = this.source.pdfPageRotation;
     this.opacity = 1;
@@ -521,6 +532,7 @@ export class ArtworkModel {
       bgOpacity: this.bgOpacity,
       referencePoint: this.referencePoint,
       pdfLayerVisibility: this.pdfLayerVisibility ? { ...this.pdfLayerVisibility } : null,
+      pdfSeparationVisibility: this.pdfSeparationVisibility ? { ...this.pdfSeparationVisibility } : null,
       quality: { ...this.quality },
       crop: this.crop ? { ...this.crop } : null,
       modified: this.modified,
@@ -562,6 +574,14 @@ export class ArtworkModel {
       }
     } else {
       this.pdfLayerVisibility = null;
+    }
+    if (state.pdfSeparationVisibility && typeof state.pdfSeparationVisibility === 'object') {
+      this.pdfSeparationVisibility = {};
+      for (const [id, visible] of Object.entries(state.pdfSeparationVisibility)) {
+        this.pdfSeparationVisibility[id] = visible !== false;
+      }
+    } else {
+      this.pdfSeparationVisibility = null;
     }
     this.quality = normalizeArtworkQuality(state.quality);
     this.modified = Boolean(state.modified);

@@ -15,6 +15,7 @@ import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
 import { createFileMenu } from './ui/FileMenu.js';
 import { createEditMenu } from './ui/EditMenu.js';
+import { createViewMenu } from './ui/ViewMenu.js';
 import { createContactsMenu } from './ui/ContactsMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
@@ -141,6 +142,7 @@ const handleRemoveArtwork = () => {
 
 let fileMenu = null;
 let editMenu = null;
+let viewMenu = null;
 let contactsMenu = null;
 
 if (fileMenuTriggerBtn && fileMenuPopover) {
@@ -169,7 +171,42 @@ if (editMenuTriggerBtn && editMenuPopover) {
     onReplaceArtwork: handlePlaceArtwork,
     onRemoveArtwork: handleRemoveArtwork,
     onOpen: () => {
+      editMenu?.togglePopover(false);
+      viewMenu?.togglePopover(false);
+      contactsMenu?.togglePopover(false);
+    },
+  });
+}
+
+if (editMenuTriggerBtn && editMenuPopover) {
+  editMenu = createEditMenu({
+    triggerButton: editMenuTriggerBtn,
+    popoverContainer: editMenuPopover,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onReplaceArtwork: handlePlaceArtwork,
+    onRemoveArtwork: handleRemoveArtwork,
+    onOpen: () => {
       fileMenu?.togglePopover(false);
+      viewMenu?.togglePopover(false);
+      contactsMenu?.togglePopover(false);
+    },
+  });
+}
+
+const viewMenuTriggerBtn = document.getElementById('viewMenuTriggerBtn');
+const viewMenuPopover = document.getElementById('viewMenuPopover');
+
+if (viewMenuTriggerBtn && viewMenuPopover) {
+  viewMenu = createViewMenu({
+    triggerButton: viewMenuTriggerBtn,
+    popoverContainer: viewMenuPopover,
+    onOverprintToggle: async (next) => artworkApp?.setOverprintEnabled?.(next),
+    isOverprintAvailable: () => artworkApp?.isOverprintAvailable?.() ?? false,
+    onSeparations: () => artworkApp?.openSeparations?.(),
+    onOpen: () => {
+      fileMenu?.togglePopover(false);
+      editMenu?.togglePopover(false);
       contactsMenu?.togglePopover(false);
     },
   });
@@ -185,6 +222,7 @@ if (contactsMenuTriggerBtn && contactsMenuPopover) {
     onOpen: () => {
       fileMenu?.togglePopover(false);
       editMenu?.togglePopover(false);
+      viewMenu?.togglePopover(false);
     },
   });
 }
@@ -211,11 +249,28 @@ window.addEventListener('keydown', async (e) => {
 const settingsTriggerBtn = document.getElementById('settingsTriggerBtn');
 const settingsPopover = document.getElementById('settingsPopover');
 
+function showSettingsToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('visible');
+  window.setTimeout(() => toast.classList.remove('visible'), 1800);
+}
+
 if (settingsTriggerBtn && settingsPopover) {
   createSettingsModal({
     triggerButton: settingsTriggerBtn,
     popoverContainer: settingsPopover,
+    showToast: showSettingsToast,
     getRenderDiagnostics: () => renderApp?.getDiagnostics?.() || null,
+    getRenderSettingsSnapshot: () => renderApp
+      ? { renderSettings: renderApp.getState(), boardAppearance: renderApp.getBoardAppearance() }
+      : null,
+    applyRenderSettingsSnapshot: async ({ renderSettings, boardAppearance }) => {
+      if (!renderApp) return false;
+      renderApp.applySettings({ renderSettings, boardAppearance });
+      return true;
+    },
   });
 }
 

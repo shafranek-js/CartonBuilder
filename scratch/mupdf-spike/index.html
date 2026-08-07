@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>MuPDF Overprint Spike Harness</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; background: #1e1e1e; color: #ddd; }
+  h1 { font-size: 18px; }
+  #drop { border: 2px dashed #555; padding: 24px; text-align: center; border-radius: 8px; margin: 12px 0; }
+  #drop.drag { border-color: #0af; }
+  canvas { border: 1px solid #444; background: repeating-conic-gradient(#333 0 25%, #2a2a2a 0 50%) 0 0 / 16px 16px; max-width: 100%; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  button { padding: 6px 12px; cursor: pointer; }
+  #pixel { font: 12px monospace; margin-top: 4px; }
+  label { display: inline-flex; gap: 6px; align-items: center; }
+  input[type=file] { max-width: 260px; }
+</style>
+</head>
+<body>
+<h1>MuPDF Overprint Spike Harness (mupdf@1.28.0)</h1>
+<p>Откройте тестовый PDF из <code>scratch/mupdf-spike/input/</code> и сравните с
+Adobe Overprint Preview. Рендер выполняется stock <code>PDFPage.toPixmap</code>.</p>
+
+<div id="drop">
+  Перетащите .pdf / .ai сюда или
+  <label><input type="file" id="file" accept=".pdf,.ai">выберите файл</label>
+</div>
+
+<div class="controls">
+  <button id="renderPrint">Render usage=Print</button>
+  <button id="renderView">Render usage=View</button>
+  <label><input type="checkbox" id="showExtras" checked> showExtras</label>
+  <label>scale <input type="number" id="scale" value="2" min="1" max="8" style="width:60px"></label>
+</div>
+<div id="pixel">Наведите курсор на canvas, чтобы увидеть цвет пикселя (RGB).</div>
+<canvas id="canvas" width="800" height="800"></canvas>
+
+<script type="module">
+import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/+esm';
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const pixelInfo = document.getElementById('pixel');
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+
+let currentBytes = null;
+let currentPng = null;
+
+function loadFile(file) {
+  return file.arrayBuffer();
+}
+
+async function render(bytes, usage) {
+  const scale = Math.max(1, Number(document.getElementById('scale').value) || 2);
+  const showExtras = document.getElementById('showExtras').checked;
+  const doc = mupdf.Document.openDocument(new Uint8Array(bytes), 'application/pdf');
+  if (!doc.isPDF()) { pixelInfo.textContent = 'Not a PDF'; doc.destroy(); return; }
+  const page = doc.loadPage(0);
+  const pixmap = page.toPixmap(
+    mupdf.Matrix.scale(scale, scale),
+    mupdf.ColorSpace.DeviceRGB,
+    false,
+    showExtras,
+    usage,
+    'CropBox',
+  );
+  const width = pixmap.getWidth();
+  const height = pixmap.getHeight();
+  const px = new Uint8ClampedArray(pixmap.getPixels());
+  canvas.width = width;
+  canvas.height = height;
+  ctx.putImageData(new ImageData(px, width, height), 0, 0);
+  currentPng = { px, width, height };
+  pixelInfo.textContent = `rendered ${width}x${height} (usage=${usage}, scale=${scale})`;
+  pixmap.destroy();
+  page.destroy();
+  doc.destroy();
+}
+
+document.getElementById('renderPrint').addEventListener('click', () => {
+  if (currentBytes) render(currentBytes, 'Print');
+});
+document.getElementById('renderView').addEventListener('click', () => {
+  if (currentBytes) render(currentBytes, 'View');
+});
+
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('drag');
+  const file = e.dataTransfer.files?.[0];
+  if (file) loadFile(file).then((b) => { currentBytes = b; render(b, 'Print'); });
+});
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files?.[0];
+  if (file) loadFile(file).then((b) => { currentBytes = b; render(b, 'Print'); });
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!currentPng) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
+  const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
+  const o = (y * currentPng.width + x) * 3;
+  const [r, g, b] = [currentPng.px[o], currentPng.px[o + 1], currentPng.px[o + 2]];
+  pixelInfo.textContent = `pixel (${x}, ${y}) = rgb(${r}, ${g}, ${b})`;
+});
+</script>
+</body>
+</html>

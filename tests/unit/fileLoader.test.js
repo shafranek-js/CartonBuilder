@@ -6,6 +6,17 @@ import {
   loadArtworkWithWorker,
 } from '../../src/artwork/fileLoader.js';
 
+vi.mock('../../src/artwork/pdfArtworkLoader.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    loadPdfArtwork: vi.fn(),
+    renderPdfArtwork: vi.fn(),
+  };
+});
+
+import { loadPdfArtwork } from '../../src/artwork/pdfArtworkLoader.js';
+
 class WorkerMock extends EventTarget {
   constructor() {
     super();
@@ -99,27 +110,54 @@ describe('artwork worker client', () => {
     expect(worker.terminate).toHaveBeenCalledOnce();
   });
 
-  it('does not retry a classified PDF failure on the main thread', async () => {
-    const worker = new WorkerMock();
-    const processFile = vi.fn();
+  it('routes PDF files to the MuPDF renderer instead of the image worker', async () => {
     const file = new Blob([
       Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x36]),
     ], { type: 'application/pdf' });
-    const promise = loadArtworkFile(file, {
+    loadPdfArtwork.mockResolvedValue({
+      previewBlob: new Blob(['preview'], { type: 'image/png' }),
+      widthPx: 100,
+      heightPx: 50,
+      previewWidthPx: 100,
+      previewHeightPx: 50,
+      pageIndex: 0,
+      pageCount: 1,
+      vector: true,
+      pdfPageRotation: 0,
+      mediaBox: null,
+      pdfLayers: [],
+      pdfLayerVisibility: null,
+      hasOverprint: false,
+      pageBox: 'CropBox',
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+      sha256: 'hash',
+    });
+    const worker = new WorkerMock();
+
+    const loaded = await loadArtworkFile(file, {
       workerSupported: true,
       workerFactory: () => worker,
-      processFile,
     });
 
-    await vi.waitFor(() => expect(worker.messages).toHaveLength(1));
-    worker.emit({
-      type: 'error',
-      jobId: worker.messages[0].jobId,
-      error: serializeAppError(new AppError('pdfPasswordProtected')),
-    });
+    expect(loadPdfArtwork).toHaveBeenCalledOnce();
+    expect(worker.messages).toHaveLength(0);
+    expect(worker.terminate).not.toHaveBeenCalled();
+    expect(loaded.source.vector).toBe(true);
+    expect(loaded.source.pageBox).toBe('CropBox');
+  });
 
-    await expect(promise).rejects.toMatchObject({ code: 'pdfPasswordProtected' });
-    expect(processFile).not.toHaveBeenCalled();
-    expect(worker.terminate).toHaveBeenCalledOnce();
+  it('forwards a classified PDF error from the MuPDF renderer', async () => {
+    const file = new Blob([
+      Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x36]),
+    ], { type: 'application/pdf' });
+    loadPdfArtwork.mockRejectedValue(new AppError('pdfPasswordProtected'));
+    const worker = new WorkerMock();
+
+    await expect(loadArtworkFile(file, {
+      workerSupported: true,
+      workerFactory: () => worker,
+    })).rejects.toMatchObject({ code: 'pdfPasswordProtected' });
+    expect(worker.terminate).not.toHaveBeenCalled();
   });
 });

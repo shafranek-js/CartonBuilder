@@ -1,0 +1,290 @@
+{
+  "generated": "2026-08-06T16:33:07.083Z",
+  "refs": {},
+  "tests": {
+    "test-01-black-overprint": {
+      "probes": [
+        "140,140",
+        "20,20"
+      ],
+      "ai": [
+        "139,35,19",
+        "231,48,42"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "view": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "compare": "test-01-black-overprint-compare.png",
+      "expected": [
+        "backdrop preserved under black (dark red), no knockout windows"
+      ]
+    },
+    "test-02-black-knockout": {
+      "probes": [
+        "140,140",
+        "20,20"
+      ],
+      "ai": [
+        "157,157,156",
+        "231,48,42"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "view": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "compare": "test-02-black-knockout-compare.png",
+      "expected": [
+        "black knocks out backdrop (gray, white windows)"
+      ]
+    },
+    "test-03-white-overprint": {
+      "probes": [
+        "105,200",
+        "295,200",
+        "10,390"
+      ],
+      "ai": [
+        "255,237,0",
+        "255,255,255",
+        "255,237,0"
+      ],
+      "ai-noop": [
+        "255,237,0",
+        "255,255,255",
+        "255,237,0"
+      ],
+      "acrobat": null,
+      "print": [
+        "255,255,255",
+        "255,255,255",
+        "255,241,0"
+      ],
+      "view": [
+        "255,255,255",
+        "255,255,255",
+        "255,241,0"
+      ],
+      "compare": "test-03-white-overprint-compare.png",
+      "expected": [
+        "left white rect INVISIBLE (overprint), right white (knockout)"
+      ]
+    },
+    "test-04-opm-0-1": {
+      "probes": [
+        "105,200",
+        "295,200",
+        "10,390"
+      ],
+      "ai": [
+        "231,43,60",
+        "231,43,60",
+        "145,133,190"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "238,60,71",
+        "238,60,71",
+        "135,129,189"
+      ],
+      "view": [
+        "238,60,71",
+        "238,60,71",
+        "135,129,189"
+      ],
+      "compare": "test-04-opm-0-1-compare.png",
+      "expected": [
+        "OPM 0 (left) and OPM 1 (right) columns DIFFER"
+      ]
+    },
+    "test-05-spot-over-cmyk": {
+      "probes": [
+        "200,200",
+        "20,380"
+      ],
+      "ai": [
+        "244,164,150",
+        "164,173,188"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "247,159,144",
+        "149,161,180"
+      ],
+      "view": [
+        "247,159,144",
+        "149,161,180"
+      ],
+      "compare": "test-05-spot-over-cmyk-compare.png",
+      "expected": null
+    },
+    "test-06-devicen": {
+      "probes": [
+        "200,200",
+        "20,380"
+      ],
+      "ai": [
+        "67,53,140",
+        "255,243,129"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "63,63,153",
+        "255,245,132"
+      ],
+      "view": [
+        "63,63,153",
+        "255,245,132"
+      ],
+      "compare": "test-06-devicen-compare.png",
+      "expected": null
+    },
+    "test-07-transparency-spot": {
+      "probes": [
+        "100,100",
+        "200,200",
+        "380,380"
+      ],
+      "ai": [
+        "231,43,60",
+        "230,43,40",
+        "179,146,178"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "238,60,71",
+        "246,149,35",
+        "165,134,170"
+      ],
+      "view": [
+        "238,60,71",
+        "246,149,35",
+        "165,134,170"
+      ],
+      "compare": "test-07-transparency-spot-compare.png",
+      "expected": null
+    },
+    "test-08-knockout-groups": {
+      "probes": [
+        "95,110",
+        "225,110",
+        "355,110"
+      ],
+      "ai": [
+        "0,159,227",
+        "0,159,227",
+        "0,159,227"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "0,173,239",
+        "0,173,239",
+        "0,173,239"
+      ],
+      "view": [
+        "0,173,239",
+        "0,173,239",
+        "0,173,239"
+      ],
+      "compare": "test-08-knockout-groups-compare.png",
+      "expected": null
+    },
+    "test-09-pdfx1a": {
+      "probes": [
+        "200,200",
+        "20,380"
+      ],
+      "ai": [
+        "140,32,32",
+        "231,48,42"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "view": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "compare": "test-09-pdfx1a-compare.png",
+      "expected": null
+    },
+    "test-10-pdfx4": {
+      "probes": [
+        "200,200",
+        "20,380"
+      ],
+      "ai": [
+        "230,17,74",
+        "231,48,42"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "237,35,82",
+        "239,64,54"
+      ],
+      "view": [
+        "237,35,82",
+        "239,64,54"
+      ],
+      "compare": "test-10-pdfx4-compare.png",
+      "expected": null
+    },
+    "test-11-ai-compatible": {
+      "probes": [
+        "140,140",
+        "20,20"
+      ],
+      "ai": [
+        "139,35,19",
+        "231,48,42"
+      ],
+      "ai-noop": null,
+      "acrobat": null,
+      "print": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "view": [
+        "147,149,151",
+        "239,64,54"
+      ],
+      "compare": "test-11-ai-compatible-compare.png",
+      "expected": null
+    },
+    "test-00-baseline": {
+      "probes": [
+        "50,50",
+        "350,50",
+        "50,350",
+        "350,350"
+      ],
+      "ai": null,
+      "acrobat": null,
+      "print": null,
+      "view": null,
+      "compare": null,
+      "expected": null
+    }
+  }
+}

@@ -25,6 +25,10 @@ import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/Rende
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { getArtworkRasterSignature, rasterizeArtwork, resolveArtworkDpi } from './artworkRasterizer.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
+import { DEFAULT_PAGE_BOX, PAGE_BOXES } from './pdfArtworkLoader.js';
+import { getOverprintMode, isOverprintEnabled, setOverprintEnabled as setOverprintSetting } from './overprintSettings.js';
+import { getMuPdfClient } from '../pdf-renderer/mupdfClient.js';
+import { getPdfSeparations } from './pdfArtworkLoader.js';
 
 const SNAP_SCREEN_PX = 6;
 const SNAP_RELEASE_SCREEN_PX = 9;
@@ -208,6 +212,10 @@ export function createArtworkApp({
   const pageDialog = documentRef.getElementById('pageDialog');
   const pageNumber = documentRef.getElementById('pdfPageNumber');
   const pageCount = documentRef.getElementById('pdfPageCount');
+  const passwordDialog = documentRef.getElementById('passwordDialog');
+  const passwordInput = documentRef.getElementById('pdfPasswordInput');
+  const separationsDialog = documentRef.getElementById('separationsDialog');
+  const separationsList = documentRef.getElementById('separationsList');
   const sublayersContainer = documentRef.getElementById('artworkSublayers');
   const contextMenu = documentRef.getElementById('layerContextMenu');
 
@@ -254,6 +262,7 @@ export function createArtworkApp({
     referencePointGrid: documentRef.getElementById('referencePointGrid'),
     pdfLayersSection: documentRef.getElementById('pdfLayersSection'),
     pdfLayersList: documentRef.getElementById('pdfLayersList'),
+    pageBoxSelect: documentRef.getElementById('pageBoxSelect'),
     cropSection: documentRef.getElementById('cropSection'),
     opacitySection: documentRef.getElementById('opacitySection'),
     cropFrameBtn: documentRef.getElementById('cropFrameButton'),
@@ -1275,9 +1284,12 @@ export function createArtworkApp({
   }
 
   function renderPdfLayers() {
+    const isPdf = artwork.hasArtwork
+      && (artwork.source?.vector || artwork.source?.mimeType === 'application/pdf');
     const layers = artwork.source?.pdfLayers || [];
-    const hasLayers = artwork.hasArtwork && layers.length > 0;
-    controls.pdfLayersSection.hidden = !hasLayers;
+    const hasLayers = isPdf && layers.length > 0;
+    controls.pdfLayersSection.hidden = !isPdf;
+    renderPageBoxControl(isPdf);
     controls.pdfLayersList.replaceChildren();
     if (!hasLayers) return;
     for (const layer of layers) {
@@ -1312,6 +1324,18 @@ export function createArtworkApp({
     }
   }
 
+  function renderPageBoxControl(visible) {
+    const select = controls.pageBoxSelect;
+    if (!select) return;
+    if (!visible) {
+      select.hidden = true;
+      return;
+    }
+    select.hidden = false;
+    const current = artwork.source?.pageBox || DEFAULT_PAGE_BOX;
+    select.value = PAGE_BOXES.includes(current) ? current : DEFAULT_PAGE_BOX;
+  }
+
   async function togglePdfLayer(id, visible) {
     const layers = artwork.source?.pdfLayers;
     const entry = getActiveEntry();
@@ -1333,6 +1357,12 @@ export function createArtworkApp({
         pageIndex: artwork.source.pageIndex || 0,
         visibility: next,
         signal: controller.signal,
+        overprint: false,
+        cacheKey: artwork.source.sha256 || '',
+        pageBox: artwork.source.pageBox || DEFAULT_PAGE_BOX,
+        passwordKey: artwork.source.sha256 || '',
+        session: artwork.source.id || null,
+        overprintMode: getOverprintMode(),
       });
       if (generation !== pdfRenderGeneration || disposed) return;
       entry.previewBlob = rendered.previewBlob;
@@ -1370,6 +1400,58 @@ export function createArtworkApp({
     }
   }
 
+  async function setOverprintEnabled(next) {
+    const enabled = Boolean(next);
+    if (isOverprintEnabled() === enabled) return false;
+    setOverprintSetting(enabled);
+
+    const pdfEntries = artworks.filter((entry) => (
+      entry?.model?.hasArtwork
+      && entry.originalBlob
+      && (entry.model.source?.vector || entry.model.source?.mimeType === 'application/pdf')
+    ));
+    if (!pdfEntries.length) {
+      renderer.setArtworks(artworks);
+      render();
+      return true;
+    }
+
+    pdfRenderController?.abort();
+    const controller = new AbortController();
+    pdfRenderController = controller;
+    const generation = ++pdfRenderGeneration;
+    try {
+      for (const entry of pdfEntries) {
+        const rendered = await renderPdfWithLayers(entry.originalBlob, {
+          pageIndex: entry.model.source.pageIndex || 0,
+          visibility: entry.model.pdfLayerVisibility,
+          signal: controller.signal,
+          overprint: false,
+          cacheKey: entry.model.source.sha256 || '',
+          pageBox: entry.model.source.pageBox || DEFAULT_PAGE_BOX,
+          passwordKey: entry.model.source.sha256 || '',
+          session: entry.model.source.id || null,
+          overprintMode: getOverprintMode(),
+        });
+        if (generation !== pdfRenderGeneration || disposed || controller.signal.aborted) return true;
+        entry.previewBlob = rendered.previewBlob;
+        entry.displayBlob = null;
+      }
+      previewBlob = artworks.find((entry) => entry.previewBlob)?.previewBlob || previewBlob;
+      renderer.setArtworks(artworks);
+      render();
+      await refreshPreviewResources({ force: true });
+      Promise.resolve(onArtworkQualityChanged({ kind: 'overprint' })).catch(() => {});
+      return true;
+    } catch (error) {
+      if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return true;
+      console.error(error);
+      return false;
+    } finally {
+      if (generation === pdfRenderGeneration) pdfRenderController = null;
+    }
+  }
+
   async function choosePdfPage(count) {
     pageNumber.value = '1';
     pageNumber.max = String(count);
@@ -1384,6 +1466,133 @@ export function createArtworkApp({
         resolve(Number(pageNumber.value) - 1);
       }, { once: true });
     });
+  }
+
+  async function promptPdfPassword() {
+    passwordInput.value = '';
+    passwordDialog.showModal();
+    return new Promise((resolve, reject) => {
+      passwordDialog.addEventListener('close', () => {
+        if (passwordDialog.returnValue !== 'confirm') {
+          reject(new AppError('pdfPasswordCancelled'));
+          return;
+        }
+        resolve(passwordInput.value);
+      }, { once: true });
+    });
+  }
+
+  const pdfSeparationsCache = new Map();
+
+  function buildSeparationBehaviors() {
+    const visibility = artwork.pdfSeparationVisibility;
+    const cached = pdfSeparationsCache.get(artwork.source?.id);
+    if (!visibility || !cached || !cached.names?.length) return null;
+    return cached.names.map((_, index) => (
+      visibility[String(index)] !== false ? 1 : 2
+    ));
+  }
+
+  function renderSeparationsDialog(data) {
+    separationsList.replaceChildren();
+    const processNames = ['Cyan', 'Magenta', 'Yellow', 'Black'];
+    const coverage = data.coverage || [];
+    const makeRow = (name, index, toggleable) => {
+      const row = documentRef.createElement('div');
+      row.className = 'separation-row';
+      const checkbox = documentRef.createElement('input');
+      checkbox.type = 'checkbox';
+      if (toggleable) {
+        checkbox.checked = artwork.pdfSeparationVisibility?.[String(index - 4)] !== false;
+        checkbox.className = 'separation-toggle';
+        checkbox.setAttribute('aria-label', name);
+        checkbox.addEventListener('change', () => toggleSeparation(index - 4, checkbox.checked));
+      } else {
+        checkbox.hidden = true;
+        checkbox.disabled = true;
+      }
+      const nameEl = documentRef.createElement('span');
+      nameEl.className = 'separation-name';
+      nameEl.textContent = name;
+      const coverageEl = documentRef.createElement('span');
+      coverageEl.className = 'separation-coverage';
+      coverageEl.textContent = coverage[index] != null ? `${coverage[index]}%` : '—';
+      row.append(checkbox, nameEl, coverageEl);
+      return row;
+    };
+    for (let i = 0; i < 4; i += 1) {
+      separationsList.appendChild(makeRow(processNames[i], i, false));
+    }
+    for (let i = 0; i < (data.names || []).length; i += 1) {
+      separationsList.appendChild(makeRow(data.names[i], 4 + i, true));
+    }
+  }
+
+  async function openSeparations() {
+    const entry = getActiveEntry();
+    if (!entry?.model?.hasArtwork || !entry.originalBlob || !artwork.source?.vector) return;
+    if (!separationsDialog || !separationsList) return;
+    const sourceId = artwork.source.id;
+    let data = pdfSeparationsCache.get(sourceId);
+    if (!data) {
+      try {
+        data = await getPdfSeparations(entry.originalBlob, {
+          pageIndex: artwork.source.pageIndex || 0,
+          signal: pdfRenderController?.signal,
+          overprintMode: 2,
+        });
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        console.error(error);
+        showError(error, 'artworkLoadFailed');
+        return;
+      }
+      pdfSeparationsCache.set(sourceId, data);
+    }
+    renderSeparationsDialog(data);
+    separationsDialog.showModal();
+  }
+
+  async function toggleSeparation(index, visible) {
+    const entry = getActiveEntry();
+    if (!entry?.originalBlob) return;
+    artwork.pdfSeparationVisibility ||= {};
+    artwork.pdfSeparationVisibility[String(index)] = visible;
+    scheduleSave();
+    const cached = pdfSeparationsCache.get(artwork.source.id);
+    if (cached) renderSeparationsDialog(cached);
+
+    pdfRenderController?.abort();
+    const controller = new AbortController();
+    pdfRenderController = controller;
+    const generation = ++pdfRenderGeneration;
+    try {
+      const rendered = await renderPdfWithLayers(entry.originalBlob, {
+        pageIndex: artwork.source.pageIndex || 0,
+        visibility: artwork.pdfLayerVisibility,
+        signal: controller.signal,
+        overprint: false,
+        cacheKey: artwork.source.sha256 || '',
+        pageBox: artwork.source.pageBox || DEFAULT_PAGE_BOX,
+        passwordKey: artwork.source.sha256 || '',
+        session: artwork.source.id || null,
+        overprintMode: 2,
+        separationBehaviors: buildSeparationBehaviors(),
+      });
+      if (generation !== pdfRenderGeneration || disposed) return;
+      entry.previewBlob = rendered.previewBlob;
+      entry.displayBlob = null;
+      previewBlob = entry.previewBlob;
+      renderer.setArtworks(artworks);
+      render();
+      await refreshPreviewResources({ force: true });
+    } catch (error) {
+      if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return;
+      console.error(error);
+      showError(error, 'artworkLoadFailed');
+    } finally {
+      if (generation === pdfRenderGeneration) pdfRenderController = null;
+    }
   }
 
   async function processFile(file, { replace = false } = {}) {
@@ -1405,6 +1614,8 @@ export function createArtworkApp({
       const loaded = await loadArtworkFile(file, {
         choosePage: choosePdfPage,
         signal: processingController.signal,
+        promptPassword: promptPdfPassword,
+        overprintMode: getOverprintMode(),
       });
       if (generation !== processingGeneration) return;
       const model = new ArtworkModel();
@@ -2628,6 +2839,49 @@ export function createArtworkApp({
   controls.boxHeight.addEventListener('change', () => handleBoxDimChange('height'));
   controls.boxDepth.addEventListener('change', () => handleBoxDimChange('depth'));
 
+  controls.pageBoxSelect?.addEventListener('change', (event) => {
+    const entry = getActiveEntry();
+    if (!entry?.model?.hasArtwork || !entry.originalBlob) return;
+    const next = PAGE_BOXES.includes(event.target.value) ? event.target.value : DEFAULT_PAGE_BOX;
+    if (artwork.source.pageBox === next) return;
+    artwork.source.pageBox = next;
+    scheduleSave();
+    pdfRenderController?.abort();
+    const controller = new AbortController();
+    pdfRenderController = controller;
+    const generation = ++pdfRenderGeneration;
+    renderPdfLayers();
+    (async () => {
+      try {
+        const rendered = await renderPdfWithLayers(entry.originalBlob, {
+          pageIndex: artwork.source.pageIndex || 0,
+          visibility: artwork.pdfLayerVisibility,
+          signal: controller.signal,
+          overprint: false,
+          cacheKey: artwork.source.sha256 || '',
+          pageBox: next,
+          passwordKey: artwork.source.sha256 || '',
+          session: artwork.source.id || null,
+          overprintMode: getOverprintMode(),
+        });
+        if (generation !== pdfRenderGeneration || disposed) return;
+        entry.previewBlob = rendered.previewBlob;
+        entry.displayBlob = null;
+        previewBlob = entry.previewBlob;
+        renderer.setArtworks(artworks);
+        render();
+        refreshPreviewResources({ force: true });
+        Promise.resolve(onArtworkQualityChanged({ kind: 'pageBox' })).catch(() => {});
+      } catch (error) {
+        if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return;
+        console.error(error);
+        showError(error, 'artworkLoadFailed');
+      } finally {
+        if (generation === pdfRenderGeneration) pdfRenderController = null;
+      }
+    })();
+  });
+
   function setupBoxScrubber(iconElement, key, axis) {
     if (!iconElement) return;
 
@@ -3216,6 +3470,9 @@ export function createArtworkApp({
     setArtworkQuality,
     updateArtworkFinish,
     refreshPreviewResources,
+    setOverprintEnabled,
+    isOverprintAvailable: () => getMuPdfClient().getRendererVersion() === 'mupdf-custom',
+    openSeparations,
     hasModifiedArtwork: () => artwork.hasArtwork && artwork.modified,
     exportDeliverable,
     resetPlacementForNewDimensions() {

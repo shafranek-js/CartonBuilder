@@ -1,5 +1,5 @@
 import { serializeAppError } from '../errors.js';
-import { processArtworkFile, renderPdfPreview } from './fileProcessing.js';
+import { processArtworkFile } from './fileProcessing.js';
 
 let activeJob = null;
 
@@ -15,7 +15,7 @@ function requestPage(jobId, count) {
   });
 }
 
-async function startJob(jobId, file) {
+async function startJob(jobId, file, overprint) {
   activeJob?.controller.abort();
   const controller = new AbortController();
   activeJob = {
@@ -28,6 +28,7 @@ async function startJob(jobId, file) {
   try {
     const result = await processArtworkFile(file, {
       signal: controller.signal,
+      overprint: Boolean(overprint),
       choosePage: (count) => requestPage(jobId, count),
     });
     if (activeJob?.jobId !== jobId) return;
@@ -44,46 +45,10 @@ async function startJob(jobId, file) {
   }
 }
 
-async function startRenderJob(jobId, file, { pageIndex, visibility, dpi, targetWidthMm }) {
-  activeJob?.controller.abort();
-  const controller = new AbortController();
-  activeJob = {
-    jobId,
-    controller,
-    resolvePage: null,
-    rejectPage: null,
-  };
-
-  try {
-    const result = await renderPdfPreview(file, {
-      pageIndex,
-      visibility,
-      dpi,
-      targetWidthMm,
-      signal: controller.signal,
-    });
-    if (activeJob?.jobId !== jobId) return;
-    postMessage({ type: 'render-complete', jobId, result });
-  } catch (error) {
-    if (activeJob?.jobId !== jobId || error?.name === 'AbortError') return;
-    postMessage({
-      type: 'error',
-      jobId,
-      error: serializeAppError(error, 'artworkLoadFailed'),
-    });
-  } finally {
-    if (activeJob?.jobId === jobId) activeJob = null;
-  }
-}
-
 self.addEventListener('message', (event) => {
   const { type, jobId } = event.data || {};
   if (type === 'load' && jobId && event.data.file instanceof Blob) {
-    startJob(jobId, event.data.file);
-    return;
-  }
-  if (type === 'render-pdf' && jobId && event.data.file instanceof Blob) {
-    startRenderJob(jobId, event.data.file, event.data);
+    startJob(jobId, event.data.file, event.data.overprint);
     return;
   }
   if (type === 'select-page' && activeJob?.jobId === jobId && activeJob.resolvePage) {

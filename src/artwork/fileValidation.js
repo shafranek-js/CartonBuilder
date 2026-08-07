@@ -44,7 +44,14 @@ export async function validateArtworkFile(file) {
 
   const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
   const detectedType = detectArtworkType(header);
-  if (!detectedType || !SUPPORTED_TYPES[detectedType]) {
+  const isAiFile = /\.ai$/i.test(file.name || '') || file.type === 'application/postscript';
+  if (!detectedType) {
+    if (isAiFile) {
+      return { mimeType: 'application/pdf', extension: 'ai' };
+    }
+    throw new AppError('artworkFileUnsupported');
+  }
+  if (!SUPPORTED_TYPES[detectedType]) {
     throw new AppError('artworkFileUnsupported');
   }
   const isMediaAlias = (

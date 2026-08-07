@@ -1,7 +1,6 @@
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
 import { AppError } from '../errors.js';
 import { sha256, validateArtworkFile } from './fileValidation.js';
+import { loadPdfArtwork } from './pdfArtworkLoader.js';
 
 const MAX_PREVIEW_EDGE = 4096;
 const MAX_PREVIEW_PIXELS = 16_000_000;
@@ -74,235 +73,7 @@ async function loadImage(file, signal) {
   }
 }
 
-function isWorkerContext() {
-  return typeof WorkerGlobalScope !== 'undefined'
-    && typeof self !== 'undefined'
-    && self instanceof WorkerGlobalScope;
-}
-
-export function flattenPdfLayers(order, getGroup) {
-  const layers = [];
-  function walk(items, prefix) {
-    for (const item of items) {
-      if (typeof item === 'string') {
-        const group = getGroup?.(item) || null;
-        layers.push({
-          id: item,
-          name: group?.name || `Layer ${item}`,
-          group: prefix || null,
-        });
-      } else if (item && Array.isArray(item.order)) {
-        const name = item.name || 'Group';
-        walk(item.order, prefix ? `${prefix} / ${name}` : name);
-      }
-    }
-  }
-  walk(order || [], '');
-  return layers;
-}
-
-async function openPdf(file, signal) {
-  throwIfAborted(signal);
-  const pdfjs = await import('pdfjs-dist');
-  throwIfAborted(signal);
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-  const originalBytes = new Uint8Array(await file.arrayBuffer());
-  const loadingTask = pdfjs.getDocument({
-    data: originalBytes.slice(),
-    disableWorker: isWorkerContext(),
-  });
-  const abortLoading = () => loadingTask.destroy();
-  signal?.addEventListener('abort', abortLoading, { once: true });
-  let documentProxy;
-  try {
-    documentProxy = await loadingTask.promise;
-  } catch (error) {
-    signal?.removeEventListener('abort', abortLoading);
-    throwIfAborted(signal);
-    if (error?.name === 'PasswordException') {
-      throw new AppError('pdfPasswordProtected');
-    }
-    throw new AppError('pdfDamaged', {}, { cause: error });
-  }
-  return {
-    documentProxy,
-    originalBytes,
-    dispose() {
-      signal?.removeEventListener('abort', abortLoading);
-      if (documentProxy) documentProxy.destroy().catch(() => {});
-      else loadingTask.destroy().catch(() => {});
-    },
-  };
-}
-
-async function renderPdfPageToBlob({
-  page,
-  pageIndex,
-  originalBytes,
-  optionalContentConfig,
-  signal,
-  dpi = null,
-  targetWidthMm = null,
-}) {
-  throwIfAborted(signal);
-  const { PDFDocument } = await import('pdf-lib');
-  throwIfAborted(signal);
-  const sourceDocument = await PDFDocument.load(originalBytes, {
-    ignoreEncryption: true,
-    updateMetadata: false,
-  });
-  const mediaBox = sourceDocument.getPage(pageIndex).getMediaBox();
-  const mediaWidth = Math.abs(mediaBox.width);
-  const mediaHeight = Math.abs(mediaBox.height);
-  const baseScale = getPreviewScale(mediaWidth * 2, mediaHeight * 2) * 2;
-  const requestedWidthPx = Number(dpi) > 0 && Number(targetWidthMm) > 0
-    ? (Number(targetWidthMm) / 25.4) * Number(dpi)
-    : Number(dpi) > 0
-      ? (mediaWidth / 72) * Number(dpi)
-      : null;
-  const renderScale = Math.max(
-    0.05,
-    requestedWidthPx ? requestedWidthPx / mediaWidth : baseScale,
-  );
-
-  const cropViewport = page.getViewport({ scale: renderScale, rotation: 0 });
-  const cropCanvas = createCanvas(
-    Math.max(1, Math.ceil(cropViewport.width)),
-    Math.max(1, Math.ceil(cropViewport.height)),
-  );
-  const cropContext = cropCanvas.getContext('2d', { alpha: true });
-  if (!cropContext) throw new AppError('canvasContextUnavailable');
-  const renderTask = page.render({
-    canvasContext: cropContext,
-    viewport: cropViewport,
-    optionalContentConfigPromise: Promise.resolve(optionalContentConfig),
-  });
-  const abortRender = () => renderTask.cancel();
-  signal?.addEventListener('abort', abortRender, { once: true });
-  try {
-    await renderTask.promise;
-  } finally {
-    signal?.removeEventListener('abort', abortRender);
-  }
-  throwIfAborted(signal);
-
-  const mediaCanvas = createCanvas(
-    Math.max(1, Math.ceil(mediaWidth * renderScale)),
-    Math.max(1, Math.ceil(mediaHeight * renderScale)),
-  );
-  const mediaContext = mediaCanvas.getContext('2d', { alpha: true });
-  if (!mediaContext) throw new AppError('canvasContextUnavailable');
-  const [cropMinX, , , cropMaxY] = page.view;
-  const mediaMaxY = mediaBox.y + mediaHeight;
-  mediaContext.drawImage(
-    cropCanvas,
-    (cropMinX - mediaBox.x) * renderScale,
-    (mediaMaxY - cropMaxY) * renderScale,
-  );
-
-  return {
-    previewBlob: await canvasToBlob(mediaCanvas, 'image/png'),
-    widthPx: Math.ceil(mediaWidth * renderScale),
-    heightPx: Math.ceil(mediaHeight * renderScale),
-    previewWidthPx: Math.ceil(mediaWidth * renderScale),
-    previewHeightPx: Math.ceil(mediaHeight * renderScale),
-    pdfPageRotation: ((page.rotate % 360) + 360) % 360,
-    mediaBox: {
-      x: mediaBox.x,
-      y: mediaBox.y,
-      width: mediaWidth,
-      height: mediaHeight,
-    },
-  };
-}
-
-async function loadPdf(file, choosePage, signal) {
-  throwIfAborted(signal);
-  const pdf = await openPdf(file, signal);
-  try {
-    const { documentProxy, originalBytes } = pdf;
-    throwIfAborted(signal);
-    const pageIndex = documentProxy.numPages > 1
-      ? await choosePage(documentProxy.numPages)
-      : 0;
-    throwIfAborted(signal);
-    if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= documentProxy.numPages) {
-      throw new AppError('pdfPageInvalid');
-    }
-
-    const page = await documentProxy.getPage(pageIndex + 1);
-    const optionalContentConfig = await documentProxy.getOptionalContentConfig();
-    const pdfLayers = optionalContentConfig
-      ? flattenPdfLayers(optionalContentConfig.getOrder(), (id) => optionalContentConfig.getGroup(id))
-      : [];
-    const pdfLayerVisibility = {};
-    for (const layer of pdfLayers) {
-      pdfLayerVisibility[layer.id] = optionalContentConfig.getGroup(layer.id)?.visible ?? true;
-    }
-
-    const rendered = await renderPdfPageToBlob({
-      page,
-      pageIndex,
-      originalBytes,
-      optionalContentConfig,
-      signal,
-    });
-
-    return {
-      ...rendered,
-      pageIndex,
-      pageCount: documentProxy.numPages,
-      vector: true,
-      pdfLayers,
-      pdfLayerVisibility,
-    };
-  } finally {
-    await pdf.dispose();
-  }
-}
-
-export async function renderPdfPreview(file, {
-  pageIndex = 0,
-  visibility = null,
-  dpi = null,
-  targetWidthMm = null,
-  signal,
-} = {}) {
-  throwIfAborted(signal);
-  const pdf = await openPdf(file, signal);
-  try {
-    const { documentProxy, originalBytes } = pdf;
-    throwIfAborted(signal);
-    if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= documentProxy.numPages) {
-      throw new AppError('pdfPageInvalid');
-    }
-    const page = await documentProxy.getPage(pageIndex + 1);
-    const optionalContentConfig = await documentProxy.getOptionalContentConfig();
-    if (optionalContentConfig && visibility) {
-      for (const id of Object.keys(visibility)) {
-        optionalContentConfig.setVisibility(id, Boolean(visibility[id]));
-      }
-    }
-    const rendered = await renderPdfPageToBlob({
-      page,
-      pageIndex,
-      originalBytes,
-      optionalContentConfig,
-      signal,
-      dpi,
-      targetWidthMm,
-    });
-    return {
-      previewBlob: rendered.previewBlob,
-      previewWidthPx: rendered.previewWidthPx,
-      previewHeightPx: rendered.previewHeightPx,
-      widthPx: rendered.widthPx,
-      heightPx: rendered.heightPx,
-    };
-  } finally {
-    await pdf.dispose();
-  }
-}
+export { flattenPdfLayers } from '../pdf-renderer/pdfLayers.js';
 
 const MINIMAL_PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -497,16 +268,17 @@ async function loadVideo(file, signal) {
 export async function processArtworkFile(file, {
   choosePage = async () => 0,
   signal,
+  overprint = false,
 } = {}) {
   throwIfAborted(signal);
   const { mimeType, extension } = await validateArtworkFile(file);
+  const sourceHash = await sha256(file);
+  throwIfAborted(signal);
   const loaded = mimeType === 'application/pdf'
-    ? await loadPdf(file, choosePage, signal)
+    ? await loadPdfArtwork(file, { choosePage, signal })
     : (mimeType.startsWith('video/') || mimeType === 'image/gif')
       ? await loadVideo(file, signal)
       : await loadImage(file, signal);
-  throwIfAborted(signal);
-  const sourceHash = await sha256(file);
   throwIfAborted(signal);
 
   return {

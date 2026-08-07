@@ -1,0 +1,359 @@
+{
+  "mupdf": "1.28.0",
+  "node": "v20.18.0",
+  "scale": 2,
+  "usage": [
+    "Print",
+    "View"
+  ],
+  "files": {
+    "test-00-baseline.pdf": {
+      "file": "test-00-baseline.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-00-baseline-Print.png",
+          "probes": [
+            "0,173,239",
+            "236,0,139",
+            "255,241,0",
+            "34,31,31"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-00-baseline-View.png",
+          "probes": [
+            "0,173,239",
+            "236,0,139",
+            "255,241,0",
+            "34,31,31"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-01-black-overprint.pdf": {
+      "file": "test-01-black-overprint.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-01-black-overprint-Print.png",
+          "probes": [
+            "147,149,151",
+            "239,64,54"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-01-black-overprint-View.png",
+          "probes": [
+            "147,149,151",
+            "239,64,54"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-02-black-knockout.pdf": {
+      "file": "test-02-black-knockout.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-02-black-knockout-Print.png",
+          "probes": [
+            "147,149,151",
+            "239,64,54"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-02-black-knockout-View.png",
+          "probes": [
+            "147,149,151",
+            "239,64,54"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-03-white-overprint.pdf": {
+      "file": "test-03-white-overprint.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-03-white-overprint-Print.png",
+          "probes": [
+            "255,255,255",
+            "255,255,255",
+            "255,241,0"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-03-white-overprint-View.png",
+          "probes": [
+            "255,255,255",
+            "255,255,255",
+            "255,241,0"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-04-opm-0-1.pdf": {
+      "file": "test-04-opm-0-1.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-04-opm-0-1-Print.png",
+          "probes": [
+            "238,60,71",
+            "238,60,71",
+            "135,129,189"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-04-opm-0-1-View.png",
+          "probes": [
+            "238,60,71",
+            "238,60,71",
+            "135,129,189"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-05-spot-over-cmyk.pdf": {
+      "file": "test-05-spot-over-cmyk.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-05-spot-over-cmyk-Print.png",
+          "probes": [
+            "247,159,144",
+            "149,161,180"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-05-spot-over-cmyk-View.png",
+          "probes": [
+            "247,159,144",
+            "149,161,180"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-06-devicen.pdf": {
+      "file": "test-06-devicen.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-06-devicen-Print.png",
+          "probes": [
+            "63,63,153",
+            "255,245,132"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-06-devicen-View.png",
+          "probes": [
+            "63,63,153",
+            "255,245,132"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-07-transparency-spot.pdf": {
+      "file": "test-07-transparency-spot.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-07-transparency-spot-Print.png",
+          "probes": [
+            "238,60,71",
+            "246,149,35",
+            "165,134,170"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-07-transparency-spot-View.png",
+          "probes": [
+            "238,60,71",
+            "246,149,35",
+            "165,134,170"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-08-knockout-groups.pdf": {
+      "file": "test-08-knockout-groups.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-08-knockout-groups-Print.png",
+          "probes": [
+            "0,173,239",
+            "0,173,239",
+            "0,173,239"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-08-knockout-groups-View.png",
+          "probes": [
+            "0,173,239",
+            "0,173,239",
+            "0,173,239"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-09-pdfx1a.pdf": {
+      "file": "test-09-pdfx1a.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-09-pdfx1a-Print.png",
+          "probes": [
+            "147,149,151",
+            "239,64,54"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-09-pdfx1a-View.png",
+          "probes": [
+            "147,149,151",
+            "239,64,54"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-10-pdfx4.pdf": {
+      "file": "test-10-pdfx4.pdf",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-10-pdfx4-Print.png",
+          "probes": [
+            "237,35,82",
+            "239,64,54"
+          ]
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-10-pdfx4-View.png",
+          "probes": [
+            "237,35,82",
+            "239,64,54"
+          ]
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-11-ai-compatible.ai": {
+      "file": "test-11-ai-compatible.ai",
+      "open": "ok",
+      "usages": {
+        "Print": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-11-ai-compatible-Print.png",
+          "probes": []
+        },
+        "View": {
+          "width": 800,
+          "height": 800,
+          "components": 3,
+          "png": "test-11-ai-compatible-View.png",
+          "probes": []
+        }
+      },
+      "pageCount": 1,
+      "isPDF": true
+    },
+    "test-12-non-compatible-ai.ai": {
+      "file": "test-12-non-compatible-ai.ai",
+      "open": "rejected",
+      "usages": {},
+      "error": "no objects found"
+    }
+  }
+}

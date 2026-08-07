@@ -1,6 +1,7 @@
 import { clearCurrentProject } from '../project/ProjectStore.js';
 import { clearSceneSettings } from '../preview3d/sceneSettings.js';
 import { clearRenderSettings } from '../render/renderSettingsStorage.js';
+import { createRenderSettingsSnapshot, parseRenderSettingsSnapshot } from '../render/renderSettingsSnapshot.js';
 import { COLOR_THEMES, applyTheme, getSavedTheme } from './ThemeManager.js';
 import { getLocale, t } from '../i18n.js';
 import { createDiagnosticsBlob } from '../diagnostics.js';
@@ -45,6 +46,8 @@ export function createSettingsModal({
   popoverContainer,
   showToast = () => {},
   getRenderDiagnostics = () => null,
+  getRenderSettingsSnapshot = () => null,
+  applyRenderSettingsSnapshot = async () => false,
   windowRef = window,
   documentRef = document,
 }) {
@@ -108,6 +111,17 @@ export function createSettingsModal({
       </div>
 
       <div class="settings-group">
+        <button type="button" class="settings-secondary-btn" id="exportRenderSettingsBtn" style="width: 100%; min-height: 30px; padding: 6px 10px; border: 1px solid var(--panel-border, #5a5a5a); border-radius: 4px; background: var(--panel-bg, #3e3e3e); color: var(--text, #ffffff); font-size: 11px; cursor: pointer; transition: background-color 0.15s ease;">
+          📤 ${t('exportRenderSettings') || 'Export Render Settings'}
+        </button>
+        <button type="button" class="settings-secondary-btn" id="importRenderSettingsBtn" style="width: 100%; min-height: 30px; margin-top: 6px; padding: 6px 10px; border: 1px solid var(--panel-border, #5a5a5a); border-radius: 4px; background: var(--panel-bg, #3e3e3e); color: var(--text, #ffffff); font-size: 11px; cursor: pointer; transition: background-color 0.15s ease;">
+          📥 ${t('importRenderSettings') || 'Import Render Settings'}
+        </button>
+        <p class="settings-desc">${t('renderSettingsImportDesc') || 'A full snapshot of the Render page settings (camera, lighting, background, effects, output, board appearance).'}</p>
+        <input type="file" id="renderSettingsFileInput" accept=".json,application/json" hidden>
+      </div>
+
+      <div class="settings-group">
         <button type="button" class="settings-danger-btn" id="clearDataBtn">
           🗑️ ${t('clearProjectData') || 'Clear Saved Project Data'}
         </button>
@@ -133,6 +147,44 @@ export function createSettingsModal({
         'carton-builder-diagnostics.json',
       );
       showToast(t('diagnosticsExported') || 'Diagnostics data exported');
+    });
+
+    popoverContainer.querySelector('#exportRenderSettingsBtn')?.addEventListener('click', () => {
+      const snapshot = getRenderSettingsSnapshot();
+      if (!snapshot) {
+        showToast(t('renderSettingsUnavailable') || 'Render settings are unavailable.');
+        return;
+      }
+      try {
+        const blob = new Blob([createRenderSettingsSnapshot(snapshot)], { type: 'application/json' });
+        downloadBlob(documentRef, windowRef, blob, `carton-render-settings-${Date.now()}.json`);
+        showToast(t('renderSettingsExported') || 'Render settings exported');
+      } catch {
+        showToast(t('renderSettingsExportFailed') || 'Could not export render settings.');
+      }
+    });
+
+    const fileInput = popoverContainer.querySelector('#renderSettingsFileInput');
+    popoverContainer.querySelector('#importRenderSettingsBtn')?.addEventListener('click', () => {
+      if (fileInput) fileInput.click();
+    });
+    fileInput?.addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const content = await file.text();
+        const parsed = parseRenderSettingsSnapshot(content);
+        const applied = await applyRenderSettingsSnapshot(parsed);
+        if (applied !== false) {
+          showToast(t('renderSettingsImported') || 'Render settings imported');
+        } else {
+          showToast(t('renderSettingsImportFailed') || 'Could not import render settings.');
+        }
+      } catch (error) {
+        showToast(error?.message || t('renderSettingsImportFailed') || 'Could not import render settings.');
+      } finally {
+        event.target.value = '';
+      }
     });
 
     popoverContainer.querySelector('#clearDataBtn')?.addEventListener('click', handleClearData);

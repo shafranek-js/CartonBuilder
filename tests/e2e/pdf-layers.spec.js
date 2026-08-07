@@ -92,8 +92,7 @@ test('imports a PDF-based Illustrator file with an .ai extension', async ({ page
   await expect(page.locator('#pdfLayersList')).toContainText('BlueLayer');
 });
 
-test('exposes PDF optional content layers and re-renders the preview when toggled', async ({ page }) => {
-  await page.goto('http://127.0.0.1:4173');
+test('exposes PDF optional content layers and re-renders the preview when toggled', async ({ page }) => {  await page.goto('http://127.0.0.1:4173');
   await page.waitForTimeout(1200);
   await buildReferenceNet(page);
   await page.locator('.step[data-step-target="artwork"]').click();
@@ -119,18 +118,89 @@ test('exposes PDF optional content layers and re-renders the preview when toggle
     };
   });
   expect(state.layers).toEqual([
-    { id: '3R', name: 'RedLayer', group: null },
-    { id: '4R', name: 'BlueLayer', group: null },
+    { id: '0', name: 'BlueLayer', group: null },
+    { id: '1', name: 'RedLayer', group: null },
   ]);
-  expect(state.visibility).toEqual({ '3R': true, '4R': false });
+  expect(state.visibility).toEqual({ '0': false, '1': true });
 
   await waitForPixels(page, ({ red, blue }) => red > 0 && blue === 0);
 
-  const blueCheckbox = page.locator('.pdf-layer-row input').nth(1);
-  await expect(blueCheckbox).not.toBeChecked();
-  await page.locator('.pdf-layer-row').nth(1).locator('.eye-cell').click();
+  const rowByName = (name) => (
+    page.locator('.pdf-layer-row', {
+      has: page.locator('.layer-title', { hasText: name }),
+    })
+  );
+  const blueRow = rowByName('BlueLayer');
+  await expect(blueRow.locator('input')).not.toBeChecked();
+  await blueRow.locator('.eye-cell').click();
   await waitForPixels(page, ({ red, blue }) => red > 0 && blue > 0);
 
-  await page.locator('.pdf-layer-row').nth(0).locator('.eye-cell').click();
+  await rowByName('RedLayer').locator('.eye-cell').click();
   await waitForPixels(page, ({ red, blue }) => red === 0 && blue > 0);
+});
+
+function buildBoxPdf() {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /CropBox [25 25 150 150] /Resources << /ProcSet [/PDF] >> /Contents 4 0 R >>',
+  ];
+  const content = '0.9 0.1 0.1 0 k 0 0 200 200 re f 0 0 1 0 k 20 20 160 160 re f';
+  objects.push(`<< /Length ${content.length} >>\nstream\n${content}endstream`);
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  objects.forEach((obj, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return Buffer.from(pdf, 'latin1');
+}
+
+test('lets the user switch the rendered page box and re-renders the preview', async ({ page }) => {
+  await page.goto('http://127.0.0.1:4173');
+  await page.waitForTimeout(1200);
+  await buildReferenceNet(page);
+  await page.locator('.step[data-step-target="artwork"]').click();
+
+  await page.locator('#artworkFileInput').setInputFiles({
+    name: 'boxes.pdf',
+    mimeType: 'application/pdf',
+    buffer: buildBoxPdf(),
+  });
+  await expect(page.locator('#artworkFileName')).toHaveText('boxes.pdf');
+  await expect(page.locator('#processingOverlay')).toBeHidden();
+
+  const pageBoxSelect = page.locator('#pageBoxSelect');
+  await expect(pageBoxSelect).toBeVisible();
+  await expect(pageBoxSelect).toHaveValue('CropBox');
+
+  const sourceBefore = await page.evaluate(() => {
+    const artwork = window.cartonBuilderApp.artwork.artwork;
+    return { pageBox: artwork.source.pageBox, width: artwork.source.widthPx };
+  });
+  expect(sourceBefore.pageBox).toBe('CropBox');
+
+  const previewBefore = await page.evaluate(async () => {
+    const entry = window.cartonBuilderApp.artwork.getArtworks()[0];
+    return entry.previewBlob ? `${entry.previewBlob.type}:${entry.previewBlob.size}` : 'none';
+  });
+
+  await pageBoxSelect.selectOption('MediaBox');
+  await expect
+    .poll(async () => page.evaluate(() => window.cartonBuilderApp.artwork.artwork.source.pageBox), { timeout: 15_000 })
+    .toBe('MediaBox');
+
+  await expect
+    .poll(async () => page.evaluate(async () => {
+      const entry = window.cartonBuilderApp.artwork.getArtworks()[0];
+      return entry?.previewBlob ? `${entry.previewBlob.type}:${entry.previewBlob.size}` : 'none';
+    }), { timeout: 15_000 })
+    .not.toBe(previewBefore);
 });

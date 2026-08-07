@@ -1,6 +1,7 @@
 import { AppError, deserializeAppError } from '../errors.js';
 import { processArtworkFile, PREVIEW_LIMITS } from './fileProcessing.js';
 import { validateArtworkFile } from './fileValidation.js';
+import { DEFAULT_PAGE_BOX, loadPdfArtwork, renderPdfArtwork } from './pdfArtworkLoader.js';
 
 function buildLoadResult(file, loaded) {
   const isVideo = Boolean(
@@ -30,6 +31,8 @@ function buildLoadResult(file, loaded) {
       sha256: loaded.sha256,
       pdfLayers: loaded.pdfLayers || null,
       pdfLayerVisibility: loaded.pdfLayerVisibility || null,
+      hasOverprint: Boolean(loaded.hasOverprint),
+      pageBox: loaded.pageBox || DEFAULT_PAGE_BOX,
       isVideo,
     },
   };
@@ -57,6 +60,7 @@ export function loadArtworkWithWorker(file, {
   signal,
   workerFactory = defaultWorkerFactory,
   jobId = crypto.randomUUID(),
+  overprint = false,
 } = {}) {
   if (signal?.aborted) {
     return Promise.reject(new DOMException('Artwork processing was cancelled.', 'AbortError'));
@@ -112,7 +116,7 @@ export function loadArtworkWithWorker(file, {
       }
     });
 
-    worker.postMessage({ type: 'load', jobId, file });
+    worker.postMessage({ type: 'load', jobId, file, overprint });
   });
 }
 
@@ -123,79 +127,35 @@ export async function loadArtworkFile(file, {
   preferWorker = true,
   workerSupported = canUseWorker(),
   processFile = processArtworkFile,
+  overprint = false,
+  promptPassword = null,
+  overprintMode = 0,
 } = {}) {
-  await validateArtworkFile(file);
+  const validated = await validateArtworkFile(file);
+  if (validated.mimeType === 'application/pdf') {
+    const loaded = await loadPdfArtwork(file, {
+      choosePage,
+      signal,
+      pageBox: DEFAULT_PAGE_BOX,
+      promptPassword,
+      overprintMode,
+    });
+    return buildLoadResult(file, loaded);
+  }
   const isVideoFile = Boolean(
     file?.type?.startsWith('video/') || file?.name?.match(/\.(mp4|webm|ogv)$/i),
   );
   if (preferWorker && workerSupported && !isVideoFile) {
     try {
-      return await loadArtworkWithWorker(file, { choosePage, signal, workerFactory });
+      return await loadArtworkWithWorker(file, { choosePage, signal, workerFactory, overprint });
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
       if (!shouldRetryOnMainThread(error)) throw error;
     }
   }
 
-  const loaded = await processFile(file, { choosePage, signal });
+  const loaded = await processFile(file, { choosePage, signal, overprint });
   return buildLoadResult(file, loaded);
-}
-
-function renderPdfWithWorker(file, {
-  pageIndex,
-  visibility,
-  dpi,
-  targetWidthMm,
-  signal,
-  workerFactory = defaultWorkerFactory,
-  jobId = crypto.randomUUID(),
-} = {}) {
-  if (signal?.aborted) {
-    return Promise.reject(new DOMException('Artwork processing was cancelled.', 'AbortError'));
-  }
-
-  let worker;
-  try {
-    worker = workerFactory();
-  } catch (error) {
-    return Promise.reject(new AppError('workerUnavailable', {}, { cause: error }));
-  }
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    const cleanup = () => {
-      signal?.removeEventListener('abort', abort);
-      worker.terminate();
-    };
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      callback(value);
-    };
-    const abort = () => {
-      finish(reject, new DOMException('Artwork processing was cancelled.', 'AbortError'));
-    };
-
-    signal?.addEventListener('abort', abort, { once: true });
-    worker.addEventListener('error', (event) => {
-      finish(reject, new AppError('artworkLoadFailed', {}, { cause: event.error }));
-    });
-    worker.addEventListener('message', (event) => {
-      const message = event.data || {};
-      if (settled || message.jobId !== jobId) return;
-      if (message.type === 'render-complete') {
-        finish(resolve, message.result);
-        return;
-      }
-      if (message.type === 'error') {
-        finish(reject, deserializeAppError(message.error, 'artworkLoadFailed'));
-      }
-    });
-
-    worker.postMessage({ type: 'render-pdf', jobId, file, pageIndex, visibility, dpi, targetWidthMm });
-  });
 }
 
 export async function renderPdfWithLayers(file, {
@@ -204,31 +164,31 @@ export async function renderPdfWithLayers(file, {
   dpi = null,
   targetWidthMm = null,
   signal,
-  workerFactory = defaultWorkerFactory,
-  preferWorker = true,
-  workerSupported = canUseWorker(),
-  render = null,
+  pageBox = DEFAULT_PAGE_BOX,
+  overprint = false,
+  cacheKey = '',
+  promptPassword = null,
+  passwordKey = '',
+  session = null,
+  overprintMode = 0,
+  separationBehaviors = null,
 } = {}) {
   if (signal?.aborted) {
     throw new DOMException('Artwork processing was cancelled.', 'AbortError');
   }
-  if (preferWorker && workerSupported) {
-    try {
-      return await renderPdfWithWorker(file, {
-        pageIndex,
-        visibility,
-        dpi,
-        targetWidthMm,
-        signal,
-        workerFactory,
-      });
-    } catch (error) {
-      if (error?.name === 'AbortError') throw error;
-      if (!shouldRetryOnMainThread(error)) throw error;
-    }
-  }
-  const renderPdfPreview = render || (await import('./fileProcessing.js')).renderPdfPreview;
-  return renderPdfPreview(file, { pageIndex, visibility, dpi, targetWidthMm, signal });
+  return renderPdfArtwork(file, {
+    pageIndex,
+    visibility,
+    dpi,
+    targetWidthMm,
+    signal,
+    pageBox,
+    promptPassword,
+    passwordKey,
+    session,
+    overprintMode: overprintMode || (overprint ? 1 : 0),
+    separationBehaviors,
+  });
 }
 
 export { PREVIEW_LIMITS };
