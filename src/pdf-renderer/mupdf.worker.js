@@ -243,6 +243,11 @@ function renderTiled(page, matrix, bounds, overprintMode) {
     try {
       page.run(device, matrix);
     } finally {
+      try {
+        device.close();
+      } catch {
+        // closing is best-effort; the device is dropped regardless
+      }
       device.destroy();
     }
     const pixels = pixmap.getPixels();

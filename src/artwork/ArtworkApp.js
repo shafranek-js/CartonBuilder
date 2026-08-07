@@ -1441,6 +1441,12 @@ export function createArtworkApp({
       renderer.setArtworks(artworks);
       render();
       await refreshPreviewResources({ force: true });
+      if (getOverprintMode() > 0 && pdfEntries.some((entry) => (
+        previewResourceSignatures.get(entry.model.source.id)
+        !== `${getArtworkRasterSignature(entry, 'preview')}|${getPreviewResourceDpi().toFixed(2)}`
+      ))) {
+        await refreshPreviewResources({ force: true });
+      }
       Promise.resolve(onArtworkQualityChanged({ kind: 'overprint' })).catch(() => {});
       return true;
     } catch (error) {
@@ -1652,7 +1658,7 @@ export function createArtworkApp({
       renderPdfLayers();
       render();
       windowRef.requestAnimationFrame(() => renderer.fitToScreen());
-      refreshPreviewResources({ force: true });
+      await refreshPreviewResources({ force: true });
       commitChange(replace ? 'Replace artwork' : 'Add artwork', before);
       announce(t('processingComplete'));
       windowRef.dispatchEvent(new CustomEvent('artwork-loaded', {
