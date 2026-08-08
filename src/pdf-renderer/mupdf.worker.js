@@ -230,42 +230,47 @@ function renderTiled(page, matrix, bounds, overprintMode) {
   const colorspace = overprint ? mupdf.ColorSpace.DeviceCMYK : mupdf.ColorSpace.DeviceRGB;
   const components = overprint ? 4 : 3;
   const out = new Uint8ClampedArray(width * height * components);
-  for (const tile of planTiles(bounds, RENDER_TILE_EDGE)) {
-    const tileWidth = tile.x1 - tile.x0;
-    const tileHeight = tile.y1 - tile.y0;
-    const x0 = Math.max(bounds.x0, tile.x0 - RENDER_TILE_OVERSCAN);
-    const y0 = Math.max(bounds.y0, tile.y0 - RENDER_TILE_OVERSCAN);
-    const x1 = Math.min(bounds.x1, tile.x1 + RENDER_TILE_OVERSCAN);
-    const y1 = Math.min(bounds.y1, tile.y1 + RENDER_TILE_OVERSCAN);
-    const pixmap = new mupdf.Pixmap(colorspace, [x0, y0, x1, y1], false);
-    pixmap.clear(255);
-    const device = new mupdf.DrawDevice(mupdf.Matrix.identity, pixmap);
-    try {
-      page.run(device, matrix);
-    } finally {
+  const displayList = page.toDisplayList(true);
+  try {
+    for (const tile of planTiles(bounds, RENDER_TILE_EDGE)) {
+      const tileWidth = tile.x1 - tile.x0;
+      const tileHeight = tile.y1 - tile.y0;
+      const x0 = Math.max(bounds.x0, tile.x0 - RENDER_TILE_OVERSCAN);
+      const y0 = Math.max(bounds.y0, tile.y0 - RENDER_TILE_OVERSCAN);
+      const x1 = Math.min(bounds.x1, tile.x1 + RENDER_TILE_OVERSCAN);
+      const y1 = Math.min(bounds.y1, tile.y1 + RENDER_TILE_OVERSCAN);
+      const pixmap = new mupdf.Pixmap(colorspace, [x0, y0, x1, y1], false);
+      pixmap.clear(255);
+      const device = new mupdf.DrawDevice(mupdf.Matrix.identity, pixmap);
       try {
-        device.close();
-      } catch {
-        // closing is best-effort; the device is dropped regardless
+        displayList.run(device, matrix);
+      } finally {
+        try {
+          device.close();
+        } catch {
+          // closing is best-effort; the device is dropped regardless
+        }
+        device.destroy();
       }
-      device.destroy();
-    }
-    const pixels = pixmap.getPixels();
-    const stride = pixmap.getStride();
-    const offsetX = tile.x0 - x0;
-    const offsetY = tile.y0 - y0;
-    const bufCol = tile.x0 - bounds.x0;
-    const bufRow = tile.y0 - bounds.y0;
-    for (let y = 0; y < tileHeight; y += 1) {
-      for (let x = 0; x < tileWidth; x += 1) {
-        const source = (y + offsetY) * stride + (x + offsetX) * components;
-        const target = ((bufRow + y) * width + (bufCol + x)) * components;
-        for (let c = 0; c < components; c += 1) {
-          out[target + c] = pixels[source + c];
+      const pixels = pixmap.getPixels();
+      const stride = pixmap.getStride();
+      const offsetX = tile.x0 - x0;
+      const offsetY = tile.y0 - y0;
+      const bufCol = tile.x0 - bounds.x0;
+      const bufRow = tile.y0 - bounds.y0;
+      for (let y = 0; y < tileHeight; y += 1) {
+        for (let x = 0; x < tileWidth; x += 1) {
+          const source = (y + offsetY) * stride + (x + offsetX) * components;
+          const target = ((bufRow + y) * width + (bufCol + x)) * components;
+          for (let c = 0; c < components; c += 1) {
+            out[target + c] = pixels[source + c];
+          }
         }
       }
+      pixmap.destroy();
     }
-    pixmap.destroy();
+  } finally {
+    displayList.destroy();
   }
   if (overprint) {
     const rgb = mupdf.convertCmykToRgb(width, height, out);

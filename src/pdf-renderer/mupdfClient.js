@@ -35,7 +35,7 @@ function rgbaToPngBlob(rgba, width, height) {
 export function createMuPdfClient({
   workerFactory = defaultWorkerFactory,
   encodePng = rgbaToPngBlob,
-  timeoutMs = 60_000,
+  timeoutMs = 180_000,
 } = {}) {
   let worker = null;
   let dead = false;
