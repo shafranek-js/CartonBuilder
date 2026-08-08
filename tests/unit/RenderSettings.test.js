@@ -21,6 +21,11 @@ describe('RenderSettings', () => {
         intensity: 1.7,
         environment: 'studio',
         environmentIntensity: 0.4,
+        environmentMap: {
+          source: 'builtin',
+          presetId: 'neutral-softbox',
+          usage: 'lighting',
+        },
         exposure: 0.85,
       },
       shadows: { enabled: true, intensity: 0.34, blur: 2, mapSize: 1024 },
@@ -82,6 +87,11 @@ describe('RenderSettings', () => {
     expect(result.camera.target).toEqual([0, 0, 0]);
     expect(result.background).toMatchObject({ mode: 'solid', color: '#d9dcde', image: { fit: 'cover', zoom: 1 } });
     expect(result.lighting).toMatchObject({ azimuth: 0, elevation: 85, intensity: 0, environment: 'studio', environmentIntensity: 5, exposure: 3 });
+    expect(result.lighting.environmentMap).toMatchObject({
+      source: 'builtin',
+      presetId: 'neutral-softbox',
+      usage: 'lighting',
+    });
     expect(result.shadows).toMatchObject({ enabled: false, intensity: 1, blur: 0, mapSize: 1024 });
     expect(result.material.profile).toBe('matte');
     expect(result.quality).toMatchObject({ interactive: 'balanced', export: 'high', html: 2400 });

@@ -1,3 +1,5 @@
+import { sanitizeEnvironmentMap } from './environmentAssets.js';
+
 export const RENDER_ASPECTS = Object.freeze({
   square: Object.freeze({ width: 1, height: 1 }),
   landscape: Object.freeze({ width: 4, height: 3 }),
@@ -84,6 +86,17 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
     intensity: 1.7,
     environment: 'studio',
     environmentIntensity: 0.4,
+    environmentMap: Object.freeze({
+      source: 'builtin',
+      presetId: 'neutral-softbox',
+      assetId: '',
+      usage: 'lighting',
+      rotation: 0,
+      intensity: 0.4,
+      backgroundIntensity: 1,
+      backgroundBlur: 0,
+      resolutionCap: 2048,
+    }),
     exposure: 0.85,
   }),
   shadows: Object.freeze({
@@ -165,7 +178,7 @@ const AA_MODES = new Set(['native', 'smaa', 'taa']);
 const FOCUS_MODES = new Set(['carton-center', 'custom']);
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const MATERIAL_PROFILES = new Set(RENDER_MATERIAL_PROFILES);
-const BACKGROUND_MODES = new Set(['solid', 'transparent', 'image']);
+const BACKGROUND_MODES = new Set(['solid', 'transparent', 'image', 'environment']);
 const BACKGROUND_FITS = new Set(['cover', 'contain']);
 const OUTPUT_FORMATS = new Set(RENDER_OUTPUT_FORMATS);
 const OUTPUT_SIZING_MODES = new Set(RENDER_OUTPUT_SIZING_MODES);
@@ -296,6 +309,7 @@ export function sanitizeRenderSettings(input = null) {
         0,
         5,
       ),
+      environmentMap: sanitizeEnvironmentMap(lighting.environmentMap),
       exposure: numberInRange(lighting.exposure, fallback.lighting.exposure, 0.1, 3),
     },
     shadows: {
