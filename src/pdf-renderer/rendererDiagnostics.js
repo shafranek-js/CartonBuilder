@@ -9,7 +9,13 @@ export function recordRenderDiagnostic({
   usage,
   durationMs,
   rendererVersion,
+  overprintMode = 0,
+  processMask = 15,
+  spotBehaviors = null,
+  separationBehaviors = null,
+  overprintApplied = false,
 }) {
+  const behaviors = spotBehaviors ?? separationBehaviors;
   recordDiagnostic('pdf-render', {
     pageIndex,
     box,
@@ -19,5 +25,10 @@ export function recordRenderDiagnostic({
     usage,
     durationMs,
     renderer: rendererVersion,
+    overprintMode,
+    processMask,
+    spotBehaviors: behaviors ? [...behaviors] : [],
+    separationBehaviors: behaviors ? [...behaviors] : [],
+    overprintApplied,
   });
 }

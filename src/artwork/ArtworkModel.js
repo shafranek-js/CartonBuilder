@@ -54,6 +54,21 @@ function normalizeArtworkQuality(value) {
   };
 }
 
+export function normalizePdfSeparationVisibility(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const process = Array.isArray(value.process)
+    ? [0, 1, 2, 3].map((index) => value.process[index] !== false)
+    : [true, true, true, true];
+  const sourceSpots = value.spots && typeof value.spots === 'object' && !Array.isArray(value.spots)
+    ? value.spots
+    : Object.fromEntries(Object.entries(value).filter(([id]) => /^\d+$/.test(id)));
+  const spots = {};
+  for (const [id, visible] of Object.entries(sourceSpots)) {
+    if (/^\d+$/.test(id)) spots[id] = visible !== false;
+  }
+  return { process, spots };
+}
+
 export const REFERENCE_POINTS = Object.freeze([
   'top-left',
   'top-center',
@@ -257,9 +272,7 @@ export class ArtworkModel {
     this.pdfLayerVisibility = source.pdfLayerVisibility && typeof source.pdfLayerVisibility === 'object'
       ? { ...source.pdfLayerVisibility }
       : null;
-    this.pdfSeparationVisibility = source.pdfSeparationVisibility && typeof source.pdfSeparationVisibility === 'object'
-      ? { ...source.pdfSeparationVisibility }
-      : null;
+    this.pdfSeparationVisibility = normalizePdfSeparationVisibility(source.pdfSeparationVisibility);
     this.rotation = this.source.pdfPageRotation;
     this.opacity = 1;
     this.fitDieline(dielineBounds, { setInitial: true });
@@ -532,7 +545,14 @@ export class ArtworkModel {
       bgOpacity: this.bgOpacity,
       referencePoint: this.referencePoint,
       pdfLayerVisibility: this.pdfLayerVisibility ? { ...this.pdfLayerVisibility } : null,
-      pdfSeparationVisibility: this.pdfSeparationVisibility ? { ...this.pdfSeparationVisibility } : null,
+      ...(this.pdfSeparationVisibility
+        ? {
+          pdfSeparationVisibility: {
+            process: [...this.pdfSeparationVisibility.process],
+            spots: { ...this.pdfSeparationVisibility.spots },
+          },
+        }
+        : {}),
       quality: { ...this.quality },
       crop: this.crop ? { ...this.crop } : null,
       modified: this.modified,
@@ -575,14 +595,7 @@ export class ArtworkModel {
     } else {
       this.pdfLayerVisibility = null;
     }
-    if (state.pdfSeparationVisibility && typeof state.pdfSeparationVisibility === 'object') {
-      this.pdfSeparationVisibility = {};
-      for (const [id, visible] of Object.entries(state.pdfSeparationVisibility)) {
-        this.pdfSeparationVisibility[id] = visible !== false;
-      }
-    } else {
-      this.pdfSeparationVisibility = null;
-    }
+    this.pdfSeparationVisibility = normalizePdfSeparationVisibility(state.pdfSeparationVisibility);
     this.quality = normalizeArtworkQuality(state.quality);
     this.modified = Boolean(state.modified);
     this.crop = normalizeCropRect(state.crop, this.unrotatedWidthMm, this.unrotatedHeightMm);

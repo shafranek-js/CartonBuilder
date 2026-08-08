@@ -1494,12 +1494,31 @@ export function createArtworkApp({
 
   const pdfSeparationsCache = new Map();
 
-  function buildSeparationBehaviors() {
+  function getSeparationVisibility() {
     const visibility = artwork.pdfSeparationVisibility;
+    return {
+      process: Array.isArray(visibility?.process)
+        ? [0, 1, 2, 3].map((index) => visibility.process[index] !== false)
+        : [true, true, true, true],
+      spots: visibility?.spots && typeof visibility.spots === 'object'
+        ? visibility.spots
+        : {},
+    };
+  }
+
+  function getProcessMask() {
+    return getSeparationVisibility().process.reduce(
+      (mask, visible, index) => mask | (visible ? (1 << index) : 0),
+      0,
+    );
+  }
+
+  function buildSeparationBehaviors() {
+    const visibility = getSeparationVisibility();
     const cached = pdfSeparationsCache.get(artwork.source?.id);
     if (!visibility || !cached || !cached.names?.length) return null;
     return cached.names.map((_, index) => (
-      visibility[String(index)] !== false ? 1 : 2
+      visibility.spots[String(index)] !== false ? 1 : 2
     ));
   }
 
@@ -1507,34 +1526,44 @@ export function createArtworkApp({
     separationsList.replaceChildren();
     const processNames = ['Cyan', 'Magenta', 'Yellow', 'Black'];
     const coverage = data.coverage || [];
-    const makeRow = (name, index, toggleable) => {
+    const visibility = getSeparationVisibility();
+    const makeRow = (name, index, toggleable, visible, onChange) => {
       const row = documentRef.createElement('div');
       row.className = 'separation-row';
       const checkbox = documentRef.createElement('input');
       checkbox.type = 'checkbox';
-      if (toggleable) {
-        checkbox.checked = artwork.pdfSeparationVisibility?.[String(index - 4)] !== false;
-        checkbox.className = 'separation-toggle';
-        checkbox.setAttribute('aria-label', name);
-        checkbox.addEventListener('change', () => toggleSeparation(index - 4, checkbox.checked));
-      } else {
-        checkbox.hidden = true;
-        checkbox.disabled = true;
-      }
+      checkbox.checked = visible !== false;
+      checkbox.className = 'separation-toggle';
+      checkbox.setAttribute('aria-label', name);
+      checkbox.addEventListener('change', () => onChange(checkbox.checked));
       const nameEl = documentRef.createElement('span');
       nameEl.className = 'separation-name';
       nameEl.textContent = name;
       const coverageEl = documentRef.createElement('span');
       coverageEl.className = 'separation-coverage';
-      coverageEl.textContent = coverage[index] != null ? `${coverage[index]}%` : '—';
+      const coverageValue = index < 4 ? data.process?.[index]?.coverage : data.spots?.[index - 4]?.coverage;
+      const displayCoverage = coverageValue ?? coverage[index];
+      coverageEl.textContent = displayCoverage != null ? `${displayCoverage}%` : '—';
       row.append(checkbox, nameEl, coverageEl);
       return row;
     };
     for (let i = 0; i < 4; i += 1) {
-      separationsList.appendChild(makeRow(processNames[i], i, false));
+      separationsList.appendChild(makeRow(
+        processNames[i],
+        i,
+        true,
+        visibility.process[i],
+        (visible) => toggleProcessSeparation(i, visible),
+      ));
     }
     for (let i = 0; i < (data.names || []).length; i += 1) {
-      separationsList.appendChild(makeRow(data.names[i], 4 + i, true));
+      separationsList.appendChild(makeRow(
+        data.names[i],
+        4 + i,
+        true,
+        visibility.spots[String(i)],
+        (visible) => toggleSeparation(i, visible),
+      ));
     }
   }
 
@@ -1566,8 +1595,9 @@ export function createArtworkApp({
   async function toggleSeparation(index, visible) {
     const entry = getActiveEntry();
     if (!entry?.originalBlob) return;
-    artwork.pdfSeparationVisibility ||= {};
-    artwork.pdfSeparationVisibility[String(index)] = visible;
+    const state = getSeparationVisibility();
+    state.spots[String(index)] = visible;
+    artwork.pdfSeparationVisibility = state;
     scheduleSave();
     const cached = pdfSeparationsCache.get(artwork.source.id);
     if (cached) renderSeparationsDialog(cached);
@@ -1587,6 +1617,51 @@ export function createArtworkApp({
         passwordKey: artwork.source.sha256 || '',
         session: artwork.source.id || null,
         overprintMode: 2,
+        processMask: getProcessMask(),
+        separationBehaviors: buildSeparationBehaviors(),
+      });
+      if (generation !== pdfRenderGeneration || disposed) return;
+      entry.previewBlob = rendered.previewBlob;
+      entry.displayBlob = null;
+      previewBlob = entry.previewBlob;
+      renderer.setArtworks(artworks);
+      render();
+      await refreshPreviewResources({ force: true });
+    } catch (error) {
+      if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return;
+      console.error(error);
+      showError(error, 'artworkLoadFailed');
+    } finally {
+      if (generation === pdfRenderGeneration) pdfRenderController = null;
+    }
+  }
+
+  async function toggleProcessSeparation(index, visible) {
+    const entry = getActiveEntry();
+    if (!entry?.originalBlob) return;
+    const state = getSeparationVisibility();
+    state.process[index] = visible;
+    artwork.pdfSeparationVisibility = state;
+    scheduleSave();
+    const cached = pdfSeparationsCache.get(artwork.source.id);
+    if (cached) renderSeparationsDialog(cached);
+
+    pdfRenderController?.abort();
+    const controller = new AbortController();
+    pdfRenderController = controller;
+    const generation = ++pdfRenderGeneration;
+    try {
+      const rendered = await renderPdfWithLayers(entry.originalBlob, {
+        pageIndex: artwork.source.pageIndex || 0,
+        visibility: artwork.pdfLayerVisibility,
+        signal: controller.signal,
+        overprint: false,
+        cacheKey: artwork.source.sha256 || '',
+        pageBox: artwork.source.pageBox || DEFAULT_PAGE_BOX,
+        passwordKey: artwork.source.sha256 || '',
+        session: artwork.source.id || null,
+        overprintMode: 2,
+        processMask: getProcessMask(),
         separationBehaviors: buildSeparationBehaviors(),
       });
       if (generation !== pdfRenderGeneration || disposed) return;

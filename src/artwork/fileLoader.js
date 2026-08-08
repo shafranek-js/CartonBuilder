@@ -171,6 +171,8 @@ export async function renderPdfWithLayers(file, {
   passwordKey = '',
   session = null,
   overprintMode = 0,
+  processMask = 15,
+  spotBehaviors = null,
   separationBehaviors = null,
 } = {}) {
   if (signal?.aborted) {
@@ -187,7 +189,8 @@ export async function renderPdfWithLayers(file, {
     passwordKey,
     session,
     overprintMode: overprintMode || (overprint ? 1 : 0),
-    separationBehaviors,
+    processMask,
+    spotBehaviors: spotBehaviors ?? separationBehaviors,
   });
 }
 

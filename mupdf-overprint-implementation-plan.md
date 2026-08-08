@@ -1,6 +1,6 @@
 # План: внедрение MuPDF.js для PDF/AI Overprint Preview
 
-Статус: План имплементации ТЗ «Техническое задание по внедрению MuPDF.js для PDF-AI Overprint Preview.htm»
+Статус: Реализация renderer+plates завершена; Adobe reference/compliance gates остаются открытыми
 Источник: `docs/Техническое задание по внедрению MuPDF.js для PDF-AI Overprint Preview.htm`
 Дата: 2026-08-06
 
@@ -11,7 +11,7 @@
   референсы Adobe в `scratch/mupdf-spike/refs/`.
 - **Phase 1 (Базовый MuPDF-рендерер): РЕАЛИЗОВАНА.** `src/pdf-renderer/` +
   `src/artwork/pdfArtworkLoader.js`; pdf.js-путь удалён; `pdfOverprint.js` удалён;
-  overprint-тугл заменён read-only статусом; page box (CropBox default) в source + UI;
+  custom overprint toggle and stock-fallback status; page box (CropBox default) in source + UI;
   AI-совместимость (`aiNotPdfCompatible`); error codes + i18n; `build.target es2022`;
   unit 263/263, PDF e2e 4/4, smoke 4/4. Контракт: `docs/11. mupdf-overprint-runtime-specification.md`.
 - **Phase 2 (Production rendering): РЕАЛИЗОВАНА.** Отмена рендеров (worker `cancel`
@@ -22,15 +22,17 @@
   mock-worker тесты клиента + парольные тесты загрузчика. unit 275/275,
   PDF e2e 4/4, smoke 4/4.
 - **Phase 3 (Большие artwork): РЕАЛИЗОВАНА.** Tiled rendering (2048 px, overscan 1,
-  `Pixmap+DrawDevice+run`, учёт page_ctm/поворота — `tileMath.js`); лимит 32 Мп →
+  native MuPDF tile API с `fz_separations`, usage `Print`, process/spot state,
+  учёт page_ctm/поворота — `tileMath.js`); лимит 32 Мп →
   `pdfRenderTooLarge`; watchdog (timeout 60 с → terminate → recovery,
   `pdfRenderTimeout`); лимиты безопасности (страницы ≤ 5000 → `pdfTooManyPages`,
   disableJS, parsing только в Worker). Тесты: `mupdfTiling.test.js`
   (тайлы = single, rot 0/90 + 4000×2000), watchdog в `mupdfClient.test.js`.
   unit 281/281, PDF e2e 5/5, smoke 4/4.
-- **Phase 4 (Custom WASM wrapper): РЕАЛИЗОВАНА.** Пересобраны mupdf 1.28.0 +
-  Emscripten 4.0.8 (`scratch/mupdf-src` + `build-mupdf-custom.sh`): glue
-  `toPixmapWithOverprint` (режимы 0/1/2 по логике mudraw -M), CMYK→RGB конверсия;
+- **Phase 4 (Custom WASM wrapper): РЕАЛИЗОВАНА.** Пересобраны MuPDF tag 1.28.0 +
+  Emscripten 4.0.8 через `scripts/build-mupdf-wasm.sh` и tracked patch series:
+  glue `toPixmapWithOverprint`/native tile (режимы 0/1/2 по логике mudraw -M),
+  process mask и CMYK→RGB конверсия;
   артефакты в `src/pdf-renderer/custom/`; worker грузит custom (fallback stock);
   overprint-рендер в DeviceCMYK; реальный тогл «Overprint Preview» в View menu
   (глобальная настройка, пере-рендер всех PDF); `getRendererVersion()`/
@@ -38,9 +40,11 @@
   unit 281/281, PDF e2e 5/5, smoke 4/4.
 - **Phase 5 (Панель сепараций): РЕАЛИЗОВАНА.** Glue: count/names/coverage/
   behaviors (по-плашечные: composite/spot/disabled); worker команда
-  `separations` + `separationBehaviors` в рендере; UI «Separations…» (диалог
-  C/M/Y/K coverage + spot-eye-toggles, пере-рендер при скрытии плашки);
-  `pdfSeparationVisibility` в модели/проекте. E2E «hide and show a spot plate».
+  `separations` возвращает process+spots, а protocol принимает `processMask` и
+  `spotBehaviors` (legacy alias `separationBehaviors`); UI «Separations…»
+  (переключаемые C/M/Y/K и spots, немедленный mode 2 rerender);
+  `pdfSeparationVisibility` schema v12 с flat migration. E2E/native probes
+  используют реальные пиксели.
   unit 281/281, PDF e2e 6/6, smoke 4/4.
 
 ## Решения, зафиксированные с заказчиком
@@ -48,7 +52,7 @@
 - Полный охват этапов 0–5 ТЗ.
 - Phase 0: разрабатывается харнесс + генерируются тестовые PDF; заказчик предоставляет Adobe-референсы для сравнения.
 - pdf.js/CSS-multiply путь **полностью заменяется** MuPDF.js; `pdfOverprint.js` удаляется.
-- До custom WASM — read-only статус «Overprint Preview: ON»; реальный тугл — на Phase 4.
+- Custom WASM renderer is now required for an active overprint toggle; stock fallback is explicitly marked unavailable.
 
 ## Конвенции проекта
 
@@ -126,7 +130,7 @@ src/pdf-renderer/
 
 ### 1.7 Overprint статус (ТЗ §14, stock-ветка)
 
-- Убрать глобальный тугл из View menu; вместо него read-only «Overprint Preview: ON». `overprintSettings.js` упростить.
+- Keep the global View-menu toggle: OFF maps to mode 0, ON maps to mode 1; stock fallback exposes an unavailable status.
 - Обновить `tests/e2e/overprint.spec.js`.
 
 ### 1.8 Persistенс

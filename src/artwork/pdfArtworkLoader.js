@@ -126,6 +126,9 @@ export async function loadPdfArtwork(file, {
   passwordKey = '',
   session = null,
   overprintMode = 0,
+  processMask = 15,
+  spotBehaviors = null,
+  separationBehaviors = null,
 } = {}) {
   const extension = getFileKind(file);
   return withPdf(file, signal, extension, promptPassword, passwordKey, async ({ client, docId, opened, sourceHash }) => {
@@ -154,6 +157,8 @@ export async function loadPdfArtwork(file, {
       box: pageBox,
       visibility: layers.pdfLayerVisibility,
       overprintMode,
+      processMask,
+      spotBehaviors: spotBehaviors ?? separationBehaviors,
     }, { session });
     throwIfAborted(signal);
 
@@ -172,7 +177,7 @@ export async function loadPdfArtwork(file, {
       mediaBox: info.mediaBox,
       pdfLayers: layers.pdfLayers,
       pdfLayerVisibility: layers.pdfLayerVisibility,
-      hasOverprint: overprintMode > 0,
+      hasOverprint: rendered.overprintApplied === true,
       pageBox,
     };
   });
@@ -202,6 +207,8 @@ export async function renderPdfArtwork(file, {
   passwordKey = '',
   session = null,
   overprintMode = 0,
+  processMask = 15,
+  spotBehaviors = null,
   separationBehaviors = null,
 } = {}) {
   const extension = getFileKind(file);
@@ -223,7 +230,8 @@ export async function renderPdfArtwork(file, {
       box: pageBox,
       visibility,
       overprintMode,
-      separationBehaviors,
+      processMask,
+      spotBehaviors: spotBehaviors ?? separationBehaviors,
     }, { session });
     throwIfAborted(signal);
     return {
@@ -232,7 +240,7 @@ export async function renderPdfArtwork(file, {
       previewHeightPx: rendered.height,
       widthPx: rendered.width,
       heightPx: rendered.height,
-      hasOverprint: overprintMode > 0,
+      hasOverprint: rendered.overprintApplied === true,
     };
   });
 }

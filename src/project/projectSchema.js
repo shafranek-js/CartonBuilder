@@ -3,6 +3,7 @@ import {
   ARTWORK_PREVIEW_QUALITY_OPTIONS,
   ARTWORK_RENDER_QUALITY_OPTIONS,
   DEFAULT_ARTWORK_QUALITY_SETTINGS,
+  normalizePdfSeparationVisibility,
 } from '../artwork/ArtworkModel.js';
 import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
@@ -12,7 +13,7 @@ import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 10;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 12;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -234,6 +235,58 @@ MIGRATIONS.set(9, (snapshot) => ({
     ? snapshot.artworks.map(migrateArtworkFinishEntry)
     : snapshot.artworks,
   history: migrateHistoryArtworkFinishes(snapshot.history),
+}));
+
+MIGRATIONS.set(10, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 11,
+  render: sanitizeRenderSettings(snapshot.render),
+}));
+
+function migrateArtworkSeparations(artwork) {
+  if (!artwork || typeof artwork !== 'object') return artwork;
+  if (!Object.hasOwn(artwork, 'pdfSeparationVisibility')) return artwork;
+  const visibility = normalizePdfSeparationVisibility(artwork.pdfSeparationVisibility);
+  return {
+    ...artwork,
+    pdfSeparationVisibility: visibility,
+  };
+}
+
+function migrateEditorArtworkSeparations(state) {
+  if (!state || typeof state !== 'object' || !Array.isArray(state.artworks)) return state;
+  return {
+    ...state,
+    artworks: state.artworks.map((entry) => ({
+      ...entry,
+      artwork: migrateArtworkSeparations(entry.artwork),
+    })),
+  };
+}
+
+function migrateHistoryArtworkSeparations(history) {
+  if (!history || typeof history !== 'object') return history;
+  const migrateStack = (stack) => (Array.isArray(stack)
+    ? stack.map((entry) => ({
+      ...entry,
+      before: migrateEditorArtworkSeparations(entry.before),
+      after: migrateEditorArtworkSeparations(entry.after),
+    }))
+    : []);
+  return {
+    ...history,
+    undo: migrateStack(history.undo),
+    redo: migrateStack(history.redo),
+  };
+}
+
+MIGRATIONS.set(11, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 12,
+  artworks: Array.isArray(snapshot.artworks)
+    ? snapshot.artworks.map((entry) => ({ ...entry, artwork: migrateArtworkSeparations(entry.artwork) }))
+    : snapshot.artworks,
+  history: migrateHistoryArtworkSeparations(snapshot.history),
 }));
 
 function clone(value) {

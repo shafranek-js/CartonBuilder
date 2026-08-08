@@ -64,10 +64,13 @@ export function renderCacheKey({
   dpi = null,
   targetWidthMm = null,
   overprintMode = 0,
+  processMask = 15,
+  spotBehaviors = null,
   separationBehaviors = null,
 }) {
   const visibilityHash = visibility ? JSON.stringify(visibility) : '';
-  const behaviorsHash = separationBehaviors ? separationBehaviors.join(',') : '';
+  const behaviors = spotBehaviors ?? separationBehaviors;
+  const behaviorsHash = behaviors ? behaviors.join(',') : '';
   return [
     docId,
     pageIndex,
@@ -75,6 +78,7 @@ export function renderCacheKey({
     box,
     usage,
     overprintMode,
+    processMask,
     behaviorsHash,
     dpi || '',
     targetWidthMm ? Number(targetWidthMm).toFixed(2) : '',

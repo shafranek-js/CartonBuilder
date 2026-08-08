@@ -183,8 +183,11 @@ export function createMuPdfClient({
       visibility = null,
       usage = 'Print',
       overprintMode = 0,
+      processMask = 15,
+      spotBehaviors = null,
       separationBehaviors = null,
     } = {}, { session = null } = {}) {
+      const effectiveSpotBehaviors = spotBehaviors ?? separationBehaviors;
       const cacheKey = renderCacheKey({
         docId,
         pageIndex,
@@ -193,7 +196,8 @@ export function createMuPdfClient({
         visibility,
         usage,
         overprintMode,
-        separationBehaviors,
+        processMask,
+        spotBehaviors: effectiveSpotBehaviors,
       });
       const cached = cache.get(cacheKey);
       if (cached) return Promise.resolve(cached.value);
@@ -207,7 +211,8 @@ export function createMuPdfClient({
           visibility,
           usage,
           overprintMode,
-          separationBehaviors,
+          processMask,
+          spotBehaviors: effectiveSpotBehaviors,
         });
         if (session) {
           const previous = sessionRenders.get(session);
@@ -233,13 +238,19 @@ export function createMuPdfClient({
           scale,
           usage,
           durationMs: result.durationMs,
-          rendererVersion: 'mupdf',
+          rendererVersion,
+          overprintMode,
+          processMask,
+          spotBehaviors: effectiveSpotBehaviors,
+          separationBehaviors: effectiveSpotBehaviors,
+          overprintApplied: result.overprintApplied === true,
         });
         const value = {
           blob,
           width: result.width,
           height: result.height,
           durationMs: Math.round(performance.now() - started),
+          overprintApplied: result.overprintApplied === true,
         };
         cache.set(cacheKey, { value, bytes: blob.size });
         return value;

@@ -42,11 +42,21 @@ async function buildReferenceNet(page) {
   await activate('Add Right Panel to the right edge of Back Panel');
 }
 
-async function getPreviewState(page) {
-  return page.evaluate(async () => {
+async function getPreviewProbe(page, fractionX = 0.5, fractionY = 0.5) {
+  return page.evaluate(async ({ fractionX: fx, fractionY: fy }) => {
     const entry = window.cartonBuilderApp.artwork.getArtworks()[0];
-    return entry?.previewBlob ? `${entry.previewBlob.type}:${entry.previewBlob.size}` : 'none';
-  });
+    if (!entry?.previewBlob) return null;
+    const bitmap = await createImageBitmap(entry.previewBlob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const x = Math.min(canvas.width - 1, Math.max(0, Math.floor(canvas.width * fx)));
+    const y = Math.min(canvas.height - 1, Math.max(0, Math.floor(canvas.height * fy)));
+    return Array.from(context.getImageData(x, y, 1, 1).data);
+  }, { fractionX, fractionY });
 }
 
 test('lets the user hide and show a spot plate in the Separations dialog', async ({ page }) => {
@@ -72,22 +82,33 @@ test('lets the user hide and show a spot plate in the Separations dialog', async
   await expect(list).toContainText('Cyan');
   await expect(list).toContainText('Black');
 
-  const spotToggle = page.locator('.separation-toggle');
-  await expect(spotToggle).toHaveCount(1);
+  const spotToggle = page.locator('.separation-toggle').nth(4);
+  await expect(page.locator('.separation-toggle')).toHaveCount(5);
   await expect(spotToggle).toBeChecked();
 
-  const before = await getPreviewState(page);
+  const cyanToggle = page.locator('.separation-toggle').nth(0);
+  const cyanBefore = await getPreviewProbe(page);
+  await cyanToggle.uncheck();
+  await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(cyanBefore);
+  await expect.poll(async () => page.evaluate(() => (
+    window.cartonBuilderApp.artwork.artwork.pdfSeparationVisibility?.process?.[0]
+  ))).toBe(false);
+  const cyanOff = await getPreviewProbe(page);
+  await cyanToggle.check();
+  await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(cyanOff);
+
+  const before = await getPreviewProbe(page);
   await spotToggle.uncheck();
-  await expect.poll(async () => getPreviewState(page), { timeout: 30_000 }).not.toBe(before);
-  const spotOff = await getPreviewState(page);
+  await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(before);
+  const spotOff = await getPreviewProbe(page);
 
   const visibility = await page.evaluate(() => (
     window.cartonBuilderApp.artwork.artwork.pdfSeparationVisibility
   ));
-  expect(visibility).toEqual({ '0': false });
+  expect(visibility).toEqual({ process: [true, true, true, true], spots: { '0': false } });
 
   await spotToggle.check();
-  await expect.poll(async () => getPreviewState(page), { timeout: 30_000 }).not.toBe(spotOff);
+  await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(spotOff);
 
   await page.evaluate(() => localStorage.setItem('carton-builder-first-run-example-v1', 'true'));
 });
@@ -117,11 +138,11 @@ test('toggles Overprint Preview through the custom MuPDF renderer and re-renders
   await expect(toggle).toBeVisible();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
-  const before = await getPreviewState(page);
+  const before = await getPreviewProbe(page);
   await toggle.click();
   await expect(page.locator('#viewMenuPopover')).toBeHidden();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('carton-builder-overprint'))).toBe('1');
-  await expect.poll(async () => getPreviewState(page), { timeout: 30_000 }).not.toBe(before);
+  await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(before);
 
   await page.locator('#viewMenuTriggerBtn').click();
   await page.locator('#menuEnableOverprintBtn').click();

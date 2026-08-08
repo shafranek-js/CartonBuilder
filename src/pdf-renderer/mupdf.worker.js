@@ -172,7 +172,12 @@ async function handleLayers(payload) {
 
 const activeRenders = new Map();
 
-function renderSingle(page, matrix, usage, box, overprintMode, separationBehaviors) {
+function normalizeProcessMask(processMask) {
+  const value = Number(processMask);
+  return Number.isInteger(value) ? value & 0x0f : 0x0f;
+}
+
+function renderSingle(page, matrix, usage, box, overprintMode, processMask, separationBehaviors) {
   if (overprintMode > 0 && RENDERER_VERSION === 'mupdf-custom') {
     let cmyk;
     if (separationBehaviors && separationBehaviors.length > 0) {
@@ -197,7 +202,7 @@ function renderSingle(page, matrix, usage, box, overprintMode, separationBehavio
       );
     }
     try {
-      const rgb = cmyk.toRgb();
+      const rgb = cmyk.toRgbWithProcessMask(normalizeProcessMask(processMask));
       try {
         return {
           rgba: pixmapToRgba(rgb),
@@ -223,76 +228,78 @@ function renderSingle(page, matrix, usage, box, overprintMode, separationBehavio
   }
 }
 
-function renderTiled(page, matrix, bounds, overprintMode) {
+function renderTiled(page, matrix, bounds, usage, box, overprintMode, processMask, separationBehaviors) {
   const width = bounds.x1 - bounds.x0;
   const height = bounds.y1 - bounds.y0;
-  const overprint = overprintMode > 0 && RENDERER_VERSION === 'mupdf-custom';
-  const colorspace = overprint ? mupdf.ColorSpace.DeviceCMYK : mupdf.ColorSpace.DeviceRGB;
-  const components = overprint ? 4 : 3;
-  const out = new Uint8ClampedArray(width * height * components);
-  const displayList = page.toDisplayList(true);
-  try {
-    for (const tile of planTiles(bounds, RENDER_TILE_EDGE)) {
-      const tileWidth = tile.x1 - tile.x0;
-      const tileHeight = tile.y1 - tile.y0;
-      const x0 = Math.max(bounds.x0, tile.x0 - RENDER_TILE_OVERSCAN);
-      const y0 = Math.max(bounds.y0, tile.y0 - RENDER_TILE_OVERSCAN);
-      const x1 = Math.min(bounds.x1, tile.x1 + RENDER_TILE_OVERSCAN);
-      const y1 = Math.min(bounds.y1, tile.y1 + RENDER_TILE_OVERSCAN);
-      const pixmap = new mupdf.Pixmap(colorspace, [x0, y0, x1, y1], false);
-      pixmap.clear(255);
-      const device = new mupdf.DrawDevice(mupdf.Matrix.identity, pixmap);
-      try {
-        displayList.run(device, matrix);
-      } finally {
-        try {
-          device.close();
-        } catch {
-          // closing is best-effort; the device is dropped regardless
-        }
-        device.destroy();
-      }
+  if (RENDERER_VERSION !== 'mupdf-custom') {
+    if (overprintMode > 0) throw new AppError('overprintUnavailable');
+    const pixmap = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true, usage, box);
+    try {
+      const rgba = new Uint8ClampedArray(width * height * 4);
       const pixels = pixmap.getPixels();
       const stride = pixmap.getStride();
+      const offsetX = bounds.x0 - pixmap.getX();
+      const offsetY = bounds.y0 - pixmap.getY();
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const source = (y + offsetY) * stride + (x + offsetX) * 3;
+          const target = (y * width + x) * 4;
+          rgba[target] = pixels[source];
+          rgba[target + 1] = pixels[source + 1];
+          rgba[target + 2] = pixels[source + 2];
+          rgba[target + 3] = 255;
+        }
+      }
+      return { rgba, width, height };
+    } finally {
+      pixmap.destroy();
+    }
+  }
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  const overprint = overprintMode > 0 && RENDERER_VERSION === 'mupdf-custom';
+  const colorspace = overprint ? mupdf.ColorSpace.DeviceCMYK : mupdf.ColorSpace.DeviceRGB;
+  const behaviors = separationBehaviors?.length ? Int32Array.from(separationBehaviors) : null;
+  for (const tile of planTiles(bounds, RENDER_TILE_EDGE)) {
+    const tileWidth = tile.x1 - tile.x0;
+    const tileHeight = tile.y1 - tile.y0;
+    const x0 = Math.max(bounds.x0, tile.x0 - RENDER_TILE_OVERSCAN);
+    const y0 = Math.max(bounds.y0, tile.y0 - RENDER_TILE_OVERSCAN);
+    const x1 = Math.min(bounds.x1, tile.x1 + RENDER_TILE_OVERSCAN);
+    const y1 = Math.min(bounds.y1, tile.y1 + RENDER_TILE_OVERSCAN);
+    const pixmap = page.toPixmapWithOverprintTile(
+      matrix,
+      colorspace,
+      [x0, y0, x1, y1],
+      false,
+      usage,
+      box,
+      overprintMode,
+      behaviors,
+    );
+    const rgb = overprint ? pixmap.toRgbWithProcessMask(normalizeProcessMask(processMask)) : pixmap;
+    try {
+      const pixels = rgb.getPixels();
+      const stride = rgb.getStride();
       const offsetX = tile.x0 - x0;
       const offsetY = tile.y0 - y0;
       const bufCol = tile.x0 - bounds.x0;
       const bufRow = tile.y0 - bounds.y0;
       for (let y = 0; y < tileHeight; y += 1) {
+        const source = (y + offsetY) * stride + offsetX * 3;
+        const target = ((bufRow + y) * width + bufCol) * 4;
         for (let x = 0; x < tileWidth; x += 1) {
-          const source = (y + offsetY) * stride + (x + offsetX) * components;
-          const target = ((bufRow + y) * width + (bufCol + x)) * components;
-          for (let c = 0; c < components; c += 1) {
-            out[target + c] = pixels[source + c];
-          }
+          const sourcePixel = source + x * 3;
+          const targetPixel = target + x * 4;
+          rgba[targetPixel] = pixels[sourcePixel];
+          rgba[targetPixel + 1] = pixels[sourcePixel + 1];
+          rgba[targetPixel + 2] = pixels[sourcePixel + 2];
+          rgba[targetPixel + 3] = 255;
         }
       }
+    } finally {
+      if (rgb !== pixmap) rgb.destroy();
       pixmap.destroy();
     }
-  } finally {
-    displayList.destroy();
-  }
-  if (overprint) {
-    const rgb = mupdf.convertCmykToRgb(width, height, out);
-    const rgba = new Uint8ClampedArray(width * height * 4);
-    for (let i = 0; i < width * height; i += 1) {
-      const s = i * 3;
-      const t = i * 4;
-      rgba[t] = rgb[s];
-      rgba[t + 1] = rgb[s + 1];
-      rgba[t + 2] = rgb[s + 2];
-      rgba[t + 3] = 255;
-    }
-    return { rgba, width, height };
-  }
-  const rgba = new Uint8ClampedArray(width * height * 4);
-  for (let i = 0; i < width * height; i += 1) {
-    const s = i * 3;
-    const t = i * 4;
-    rgba[t] = out[s];
-    rgba[t + 1] = out[s + 1];
-    rgba[t + 2] = out[s + 2];
-    rgba[t + 3] = 255;
   }
   return { rgba, width, height };
 }
@@ -306,8 +313,11 @@ async function handleRender(id, payload) {
     visibility = null,
     usage = 'Print',
     overprintMode = 0,
+    processMask = 15,
+    spotBehaviors = null,
     separationBehaviors = null,
   } = payload;
+  const effectiveSpotBehaviors = spotBehaviors ?? separationBehaviors;
   const document = getDocument(docId);
   const pdfDocument = document.isPDF() ? document.asPDF() : null;
   if (pdfDocument && visibility) {
@@ -338,24 +348,27 @@ async function handleRender(id, payload) {
     const bounds = snapRect(transformRect(unrotatedBox, mupdf.Matrix.concat(pageCtm, matrix)));
     const width = bounds.x1 - bounds.x0;
     const height = bounds.y1 - bounds.y0;
-    if (width * height > RENDER_MAX_PIXELS) {
-      throw new AppError('pdfRenderTooLarge', { width, height });
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new AppError('pdfRenderFailed', { reason: 'invalidBounds' });
     }
-
+    if (width * height > RENDER_MAX_PIXELS) {
+      throw new AppError('pdfRenderTooLarge', { width, height, maxPixels: RENDER_MAX_PIXELS });
+    }
     const tiled = width > RENDER_TILE_EDGE || height > RENDER_TILE_EDGE;
-    const overprintWithoutBehaviors = (
-      overprintMode > 0
-      && RENDERER_VERSION === 'mupdf-custom'
-      && (!separationBehaviors || separationBehaviors.length === 0)
-    );
-    const rendered = (overprintWithoutBehaviors || tiled)
-      ? renderTiled(page, matrix, bounds, overprintMode)
-      : renderSingle(page, matrix, usage, box, overprintMode, separationBehaviors);
+    const rendered = tiled
+      ? renderTiled(page, matrix, bounds, usage, box, overprintMode, processMask, effectiveSpotBehaviors)
+      : renderSingle(page, matrix, usage, box, overprintMode, processMask, effectiveSpotBehaviors);
     if (activeRenders.get(id)?.cancelled) return;
     const rgba = rendered.rgba;
     if (activeRenders.get(id)?.cancelled) return;
     const durationMs = Math.round(performance.now() - started);
-    sendOk(id, { rgba, width: rendered.width, height: rendered.height, durationMs }, [rgba.buffer]);
+    sendOk(id, {
+      rgba,
+      width: rendered.width,
+      height: rendered.height,
+      durationMs,
+      overprintApplied: overprintMode > 0 && RENDERER_VERSION === 'mupdf-custom',
+    }, [rgba.buffer]);
   } finally {
     activeRenders.delete(id);
     page.destroy();
@@ -368,12 +381,35 @@ async function handleSeparations(payload) {
   const page = document.loadPage(pageIndex);
   try {
     if (RENDERER_VERSION !== 'mupdf-custom' || typeof page.separationCount !== 'function') {
-      return { count: 0, names: [], coverage: [] };
+      return {
+        supported: false,
+        process: [],
+        spots: [],
+        count: 0,
+        names: [],
+        coverage: [],
+      };
     }
     const count = page.separationCount();
     const names = page.separationNames();
     const coverage = page.separationCoverage(overprintMode);
-    return { count, names, coverage };
+    const processNames = ['Cyan', 'Magenta', 'Yellow', 'Black'];
+    return {
+      supported: true,
+      process: processNames.map((name, index) => ({
+        index,
+        name,
+        coverage: coverage[index] ?? 0,
+      })),
+      spots: names.map((name, index) => ({
+        index,
+        name,
+        coverage: coverage[4 + index] ?? 0,
+      })),
+      count,
+      names,
+      coverage,
+    };
   } finally {
     page.destroy();
   }

@@ -1063,6 +1063,9 @@ export class Pixmap extends Userdata {
     toRgb() {
         return new Pixmap(libmupdf._wasm_convert_pixmap_to_rgb(this.pointer));
     }
+    toRgbWithProcessMask(processMask = 15) {
+        return new Pixmap(libmupdf._wasm_convert_pixmap_to_rgb_with_process_mask(this.pointer, processMask));
+    }
     asPSD() {
         let buf = libmupdf._wasm_new_buffer_from_pixmap_as_psd(this.pointer);
         try {
@@ -2272,6 +2275,26 @@ export class PDFPage extends Page {
         }
         try {
             let result = libmupdf._wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_behaviors(this.pointer, MATRIX(matrix), colorspace.pointer, alpha, STRING(usage), box_ix, overprintMode, bp, nbehaviors);
+            return new Pixmap(result);
+        }
+        finally {
+            if (bp)
+                libmupdf._wasm_free(bp);
+        }
+    }
+    toPixmapWithOverprintTile(matrix, colorspace, bbox, alpha = false, usage = "Print", box = "CropBox", overprintMode = 0, behaviors = null) {
+        checkMatrix(matrix);
+        checkType(colorspace, ColorSpace);
+        checkRect(bbox);
+        let box_ix = ENUM(box, Page.BOXES);
+        let nbehaviors = behaviors ? behaviors.length : 0;
+        let bp = 0;
+        if (behaviors && nbehaviors > 0) {
+            bp = libmupdf._wasm_malloc(nbehaviors * 4);
+            libmupdf.HEAP32.set(behaviors, bp >> 2);
+        }
+        try {
+            let result = libmupdf._wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_tile(this.pointer, MATRIX(matrix), colorspace.pointer, alpha, STRING(usage), box_ix, overprintMode, bp, nbehaviors, Math.floor(bbox[0]), Math.floor(bbox[1]), Math.ceil(bbox[2]), Math.ceil(bbox[3]));
             return new Pixmap(result);
         }
         finally {

@@ -126,6 +126,10 @@ describe('renderCacheKey', () => {
     expect(renderCacheKey({ ...base, scale: 2 })).not.toBe(renderCacheKey(base));
     expect(renderCacheKey({ ...base, visibility: { '0': false } }))
       .not.toBe(renderCacheKey({ ...base, visibility: { '0': true } }));
+    expect(renderCacheKey({ ...base, processMask: 1 }))
+      .not.toBe(renderCacheKey({ ...base, processMask: 15 }));
+    expect(renderCacheKey({ ...base, separationBehaviors: [1] }))
+      .not.toBe(renderCacheKey({ ...base, separationBehaviors: [2] }));
   });
 });
 

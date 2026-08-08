@@ -1,0 +1,702 @@
+diff --git a/platform/wasm/lib/mupdf.c b/platform/wasm/lib/mupdf.c
+index 26c9845..62737a9 100644
+--- a/platform/wasm/lib/mupdf.c
++++ b/platform/wasm/lib/mupdf.c
+@@ -529,6 +529,418 @@ fz_pixmap * wasm_pdf_new_pixmap_from_page_contents_with_usage(pdf_page *page, fz
+ 	POINTER(pdf_new_pixmap_from_page_contents_with_usage, page, *ctm, colorspace, alpha, usage, box)
+ }
+ 
++EXPORT
++int wasm_page_uses_overprint(pdf_page *page)
++{
++	return fz_page_uses_overprint(ctx, &page->super);
++}
++
++static fz_pixmap *
++wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_imp(pdf_page *page, fz_matrix *ctm, fz_colorspace *colorspace, boolean alpha, char *usage, int box, int overprint_mode, int contents_only)
++{
++	fz_separations *seps = NULL;
++	fz_pixmap *pix = NULL;
++	fz_var(seps);
++	fz_var(pix);
++	fz_try(ctx)
++	{
++		if (overprint_mode > 0)
++		{
++			seps = pdf_page_separations(ctx, page);
++			if (seps)
++			{
++				int i;
++				int n = fz_count_separations(ctx, seps);
++				if (overprint_mode == 2)
++					for (i = 0; i < n; i++)
++						fz_set_separation_behavior(ctx, seps, i, FZ_SEPARATION_SPOT);
++				else
++					for (i = 0; i < n; i++)
++						fz_set_separation_behavior(ctx, seps, i, FZ_SEPARATION_COMPOSITE);
++			}
++			if (!seps)
++			{
++				seps = fz_new_separations(ctx, 0);
++			}
++		}
++		if (contents_only)
++			pix = pdf_new_pixmap_from_page_contents_with_separations_and_usage(ctx, page, *ctm, colorspace, seps, alpha, usage, box);
++		else
++			pix = pdf_new_pixmap_from_page_with_separations_and_usage(ctx, page, *ctm, colorspace, seps, alpha, usage, box);
++	}
++	fz_always(ctx)
++	{
++		fz_drop_separations(ctx, seps);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_pixmap(ctx, pix);
++		wasm_rethrow(ctx);
++	}
++	return pix;
++}
++
++static fz_separations *
++wasm_make_separations(pdf_page *page, int overprint_mode, int *behaviors, int nbehaviors)
++{
++	fz_separations *seps = NULL;
++	fz_var(seps);
++	fz_try(ctx)
++	{
++		if (overprint_mode > 0)
++			seps = pdf_page_separations(ctx, page);
++		if (seps)
++		{
++			int i, n = fz_count_separations(ctx, seps);
++			for (i = 0; i < n; i++)
++			{
++				int behavior;
++				if (behaviors && i < nbehaviors)
++					behavior = behaviors[i];
++				else
++					behavior = overprint_mode == 2 ? FZ_SEPARATION_SPOT : FZ_SEPARATION_COMPOSITE;
++				fz_set_separation_behavior(ctx, seps, i, (fz_separation_behavior)behavior);
++			}
++		}
++		if (overprint_mode > 0 && !seps)
++			seps = fz_new_separations(ctx, 0);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_separations(ctx, seps);
++		wasm_rethrow(ctx);
++	}
++	return seps;
++}
++
++static fz_pixmap *
++wasm_render_tile(pdf_page *page, fz_matrix ctm, fz_colorspace *colorspace, boolean alpha, const char *usage, int box, int overprint_mode, int *behaviors, int nbehaviors, fz_irect bbox)
++{
++	fz_separations *seps = NULL;
++	fz_pixmap *pix = NULL;
++	fz_device *dev = NULL;
++	fz_var(seps);
++	fz_var(pix);
++	fz_var(dev);
++	fz_try(ctx)
++	{
++		seps = wasm_make_separations(page, overprint_mode, behaviors, nbehaviors);
++		pix = fz_new_pixmap_with_bbox(ctx, colorspace, bbox, seps, alpha);
++		fz_clear_pixmap(ctx, pix);
++		dev = fz_new_draw_device(ctx, ctm, pix);
++		pdf_run_page_with_usage(ctx, page, dev, fz_identity, usage, NULL);
++		fz_close_device(ctx, dev);
++	}
++	fz_always(ctx)
++	{
++		fz_drop_device(ctx, dev);
++		fz_drop_separations(ctx, seps);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_pixmap(ctx, pix);
++		wasm_rethrow(ctx);
++	}
++	return pix;
++}
++
++EXPORT
++fz_pixmap * wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_tile(pdf_page *page, fz_matrix *ctm, fz_colorspace *colorspace, boolean alpha, char *usage, int box, int overprint_mode, int *behaviors, int nbehaviors, int x0, int y0, int x1, int y1)
++{
++	return wasm_render_tile(page, *ctm, colorspace, alpha, usage, box, overprint_mode, behaviors, nbehaviors, fz_make_irect(x0, y0, x1, y1));
++}
++
++EXPORT
++fz_pixmap * wasm_pdf_new_pixmap_from_page_with_usage_and_overprint(pdf_page *page, fz_matrix *ctm, fz_colorspace *colorspace, boolean alpha, char *usage, int box, int overprint_mode)
++{
++	return wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_imp(page, ctm, colorspace, alpha, usage, box, overprint_mode, 0);
++}
++
++EXPORT
++fz_pixmap * wasm_pdf_new_pixmap_from_page_contents_with_usage_and_overprint(pdf_page *page, fz_matrix *ctm, fz_colorspace *colorspace, boolean alpha, char *usage, int box, int overprint_mode)
++{
++	return wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_imp(page, ctm, colorspace, alpha, usage, box, overprint_mode, 1);
++}
++
++EXPORT
++fz_pixmap * wasm_convert_pixmap_to_rgb(fz_pixmap *pix)
++{
++	fz_pixmap *out = NULL;
++	fz_var(out);
++	fz_try(ctx)
++	{
++		out = fz_convert_pixmap(ctx, pix, fz_device_rgb(ctx), NULL, NULL, fz_default_color_params, 0);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_pixmap(ctx, out);
++		wasm_rethrow(ctx);
++	}
++	return out;
++}
++
++EXPORT
++fz_pixmap * wasm_convert_pixmap_to_rgb_with_process_mask(fz_pixmap *pix, int process_mask)
++{
++	fz_pixmap *masked = NULL;
++	fz_pixmap *converted = NULL;
++	fz_pixmap *out = NULL;
++	fz_var(masked);
++	fz_var(converted);
++	fz_var(out);
++	fz_try(ctx)
++	{
++		fz_irect bbox = fz_make_irect(pix->x, pix->y, pix->x + pix->w, pix->y + pix->h);
++		masked = fz_new_pixmap_with_bbox(ctx, pix->colorspace, bbox, pix->seps, pix->alpha);
++		masked->xres = pix->xres;
++		masked->yres = pix->yres;
++		{
++			int y, x, c, process = fz_colorspace_n(ctx, pix->colorspace);
++			memcpy(masked->samples, pix->samples, (size_t)pix->stride * (size_t)pix->h);
++			if (process > 4) process = 4;
++			for (y = 0; y < pix->h; y++)
++			{
++				unsigned char *row = masked->samples + (size_t)y * (size_t)masked->stride;
++				for (x = 0; x < pix->w; x++)
++				{
++					unsigned char *sample = row + (size_t)x * (size_t)masked->n;
++					for (c = 0; c < process; c++)
++						if ((process_mask & (1 << c)) == 0)
++							sample[c] = 0;
++				}
++			}
++		}
++		converted = fz_convert_pixmap(ctx, masked, fz_device_rgb(ctx), NULL, NULL, fz_default_color_params, 0);
++		/* fz_convert_pixmap may keep spot channels alongside RGB. The preview
++		 * protocol is RGBA, so resolve spots in MuPDF first and then expose only
++		 * RGB (+ alpha when requested), never a spot channel as fake alpha. */
++		if (converted->n == 3 + converted->alpha)
++		{
++			out = converted;
++			converted = NULL;
++		}
++		else
++		{
++			int y, x;
++			fz_irect bbox = fz_make_irect(converted->x, converted->y, converted->x + converted->w, converted->y + converted->h);
++			out = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, converted->alpha);
++			for (y = 0; y < converted->h; y++)
++			{
++				unsigned char *src = converted->samples + (size_t)y * (size_t)converted->stride;
++				unsigned char *dst = out->samples + (size_t)y * (size_t)out->stride;
++				for (x = 0; x < converted->w; x++)
++				{
++					dst[0] = src[0];
++					dst[1] = src[1];
++					dst[2] = src[2];
++					if (converted->alpha)
++						dst[3] = src[converted->n - 1];
++					src += converted->n;
++					dst += out->n;
++				}
++			}
++		}
++	}
++	fz_always(ctx)
++	{
++		fz_drop_pixmap(ctx, masked);
++		fz_drop_pixmap(ctx, converted);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_pixmap(ctx, out);
++		wasm_rethrow(ctx);
++	}
++	return out;
++}
++
++EXPORT
++int wasm_pdf_page_separations_count(pdf_page *page)
++{
++	fz_separations *seps = NULL;
++	int n = 0;
++	fz_try(ctx)
++	{
++		seps = pdf_page_separations(ctx, page);
++		n = seps ? fz_count_separations(ctx, seps) : 0;
++	}
++	fz_always(ctx)
++	{
++		fz_drop_separations(ctx, seps);
++	}
++	fz_catch(ctx)
++	{
++		wasm_rethrow(ctx);
++	}
++	return n;
++}
++
++EXPORT
++void wasm_pdf_page_separation_names(pdf_page *page, char *out, int buflen)
++{
++	fz_separations *seps = NULL;
++	fz_try(ctx)
++	{
++		seps = pdf_page_separations(ctx, page);
++		if (seps)
++		{
++			int n = fz_count_separations(ctx, seps);
++			char *p = out;
++			int i;
++			for (i = 0; i < n && p < out + buflen - 1; i++)
++			{
++				const char *name = fz_separation_name(ctx, seps, i);
++				int len = name ? (int)strlen(name) : 0;
++				if (p + len + 1 > out + buflen)
++					break;
++				if (name)
++					memcpy(p, name, len);
++				p += len;
++				*p++ = '\0';
++			}
++			*p = '\0';
++		}
++	}
++	fz_always(ctx)
++	{
++		fz_drop_separations(ctx, seps);
++	}
++	fz_catch(ctx)
++	{
++		wasm_rethrow(ctx);
++	}
++}
++
++EXPORT
++void wasm_pdf_page_separation_coverage(pdf_page *page, int *out, int outlen, int overprint_mode)
++{
++	fz_separations *seps = NULL;
++	fz_pixmap *pix = NULL;
++	fz_try(ctx)
++	{
++		seps = pdf_page_separations(ctx, page);
++		if (seps)
++		{
++			int i, n = fz_count_separations(ctx, seps);
++			for (i = 0; i < n; i++)
++			{
++				int b = FZ_SEPARATION_COMPOSITE;
++				if (overprint_mode == 2)
++					b = FZ_SEPARATION_SPOT;
++				fz_set_separation_behavior(ctx, seps, i, b);
++			}
++		}
++		else if (overprint_mode > 0 && fz_page_uses_overprint(ctx, &page->super))
++		{
++			seps = fz_new_separations(ctx, 0);
++		}
++		pix = pdf_new_pixmap_from_page_with_separations_and_usage(ctx, page, fz_identity, fz_device_cmyk(ctx), seps, 0, "Print", FZ_CROP_BOX);
++		{
++			int w = pix->w;
++			int h = pix->h;
++			int n = pix->n;
++			int spots = pix->s;
++			int i, c, x, y;
++			int process[4] = { 0, 0, 0, 0 };
++			int total = w * h;
++			unsigned char *samples = pix->samples;
++			int stride = pix->stride;
++			for (i = 0; i < outlen; i++)
++				out[i] = 0;
++			for (y = 0; y < h; y++)
++			{
++				for (x = 0; x < w; x++)
++				{
++					unsigned char *s = samples + y * stride + x * n;
++					for (c = 0; c < 4 && c < outlen; c++)
++						if (s[c] > 0)
++							process[c]++;
++					for (i = 0; i < spots && 4 + i < outlen; i++)
++						if (s[4 + i] > 0)
++							out[4 + i] += 1;
++				}
++			}
++			for (c = 0; c < 4 && c < outlen; c++)
++				out[c] = (int)((process[c] * 100 + total / 2) / total);
++			for (i = 0; i < spots && 4 + i < outlen; i++)
++				out[4 + i] = (int)((out[4 + i] * 100 + total / 2) / total);
++		}
++	}
++	fz_always(ctx)
++	{
++		fz_drop_pixmap(ctx, pix);
++		fz_drop_separations(ctx, seps);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_pixmap(ctx, pix);
++		fz_drop_separations(ctx, seps);
++		wasm_rethrow(ctx);
++	}
++}
++
++EXPORT
++fz_pixmap * wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_behaviors(pdf_page *page, fz_matrix *ctm, fz_colorspace *colorspace, boolean alpha, char *usage, int box, int overprint_mode, int *behaviors, int nbehaviors)
++{
++	fz_separations *seps = NULL;
++	fz_pixmap *pix = NULL;
++	fz_var(seps);
++	fz_var(pix);
++	fz_try(ctx)
++	{
++		seps = pdf_page_separations(ctx, page);
++		if (seps)
++		{
++			int i, n = fz_count_separations(ctx, seps);
++			for (i = 0; i < n; i++)
++			{
++				int behavior = (i < nbehaviors) ? behaviors[i] : FZ_SEPARATION_COMPOSITE;
++				fz_set_separation_behavior(ctx, seps, i, behavior);
++			}
++		}
++		if (overprint_mode > 0 && !seps)
++		{
++			seps = fz_new_separations(ctx, 0);
++		}
++		pix = pdf_new_pixmap_from_page_with_separations_and_usage(ctx, page, *ctm, colorspace, seps, alpha, usage, box);
++	}
++	fz_always(ctx)
++	{
++		fz_drop_separations(ctx, seps);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_pixmap(ctx, pix);
++		wasm_rethrow(ctx);
++	}
++	return pix;
++}
++
++EXPORT
++void wasm_convert_cmyk_buffer_to_rgb(int width, int height, unsigned char *cmyk, unsigned char *rgb)
++{
++	fz_pixmap *src = NULL;
++	fz_pixmap *dst = NULL;
++	fz_var(src);
++	fz_var(dst);
++	fz_try(ctx)
++	{
++		src = fz_new_pixmap_with_bbox(ctx, fz_device_cmyk(ctx), fz_make_irect(0, 0, width, height), NULL, 0);
++		memcpy(src->samples, cmyk, (size_t)width * (size_t)height * 4);
++		dst = fz_convert_pixmap(ctx, src, fz_device_rgb(ctx), NULL, NULL, fz_default_color_params, 0);
++		memcpy(rgb, dst->samples, (size_t)width * (size_t)height * 3);
++	}
++	fz_always(ctx)
++	{
++		fz_drop_pixmap(ctx, src);
++		fz_drop_pixmap(ctx, dst);
++	}
++	fz_catch(ctx)
++	{
++		wasm_rethrow(ctx);
++	}
++}
++
+ EXPORT
+ fz_pixmap * wasm_new_pixmap_with_bbox(fz_colorspace *colorspace, fz_rect *bbox, boolean alpha)
+ {
+diff --git a/platform/wasm/lib/mupdf.ts b/platform/wasm/lib/mupdf.ts
+index dcf2a16..d776374 100644
+--- a/platform/wasm/lib/mupdf.ts
++++ b/platform/wasm/lib/mupdf.ts
+@@ -231,6 +231,21 @@ export function disableICC() {
+ 	libmupdf._wasm_disable_icc()
+ }
+ 
++export function convertCmykToRgb(width: number, height: number, cmyk: Uint8Array): Uint8Array {
++	let src = libmupdf._wasm_malloc(cmyk.length)
++	let dst = libmupdf._wasm_malloc(width * height * 3)
++	libmupdf.HEAPU8.set(cmyk, src)
++	libmupdf._wasm_convert_cmyk_buffer_to_rgb(
++		width,
++		height,
++		src as unknown as Pointer<"char">,
++		dst as unknown as Pointer<"char">)
++	let out = new Uint8Array(libmupdf.HEAPU8.subarray(dst, dst + width * height * 3))
++	libmupdf._wasm_free(src)
++	libmupdf._wasm_free(dst)
++	return out
++}
++
+ export function setUserCSS(text: string) {
+ 	libmupdf._wasm_set_user_css(STRING(text))
+ }
+@@ -1426,6 +1441,14 @@ export class Pixmap extends Userdata<"fz_pixmap"> {
+ 		}
+ 	}
+ 
++	toRgb() {
++		return new Pixmap(libmupdf._wasm_convert_pixmap_to_rgb(this.pointer))
++	}
++
++	toRgbWithProcessMask(processMask = 15) {
++		return new Pixmap(libmupdf._wasm_convert_pixmap_to_rgb_with_process_mask(this.pointer, processMask))
++	}
++
+ 	asPSD() {
+ 		let buf = libmupdf._wasm_new_buffer_from_pixmap_as_psd(this.pointer)
+ 		try {
+@@ -2970,6 +2993,10 @@ export class PDFPage extends Page {
+ 		return fromMatrix(libmupdf._wasm_pdf_page_transform(this.pointer))
+ 	}
+ 
++	pageUsesOverprint() {
++		return !!libmupdf._wasm_page_uses_overprint(this.pointer)
++	}
++
+ 	setPageBox(box: PageBox, rect: Rect) {
+ 		let box_ix = ENUM<PageBox>(box, Page.BOXES)
+ 		checkRect(rect)
+@@ -2998,6 +3025,125 @@ export class PDFPage extends Page {
+ 		return new Pixmap(result)
+ 	}
+ 
++	toPixmapWithOverprint(matrix: Matrix, colorspace: ColorSpace, alpha = false, showExtras = true, usage = "Print", box: PageBox = "CropBox", overprintMode = 0) {
++		checkMatrix(matrix)
++		checkType(colorspace, ColorSpace)
++		let box_ix = ENUM<PageBox>(box, Page.BOXES)
++		let result
++		if (showExtras)
++			result = libmupdf._wasm_pdf_new_pixmap_from_page_with_usage_and_overprint(this.pointer,
++				MATRIX(matrix),
++				colorspace.pointer,
++				alpha,
++				STRING(usage),
++				box_ix,
++				overprintMode)
++		else
++			result = libmupdf._wasm_pdf_new_pixmap_from_page_contents_with_usage_and_overprint(this.pointer,
++				MATRIX(matrix),
++				colorspace.pointer,
++				alpha,
++				STRING(usage),
++				box_ix,
++				overprintMode)
++		return new Pixmap(result)
++	}
++
++	toPixmapWithOverprintAndBehaviors(matrix: Matrix, colorspace: ColorSpace, alpha = false, usage = "Print", box: PageBox = "CropBox", overprintMode = 0, behaviors: Int32Array | null = null) {
++		checkMatrix(matrix)
++		checkType(colorspace, ColorSpace)
++		let box_ix = ENUM<PageBox>(box, Page.BOXES)
++		let nbehaviors = behaviors ? behaviors.length : 0
++		let bp = 0
++		if (behaviors && nbehaviors > 0) {
++			bp = libmupdf._wasm_malloc(nbehaviors * 4)
++			libmupdf.HEAP32.set(behaviors, bp >> 2)
++		}
++		try {
++			let result = libmupdf._wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_behaviors(this.pointer,
++				MATRIX(matrix),
++				colorspace.pointer,
++				alpha,
++				STRING(usage),
++				box_ix,
++				overprintMode,
++				bp as unknown as Pointer<"int">,
++				nbehaviors)
++			return new Pixmap(result)
++		} finally {
++			if (bp) libmupdf._wasm_free(bp as unknown as Pointer<"void">)
++		}
++	}
++
++	toPixmapWithOverprintTile(matrix: Matrix, colorspace: ColorSpace, bbox: Rect, alpha = false, usage = "Print", box: PageBox = "CropBox", overprintMode = 0, behaviors: Int32Array | null = null) {
++		checkMatrix(matrix)
++		checkType(colorspace, ColorSpace)
++		checkRect(bbox)
++		let box_ix = ENUM<PageBox>(box, Page.BOXES)
++		let nbehaviors = behaviors ? behaviors.length : 0
++		let bp = 0
++		if (behaviors && nbehaviors > 0) {
++			bp = libmupdf._wasm_malloc(nbehaviors * 4)
++			libmupdf.HEAP32.set(behaviors, bp >> 2)
++		}
++		try {
++			let result = libmupdf._wasm_pdf_new_pixmap_from_page_with_usage_and_overprint_tile(this.pointer,
++				MATRIX(matrix),
++				colorspace.pointer,
++				alpha,
++				STRING(usage),
++				box_ix,
++				overprintMode,
++				bp as unknown as Pointer<"int">,
++				nbehaviors,
++				Math.floor(bbox[0]), Math.floor(bbox[1]), Math.ceil(bbox[2]), Math.ceil(bbox[3]))
++			return new Pixmap(result)
++		} finally {
++			if (bp) libmupdf._wasm_free(bp as unknown as Pointer<"void">)
++		}
++	}
++
++	separationCount(): number {
++		return libmupdf._wasm_pdf_page_separations_count(this.pointer)
++	}
++
++	separationNames(): string[] {
++		let count = this.separationCount()
++		if (count === 0) return []
++		let buflen = (count + 1) * 64
++		let buf = libmupdf._wasm_malloc(buflen)
++		let decoder = new TextDecoder()
++		let names: string[] = []
++		try {
++			libmupdf._wasm_pdf_page_separation_names(this.pointer, buf as unknown as Pointer<"char">, buflen)
++			let bytes = libmupdf.HEAPU8.subarray(buf, buf + buflen)
++			let start = 0
++			for (let i = 0; i < bytes.length && names.length < count; i++) {
++				if (bytes[i] === 0) {
++					if (i > start) names.push(decoder.decode(bytes.subarray(start, i)))
++					start = i + 1
++				}
++			}
++		} finally {
++			libmupdf._wasm_free(buf)
++		}
++		return names
++	}
++
++	separationCoverage(overprintMode = 0): number[] {
++		let count = this.separationCount()
++		let total = 4 + count
++		let buf = libmupdf._wasm_malloc(total * 4)
++		try {
++			libmupdf._wasm_pdf_page_separation_coverage(this.pointer, buf as unknown as Pointer<"int">, total, overprintMode)
++			let out: number[] = []
++			for (let i = 0; i < total; i++) out.push(libmupdf.HEAP32[(buf >> 2) + i] as number)
++			return out
++		} finally {
++			libmupdf._wasm_free(buf)
++		}
++	}
++
+ 	getWidgets() {
+ 		if (!this._widgets) {
+ 			this._widgets = []
+diff --git a/source/fitz/draw-device.c b/source/fitz/draw-device.c
+index 3c62cad..a4c977b 100644
+--- a/source/fitz/draw-device.c
++++ b/source/fitz/draw-device.c
+@@ -436,6 +436,8 @@ colors_supported(fz_context *ctx, fz_colorspace *cs, fz_pixmap *dest)
+ 	return 0;
+ }
+ 
++static const char *cmyk_colorant_names[4] = { "Cyan", "Magenta", "Yellow", "Black" };
++
+ static int
+ cs_has_matching_colorant(fz_context *ctx, fz_colorspace *src, const char *name)
+ {
+@@ -444,6 +446,10 @@ cs_has_matching_colorant(fz_context *ctx, fz_colorspace *src, const char *name)
+ 	for (i = 0; i < sn; i++)
+ 	{
+ 		const char *sname = fz_colorspace_colorant(ctx, src, i);
++		if (!sname && fz_colorspace_is_cmyk(ctx, src))
++		{
++			if (i < 4) sname = cmyk_colorant_names[i];
++		}
+ 		if (!sname)
+ 			continue;
+ 		if (name && !strcmp(name, sname))
+@@ -503,6 +509,10 @@ set_op_from_spaces(fz_context *ctx, fz_overprint *op, const fz_pixmap *dest, fz_
+ 		/* Run through the colorants looking for one that isn't mentioned.
+ 		 * i.e. continue if we we find one, break if not. */
+ 		const char *sname = fz_colorspace_colorant(ctx, src, j);
++		if (!sname && fz_colorspace_is_cmyk(ctx, src))
++		{
++			if (j < 4) sname = cmyk_colorant_names[j];
++		}
+ 		if (!sname)
+ 			break;
+ 		if (!strcmp(sname, "All") || !strcmp(sname, "None"))
+@@ -590,6 +600,8 @@ resolve_color(fz_context *ctx,
+ 	fz_colorspace *model = dest->colorspace;
+ 	int devn, devgray;
+ 	int effective_opm;
++	int src_is_cmyk;
++	int dst_is_cmyk;
+ 
+ 	if (colorspace == NULL && model != NULL)
+ 		fz_throw(ctx, FZ_ERROR_ARGUMENT, "color destination requires source color");
+@@ -597,6 +609,8 @@ resolve_color(fz_context *ctx,
+ 	effective_opm = color_params.opm;
+ 	devn = fz_colorspace_is_device_n(ctx, colorspace);
+ 	devgray = fz_colorspace_is_device_gray(ctx, colorspace);
++	src_is_cmyk = fz_colorspace_is_cmyk(ctx, colorspace);
++	dst_is_cmyk = fz_colorspace_is_cmyk(ctx, dest->colorspace);
+ 
+ 	/* We can only overprint when enabled, and when we are in a subtractive colorspace */
+ 	if (color_params.op == 0 || !fz_colorspace_is_subtractive(ctx, dest->colorspace) || !overprint_possible)
+@@ -614,7 +628,8 @@ resolve_color(fz_context *ctx,
+ 	/* FIXME: Possibly we need a better equivalency test here. */
+ 	else if (!devn && colorspace != dest->colorspace)
+ 	{
+-		effective_opm = 0;
++		if (!(src_is_cmyk && dst_is_cmyk))
++			effective_opm = 0;
+ 	}
+ 
+ 	if (n == 0)
+@@ -649,9 +664,21 @@ resolve_color(fz_context *ctx,
+ 		/* If OPM, then protect all components for which the color values are zero.
+ 		 * (but only if we're in devicecmyk). */
+ 		if (effective_opm == 1 && colorspace != fz_device_gray(ctx))
++		{
+ 			for (i = 0; i < n; i++)
+-				if (colorfv[i] == 0)
+-					fz_set_overprint(op, i);
++			{
++				if (src_is_cmyk && dst_is_cmyk && i < fz_colorspace_n(ctx, colorspace))
++				{
++					if (color[i] < 0.001f)
++						fz_set_overprint(op, i);
++				}
++				else
++				{
++					if (color[i] < 0.001f || colorfv[i] < 0.01f)
++						fz_set_overprint(op, i);
++				}
++			}
++		}
+ 	}
+ 
+ 	return op;
+diff --git a/source/pdf/pdf-page.c b/source/pdf/pdf-page.c
+index 64edbb1..0033494 100644
+--- a/source/pdf/pdf-page.c
++++ b/source/pdf/pdf-page.c
+@@ -536,6 +536,9 @@ static int
+ pdf_extgstate_uses_overprint(fz_context *ctx, pdf_obj *dict)
+ {
+ 	pdf_obj *obj = pdf_dict_get(ctx, dict, PDF_NAME(OP));
++	if (obj && pdf_to_bool(ctx, obj))
++		return 1;
++	obj = pdf_dict_get(ctx, dict, PDF_NAME(op));
+ 	if (obj && pdf_to_bool(ctx, obj))
+ 		return 1;
+ 	return 0;

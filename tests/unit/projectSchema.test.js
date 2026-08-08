@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { sha256 } from '../../src/artwork/fileValidation.js';
+import { ArtworkModel } from '../../src/artwork/ArtworkModel.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import {
   CURRENT_PROJECT_SCHEMA_VERSION,
@@ -178,7 +179,7 @@ describe('project schema', () => {
 
     const migrated = migrateProjectSnapshot(v8);
 
-    expect(migrated.schemaVersion).toBe(10);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(migrated.render.output).toMatchObject({
       kind: 'image',
       sequence: { frames: 36, longEdge: 1024, format: 'png' },
@@ -320,5 +321,24 @@ describe('project schema', () => {
     expect(valid.snapshot.artworks).toEqual([]);
     expect(valid.snapshot.activeArtworkIndex).toBe(-1);
     expect(valid.artworkBlobs).toEqual([]);
+  });
+
+  it('migrates flat separation visibility into process and spot plates', async () => {
+    const { snapshot } = await createBundle();
+    snapshot.schemaVersion = 11;
+    snapshot.artworks = [{
+      artwork: { ...snapshot.artwork, pdfSeparationVisibility: { '0': false } },
+      visible: true,
+    }];
+    const migrated = migrateProjectSnapshot(snapshot);
+    expect(migrated.artworks[0].artwork.pdfSeparationVisibility).toEqual({
+      process: [true, true, true, true],
+      spots: { '0': false },
+    });
+    const model = new ArtworkModel(migrated.artworks[0].artwork);
+    expect(model.toJSON().pdfSeparationVisibility).toEqual({
+      process: [true, true, true, true],
+      spots: { '0': false },
+    });
   });
 });
