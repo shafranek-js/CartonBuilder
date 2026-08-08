@@ -360,8 +360,14 @@ export async function validateProjectBundle({
     }
 
     const detectedOriginalType = await detectBlobType(entry.originalBlob);
-    if (!detectedOriginalType || detectedOriginalType !== source.mimeType) {
+    if (!detectedOriginalType) {
       throw new AppError('projectArtworkTypeMismatch');
+    }
+    if (detectedOriginalType !== source.mimeType) {
+      // The blob bytes are archive-verified; a stale or browser-supplied
+      // mimeType (e.g. an empty type on .ai imports) should be corrected
+      // rather than rejected so the project can be restored.
+      source.mimeType = detectedOriginalType;
     }
 
     const detectedPreviewType = await detectBlobType(entry.previewBlob);

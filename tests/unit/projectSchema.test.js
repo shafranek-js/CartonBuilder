@@ -267,6 +267,18 @@ describe('project schema', () => {
       },
     });
     expect(missingHash.snapshot.artworks[0].artwork.source.sha256).toBe(expectedHash);
+
+    const staleType = await validateProjectBundle({
+      ...bundle,
+      snapshot: {
+        ...bundle.snapshot,
+        artwork: {
+          ...bundle.snapshot.artwork,
+          source: { ...bundle.snapshot.artwork.source, mimeType: 'application/postscript' },
+        },
+      },
+    });
+    expect(staleType.snapshot.artworks[0].artwork.source.mimeType).toBe('image/png');
   });
 
   it('validates multiple artworks with aligned blobs', async () => {

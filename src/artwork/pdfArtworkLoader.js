@@ -163,6 +163,7 @@ export async function loadPdfArtwork(file, {
       heightPx: rendered.height,
       previewWidthPx: rendered.width,
       previewHeightPx: rendered.height,
+      mimeType: 'application/pdf',
       sha256: sourceHash,
       pageIndex,
       pageCount,
