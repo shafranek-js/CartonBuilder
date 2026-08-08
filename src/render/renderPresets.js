@@ -1,6 +1,26 @@
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from './RenderSettings.js';
+import leftViewPresetJson from '../../Preset left view.json?raw';
+import rightViewPresetJson from '../../Preset right vew.json?raw';
 
 const BASE = DEFAULT_RENDER_SETTINGS;
+
+function readImportedRenderSettings(raw, presetId) {
+  try {
+    const parsed = JSON.parse(raw);
+    const settings = parsed?.renderSettings || parsed;
+    return Object.freeze({
+      ...settings,
+      presetId,
+      activeViewPresetId: '',
+      viewPresetBaseId: '',
+    });
+  } catch {
+    return Object.freeze({ presetId });
+  }
+}
+
+const LEFT_VIEW_SETTINGS = readImportedRenderSettings(leftViewPresetJson, 'left-view');
+const RIGHT_VIEW_SETTINGS = readImportedRenderSettings(rightViewPresetJson, 'right-view');
 
 export const RENDER_PRESET_DEFINITIONS = Object.freeze({
   'clean-studio': Object.freeze({
@@ -80,6 +100,14 @@ export const RENDER_PRESET_DEFINITIONS = Object.freeze({
       lighting: { environment: 'warm', environmentIntensity: 0.5, azimuth: 35, elevation: 50, intensity: 1.8, exposure: 0.85 },
       shadows: { enabled: true, intensity: 0.3, blur: 3 }, floor: { reflection: { enabled: false } },
     }),
+  }),
+  'left-view': Object.freeze({
+    labelKey: 'renderPresetLeftView',
+    settings: LEFT_VIEW_SETTINGS,
+  }),
+  'right-view': Object.freeze({
+    labelKey: 'renderPresetRightView',
+    settings: RIGHT_VIEW_SETTINGS,
   }),
 });
 

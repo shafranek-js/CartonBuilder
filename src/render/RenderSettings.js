@@ -21,7 +21,16 @@ export const RENDER_GLB_TEXTURE_SIZES = Object.freeze(['auto', 1024, 2048, 4096]
 export const RENDER_GLB_MATERIAL_MODES = Object.freeze(['full-pbr', 'basic-compatibility']);
 
 export const RENDER_MATERIAL_PROFILES = Object.freeze(['uncoated', 'matte', 'gloss']);
-export const RENDER_PRESETS = Object.freeze(['clean-studio', 'catalogue', 'soft-grey', 'transparent', 'glossy-product', 'warm-retail']);
+export const RENDER_PRESETS = Object.freeze([
+  'clean-studio',
+  'catalogue',
+  'soft-grey',
+  'transparent',
+  'glossy-product',
+  'warm-retail',
+  'left-view',
+  'right-view',
+]);
 export const HTML_EXPORT_QUALITY_OPTIONS = Object.freeze(['auto', 600, 1200, 2400]);
 export const RENDER_CAMERA_PRESETS = Object.freeze([
   'back',

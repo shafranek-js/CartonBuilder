@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "exportedAt": "2026-08-08T17:40:34.268Z",
+  "renderSettings": {
+    "presetId": "glossy-product",
+    "aspect": "landscape",
+    "longEdge": 4096,
+    "camera": {
+      "preset": "custom",
+      "projection": "perspective",
+      "fov": 20,
+      "focalLength": 68.05538183541252,
+      "lens": "custom",
+      "heading": 19.68414779499409,
+      "elevation": 10.953797962857154,
+      "horizontalPan": 0,
+      "verticalPan": 0,
+      "cameraDistance": 423.2512477033136,
+      "frameHeight": 4,
+      "orthographicHeight": 4,
+      "verticalCorrection": false,
+      "keepVerticalsParallel": false,
+      "position": [
+        133.03522001975094,
+        76.47977207461359,
+        374.4701988362253
+      ],
+      "target": [
+        -6.933071063953066,
+        -3.9453173650624507,
+        -16.78713484857525
+      ]
+    },
+    "activeViewPresetId": "",
+    "viewPresetBaseId": "",
+    "background": {
+      "mode": "transparent",
+      "color": "#eef0f1",
+      "image": {
+        "assetId": "",
+        "fileName": "",
+        "mimeType": "",
+        "width": 0,
+        "height": 0,
+        "fit": "cover",
+        "positionX": 0.5,
+        "positionY": 0.5,
+        "zoom": 1,
+        "blur": 0,
+        "brightness": 1,
+        "overlayColor": "#000000",
+        "overlayOpacity": 0
+      }
+    },
+    "lighting": {
+      "azimuth": 48,
+      "elevation": 55,
+      "intensity": 2,
+      "environment": "studio",
+      "environmentIntensity": 0.5,
+      "environmentMap": {
+        "source": "builtin",
+        "presetId": "neutral-softbox",
+        "assetId": "",
+        "usage": "lighting",
+        "rotation": 0,
+        "intensity": 0.4,
+        "backgroundIntensity": 1,
+        "backgroundBlur": 0,
+        "resolutionCap": 2048
+      },
+      "exposure": 0.85
+    },
+    "shadows": {
+      "enabled": false,
+      "intensity": 0,
+      "blur": 0,
+      "mapSize": 1024,
+      "includeInTransparentExport": false
+    },
+    "floor": {
+      "reflection": {
+        "enabled": false,
+        "strength": 0.1,
+        "blur": 0.65,
+        "fadeDistance": 0.65,
+        "includeInTransparentExport": false
+      }
+    },
+    "material": {
+      "profile": "gloss"
+    },
+    "quality": {
+      "interactive": "high",
+      "export": "high",
+      "html": 2400
+    },
+    "output": {
+      "kind": "image",
+      "format": "png",
+      "sizingMode": "preset",
+      "widthPx": 2048,
+      "heightPx": 1536,
+      "lockAspect": true,
+      "printUnit": "cm",
+      "printWidth": 20,
+      "printHeight": 20,
+      "ppi": 300,
+      "jpegQuality": 0.94,
+      "sequence": {
+        "frames": 36,
+        "longEdge": 1024,
+        "format": "png"
+      },
+      "glb": {
+        "textureSize": "auto",
+        "materialMode": "full-pbr",
+        "includeCamera": true
+      }
+    },
+    "effects": {
+      "gtao": {
+        "enabled": false,
+        "intensity": 0.5,
+        "radius": 0.18,
+        "resolution": "half"
+      },
+      "antialiasing": {
+        "interactive": "smaa",
+        "settled": "taa",
+        "export": "taa",
+        "taaSamples": 16
+      },
+      "dof": {
+        "enabled": false,
+        "focusMode": "carton-center",
+        "focusDistance": 1,
+        "aperture": 0.025,
+        "maxBlur": 0.01
+      }
+    }
+  },
+  "boardAppearance": {
+    "thicknessMm": 0.35,
+    "bevelRadiusMm": 0.12,
+    "interiorColor": "#f4f2ec",
+    "edgeColor": "#c8c1b5"
+  }
+}
