@@ -109,6 +109,13 @@ export function runRenderExportPreflight({
     issues.push(issue('basic-glb-finishes', 'warning'));
   }
 
+  if (kind === 'glb' && (sanitized.lighting.environmentMap?.source === 'custom'
+    || sanitized.lighting.environmentMap?.usage === 'background'
+    || sanitized.lighting.environmentMap?.usage === 'both'
+    || sanitized.background.mode === 'environment')) {
+    issues.push(issue('hdri-glb', 'warning'));
+  }
+
   if (estimatedBytes > memoryBudgetBytes * 0.75) {
     issues.push(issue('memory-budget', 'warning', {
       estimatedBytes,

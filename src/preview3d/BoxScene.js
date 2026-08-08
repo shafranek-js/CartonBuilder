@@ -63,6 +63,10 @@ import {
   fovToFocalLength,
 } from '../render/cameraState.js';
 import { ENVIRONMENT_MAP_PRESETS, sanitizeEnvironmentMap } from '../render/environmentAssets.js';
+import {
+  EnvironmentRuntimeCache,
+  prepareEnvironmentTexture,
+} from '../render/environmentRuntime.js';
 
 const CAMERA_DIRECTION = new Vector3(1, 1, 1).normalize();
 const PERSPECTIVE_FOV = 35;
@@ -487,6 +491,20 @@ export class BoxScene {
     this.environmentMap = sanitizeEnvironmentMap(environmentMap);
     this.environmentAsset = environmentAsset || null;
     this.environmentLoadGeneration = 0;
+    this.environmentRuntimeCache = new EnvironmentRuntimeCache();
+    this.environmentRuntimeEntry = null;
+    this.environmentDiagnostics = {
+      assetId: '',
+      presetId: this.environmentMap.presetId,
+      source: 'procedural',
+      requestedResolution: this.environmentMap.resolutionCap,
+      effectiveResolution: null,
+      width: 0,
+      height: 0,
+      cacheHit: false,
+      fallbackReason: null,
+      cacheEntries: 0,
+    };
 
     this.renderer = new WebGLRenderer({
       canvas,
@@ -1080,7 +1098,7 @@ export class BoxScene {
     this.orthographicCamera.updateProjectionMatrix();
   }
 
-  ensureEnvironment() {
+  ensureEnvironment({ fallbackReason, preserveAssetDiagnostics = false } = {}) {
     if (this.pmremGenerator == null) this.pmremGenerator = new PMREMGenerator(this.renderer);
     let environmentScene = null;
     if (this.environmentPreset === 'studio') {
@@ -1088,7 +1106,9 @@ export class BoxScene {
     } else if (this.environmentPreset !== 'none') {
       environmentScene = createEnvironmentScene(this.environmentPreset);
     }
-    const previous = this.environmentRenderTarget;
+    const previous = this.environmentRuntimeEntry ? null : this.environmentRenderTarget;
+    this.environmentRuntimeEntry = null;
+    this.environmentEquirectangular = null;
     if (!environmentScene) {
       this.environmentTexture = null;
       this.environmentRenderTarget = null;
@@ -1100,6 +1120,22 @@ export class BoxScene {
       else disposeEnvironmentScene(environmentScene);
     }
     previous?.dispose?.();
+    this.environmentDiagnostics = {
+      ...this.environmentDiagnostics,
+      assetId: preserveAssetDiagnostics ? (this.environmentDiagnostics.assetId || '') : '',
+      presetId: preserveAssetDiagnostics
+        ? (this.environmentDiagnostics.presetId || 'neutral-softbox')
+        : 'neutral-softbox',
+      source: preserveAssetDiagnostics ? (this.environmentDiagnostics.source || 'procedural') : 'procedural',
+      effectiveResolution: null,
+      width: 0,
+      height: 0,
+      cacheHit: false,
+      fallbackReason: fallbackReason === undefined
+        ? (this.environmentDiagnostics.fallbackReason || null)
+        : fallbackReason,
+      cacheEntries: this.environmentRuntimeCache.size,
+    };
     this.applyEnvironment();
   }
 
@@ -1127,6 +1163,7 @@ export class BoxScene {
   }
 
   setEnvironmentMap(environmentMap = null, { render = true } = {}) {
+    const previousResolution = this.environmentMap?.resolutionCap;
     this.environmentMap = sanitizeEnvironmentMap(environmentMap);
     const builtIn = ENVIRONMENT_MAP_PRESETS.find((entry) => entry.id === this.environmentMap.presetId);
     if (this.environmentMap.source === 'builtin' && builtIn) {
@@ -1136,6 +1173,11 @@ export class BoxScene {
         && this.environmentAsset?.presetId === builtIn.id
         && this.environmentEquirectangular;
       if (!usesPackagedTexture) this.ensureEnvironment();
+      else if (previousResolution !== this.environmentMap.resolutionCap) {
+        // A cap change must rebuild/reuse the runtime entry even when the
+        // selected asset id is unchanged.
+        this.setEnvironmentAsset(this.environmentAsset, { render: false });
+      }
     } else if (this.environmentMap.source === 'none') {
       this.environmentPreset = 'none';
       this.ensureEnvironment();
@@ -1148,14 +1190,49 @@ export class BoxScene {
     const generation = ++this.environmentLoadGeneration;
     this.environmentAsset = asset || null;
     if (!asset?.blob) {
-      this.environmentEquirectangular?.dispose?.();
-      this.environmentEquirectangular = null;
-      this.environmentMap = sanitizeEnvironmentMap({ ...this.environmentMap, source: 'builtin', assetId: '' });
-      this.ensureEnvironment();
+      this.environmentMap = sanitizeEnvironmentMap({
+        ...this.environmentMap,
+        source: 'builtin',
+        presetId: 'neutral-softbox',
+        assetId: '',
+      });
+      const expectedAssetId = asset?.assetId || '';
+      const expectedSource = asset ? (asset.source === 'builtin' ? 'builtin' : 'custom') : 'procedural';
+      this.environmentDiagnostics = {
+        ...this.environmentDiagnostics,
+        assetId: expectedAssetId,
+        presetId: 'neutral-softbox',
+        source: expectedSource,
+        requestedResolution: this.environmentMap.resolutionCap,
+        effectiveResolution: null,
+        width: 0,
+        height: 0,
+        cacheHit: false,
+        fallbackReason: asset ? 'missing-asset' : null,
+      };
+      this.ensureEnvironment({
+        fallbackReason: asset ? 'missing-asset' : null,
+        preserveAssetDiagnostics: Boolean(asset),
+      });
       if (render) this.render();
       return false;
     }
     try {
+      const requestedResolution = this.environmentMap.resolutionCap;
+      const cacheKey = `${asset.assetId || asset.presetId || 'environment'}:${requestedResolution}`;
+      const cached = this.environmentRuntimeCache.get(cacheKey);
+      if (cached && generation === this.environmentLoadGeneration && !this.disposed) {
+        this.activateEnvironmentRuntimeEntry(cached, { cacheHit: true });
+        this.environmentMap = sanitizeEnvironmentMap({
+          ...this.environmentMap,
+          source: asset.source === 'builtin' ? 'builtin' : 'custom',
+          presetId: asset.source === 'builtin' ? asset.presetId : this.environmentMap.presetId,
+          assetId: asset.source === 'builtin' ? '' : asset.assetId,
+        });
+        this.applyEnvironment();
+        if (render) this.render();
+        return true;
+      }
       const buffer = await asset.blob.arrayBuffer();
       const loader = asset.mimeType === 'application/vnd.openexr' ? new EXRLoader() : new HDRLoader();
       // DataTextureLoader.parse() returns raw texture data; createDataTexture()
@@ -1169,8 +1246,19 @@ export class BoxScene {
       texture.mapping = EquirectangularReflectionMapping;
       texture.colorSpace = NoColorSpace;
       texture.needsUpdate = true;
-      this.environmentEquirectangular?.dispose?.();
-      this.environmentEquirectangular = texture;
+      const prepared = prepareEnvironmentTexture(texture, {
+        requestedResolution,
+        maxTextureSize: this.renderer.capabilities.maxTextureSize,
+      });
+      if (!prepared.texture) {
+        texture.dispose?.();
+        throw Object.assign(new Error('No viable HDRI runtime resolution'), { code: 'no-viable-resolution' });
+      }
+      if (prepared.sourceTextureOwned) texture.dispose?.();
+      const runtimeTexture = prepared.texture;
+      const previousProceduralTarget = this.environmentRuntimeEntry ? null : this.environmentRenderTarget;
+      previousProceduralTarget?.dispose?.();
+      const renderTarget = this.ensureEnvironmentFromTexture(runtimeTexture);
       const isBuiltInAsset = asset?.source === 'builtin';
       this.environmentMap = sanitizeEnvironmentMap({
         ...this.environmentMap,
@@ -1178,7 +1266,18 @@ export class BoxScene {
         presetId: isBuiltInAsset ? asset.presetId : this.environmentMap.presetId,
         assetId: isBuiltInAsset ? '' : asset.assetId,
       });
-      this.ensureEnvironmentFromTexture(texture);
+      const entry = {
+        key: cacheKey,
+        runtimeTexture,
+        renderTarget,
+        ...prepared.dimensions,
+        assetId: asset.assetId || '',
+        presetId: isBuiltInAsset ? asset.presetId : this.environmentMap.presetId,
+        source: isBuiltInAsset ? 'builtin' : 'custom',
+        disposed: false,
+      };
+      this.environmentRuntimeCache.set(cacheKey, entry, cacheKey);
+      this.activateEnvironmentRuntimeEntry(entry, { cacheHit: false });
       this.applyEnvironment();
       if (render) this.render();
       return true;
@@ -1186,9 +1285,31 @@ export class BoxScene {
       // A bad map must never leave the viewport blank. Keep the neutral
       // procedural studio active and let the caller surface the error.
       console.warn('Could not load HDR environment map; using procedural fallback.', error);
-      this.environmentMap = sanitizeEnvironmentMap({ ...this.environmentMap, source: 'builtin', assetId: '' });
+      this.environmentMap = sanitizeEnvironmentMap({
+        ...this.environmentMap,
+        source: 'builtin',
+        presetId: 'neutral-softbox',
+        assetId: '',
+      });
+      const failureDiagnostics = {
+        ...this.environmentDiagnostics,
+        assetId: asset.assetId || '',
+        presetId: asset.source === 'builtin' ? asset.presetId : this.environmentMap.presetId,
+        source: asset.source === 'builtin' ? 'builtin' : 'custom',
+        requestedResolution: this.environmentMap.resolutionCap,
+        effectiveResolution: null,
+        width: 0,
+        height: 0,
+        cacheHit: false,
+        fallbackReason: error?.code || 'decode-error',
+        cacheEntries: this.environmentRuntimeCache.size,
+      };
+      this.environmentDiagnostics = failureDiagnostics;
       this.environmentPreset = 'studio';
-      this.ensureEnvironment();
+      this.ensureEnvironment({
+        fallbackReason: failureDiagnostics.fallbackReason,
+        preserveAssetDiagnostics: true,
+      });
       if (render) this.render();
       return false;
     }
@@ -1196,10 +1317,26 @@ export class BoxScene {
 
   ensureEnvironmentFromTexture(texture) {
     if (this.pmremGenerator == null) this.pmremGenerator = new PMREMGenerator(this.renderer);
-    const previous = this.environmentRenderTarget;
-    this.environmentRenderTarget = this.pmremGenerator.fromEquirectangular(texture);
-    this.environmentTexture = this.environmentRenderTarget.texture;
-    previous?.dispose?.();
+    return this.pmremGenerator.fromEquirectangular(texture);
+  }
+
+  activateEnvironmentRuntimeEntry(entry, { cacheHit = false } = {}) {
+    this.environmentRuntimeEntry = entry;
+    this.environmentEquirectangular = entry.runtimeTexture;
+    this.environmentRenderTarget = entry.renderTarget;
+    this.environmentTexture = entry.renderTarget?.texture || null;
+    this.environmentDiagnostics = {
+      assetId: entry.assetId || '',
+      presetId: entry.presetId || this.environmentMap.presetId,
+      source: entry.source || 'custom',
+      requestedResolution: this.environmentMap.resolutionCap,
+      effectiveResolution: entry.effectiveResolution || entry.width || null,
+      width: entry.width || 0,
+      height: entry.height || 0,
+      cacheHit,
+      fallbackReason: entry.fallbackReason || null,
+      cacheEntries: this.environmentRuntimeCache.size,
+    };
   }
 
   setScenePreset(preset, { render = true } = {}) {
@@ -1824,6 +1961,11 @@ export class BoxScene {
       foldProgress: this.foldProgress,
       geometryMode: this.geometryMode,
       thicknessMm: this.boardAppearance.thicknessMm,
+      environmentMap: {
+        ...this.environmentDiagnostics,
+        cacheEntries: this.environmentRuntimeCache.size,
+        cacheKeys: this.environmentRuntimeCache.keys(),
+      },
       floorReflection: {
         enabled: this.floorReflectionSettings.enabled,
         visible: Boolean(this.floorReflection?.visible),
@@ -1865,7 +2007,7 @@ export class BoxScene {
       plane.material?.dispose();
     }
     this.backgroundTexture?.dispose?.();
-    this.environmentEquirectangular?.dispose?.();
+    this.environmentEquirectangular = null;
     if (this.backgroundObjectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
       URL.revokeObjectURL(this.backgroundObjectUrl);
     }
@@ -1874,8 +2016,17 @@ export class BoxScene {
       this.floorReflection.material?.dispose();
       this.floorReflection.getRenderTarget?.()?.dispose?.();
     }
-    this.environmentTexture?.dispose();
-    this.environmentRenderTarget?.dispose();
+    if (this.environmentRuntimeEntry) {
+      this.environmentRuntimeEntry = null;
+      this.environmentEquirectangular = null;
+      this.environmentRenderTarget = null;
+      this.environmentTexture = null;
+    } else {
+      this.environmentRenderTarget?.dispose?.();
+      this.environmentRenderTarget = null;
+      this.environmentTexture = null;
+    }
+    this.environmentRuntimeCache.clear();
     this.pmremGenerator?.dispose();
     this.renderer.dispose();
   }

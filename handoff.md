@@ -186,13 +186,13 @@ WebGPU, CMYK/ICC/Pantone/overprint и print-proof validation находятся 
 
 ## 8. Persistence и версии
 
-- Current project schema: **v10** (`src/project/projectSchema.js`).
+- Current project schema: **v12** (`src/project/projectSchema.js`).
 - v2 → v10 migrations add per-artwork quality/finish roles and Render board
   appearance while preserving artwork, box, history and view state.
-- `.carton` archive manifest export version: **3**.
-- Legacy manifest versions 1 and 2 поддерживаются на import.
+- `.carton` archive manifest export version: **4**.
+- Legacy manifest versions 1, 2 and 3 поддерживаются на import.
 - Current archive stores arrays of artwork assets/previews and optional Render
-  background assets addressed by SHA-256 asset ID.
+  background/HDRI assets addressed by SHA-256 asset ID.
 - IndexedDB stores: `projects`, `presets`, `scenePresets`, `renderPresets`.
 - Project snapshot сохраняет canonical artwork/box state и Render settings;
   GPU handles, renderer diagnostics, progress and other transient Three.js state
@@ -270,11 +270,12 @@ runtime-документы:
 
 ## 11. Рекомендуемый порядок следующей работы
 
-1. Следующая Planned-фаза — HDR environment maps: каталог, загрузка,
-   intensity/rotation, fallback на процедурный studio light и безопасное
-   сохранение только пользовательских настроек.
-2. Перед HDR implementation зафиксировать UX-контракт в Planned-документе и
-   добавить его в `docs/README.md`; не смешивать HDR assets с project snapshot.
+1. Wave 7B production hardening HDR/EXR/IBL завершена в
+   `docs/12. hdri-environment-runtime-specification.md`: linear-light 1K/2K/4K
+   runtime preparation, device fallback, bounded two-entry PMREM cache,
+   transient diagnostics, custom-map recovery and archive v4 boundaries.
+2. Следующая отдельная волна — Wave 8 Geometry Fidelity; не смешивать её с
+   HDRI runtime cache или изменениями schema/archive.
 3. Поддерживать `docs/README.md` в том же PR, что и изменения функциональности;
    новый документ добавлять туда с одним статусом и владельцем.
 4. Любое изменение canonical model сопровождать schema/history/archive tests и

@@ -9,11 +9,12 @@ import {
 
 import { MAX_ARTWORK_BYTES } from '../artwork/fileValidation.js';
 import { MAX_RENDER_BACKGROUND_BYTES } from '../render/renderAssets.js';
+import { MAX_RENDER_ENVIRONMENT_BYTES } from '../render/environmentAssets.js';
 import { AppError } from '../errors.js';
 import { CURRENT_PROJECT_SCHEMA_VERSION, validateProjectBundle } from './projectSchema.js';
 
 const FORMAT = 'carton-builder-project';
-const FORMAT_VERSION = 3;
+const FORMAT_VERSION = 4;
 const LEGACY_FORMAT_VERSION = 1;
 const MAX_ARCHIVE_BYTES = 120 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
@@ -28,10 +29,8 @@ function safeExtension(fileName) {
 
 export async function createProjectArchive({ snapshot, artworkBlobs, renderAssets = [] }) {
   const validated = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
-  // Keep legacy archive fixtures stable while still allowing current projects
-  // to write schema v10 snapshots. Older v6 archives are represented as v7;
-  // opening them remains compatible with the normal project migration path.
-  if (Number(snapshot?.schemaVersion) === 6) validated.snapshot.schemaVersion = 7;
+  // Always write the current schema after migration. Older archives remain
+  // readable through the normal v1-v3 compatibility path below.
   const assets = validated.snapshot.artworks.map((entry, index) => ({
     path: `assets/artwork-${index}.${safeExtension(entry.artwork.source.fileName)}`,
     sha256: entry.artwork.source.sha256,
@@ -45,6 +44,7 @@ export async function createProjectArchive({ snapshot, artworkBlobs, renderAsset
     renderAssets: validated.renderAssets.map((asset) => ({
       path: `render-assets/${asset.assetId}.${safeExtension(asset.fileName)}`,
       assetId: asset.assetId,
+      kind: asset.kind || 'background',
       sha256: asset.sha256,
       fileName: asset.fileName,
       mimeType: asset.mimeType,
@@ -109,7 +109,7 @@ export async function readProjectArchive(blob) {
       return result;
     }
 
-    if (![2, FORMAT_VERSION].includes(manifest.version)) throw new AppError('projectVersionUnsupported');
+    if (![2, 3, FORMAT_VERSION].includes(manifest.version)) throw new AppError('projectVersionUnsupported');
     if (!Array.isArray(manifest.assets) || !Array.isArray(manifest.previews)) {
       throw new AppError('projectIncomplete');
     }
@@ -138,7 +138,7 @@ export async function readProjectArchive(blob) {
       });
     }
     const renderAssets = [];
-    if (manifest.version === FORMAT_VERSION) {
+    if (manifest.version >= 3) {
       if (!Array.isArray(manifest.renderAssets)) throw new AppError('projectIncomplete');
       if (manifest.renderAssets.some((asset) => !/^render-assets\/[a-f0-9]{64}\.[a-z0-9]+$/i.test(asset?.path))) {
         throw new AppError('projectAssetPathInvalid');
@@ -146,11 +146,14 @@ export async function readProjectArchive(blob) {
       for (const manifestAsset of manifest.renderAssets) {
         const assetEntry = byName.get(manifestAsset.path);
         if (!assetEntry) throw new AppError('projectRenderAssetMissing');
-        if (assetEntry.uncompressedSize > MAX_RENDER_BACKGROUND_BYTES) {
-          throw new AppError('renderBackgroundTooLarge');
+        const kind = manifestAsset.kind === 'environment' ? 'environment' : 'background';
+        const maxBytes = kind === 'environment' ? MAX_RENDER_ENVIRONMENT_BYTES : MAX_RENDER_BACKGROUND_BYTES;
+        if (assetEntry.uncompressedSize > maxBytes) {
+          throw new AppError(kind === 'environment' ? 'renderEnvironmentTooLarge' : 'renderBackgroundTooLarge');
         }
         renderAssets.push({
           ...manifestAsset,
+          kind,
           blob: await assetEntry.getData(new BlobWriter()),
         });
       }

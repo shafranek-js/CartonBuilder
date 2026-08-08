@@ -375,7 +375,11 @@ export async function validateProjectBundle({
   const snapshot = migrateProjectSnapshot(inputSnapshot);
   const validatedRenderAssets = await validateRenderAssets(renderAssets);
   const backgroundAssetId = snapshot.render?.background?.image?.assetId;
-  if (backgroundAssetId && !validatedRenderAssets.some((asset) => asset.assetId === backgroundAssetId)) {
+  if (backgroundAssetId && !validatedRenderAssets.some((asset) => asset.assetId === backgroundAssetId && asset.kind !== 'environment')) {
+    throw new AppError('projectRenderAssetMissing');
+  }
+  const environmentAssetId = snapshot.render?.lighting?.environmentMap?.assetId;
+  if (environmentAssetId && !validatedRenderAssets.some((asset) => asset.assetId === environmentAssetId && asset.kind === 'environment')) {
     throw new AppError('projectRenderAssetMissing');
   }
   if (!snapshot.artworks.length) {

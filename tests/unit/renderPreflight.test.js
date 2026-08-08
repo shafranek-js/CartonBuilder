@@ -58,4 +58,23 @@ describe('runRenderExportPreflight', () => {
     expect(result.status).toBe('blocked');
     expect(result.issues[0]).toMatchObject({ code: 'context-lost', severity: 'error' });
   });
+
+  it('warns that GLB viewers do not receive custom HDRI presentation assets', () => {
+    const result = runRenderExportPreflight({
+      kind: 'glb',
+      settings: {
+        ...DEFAULT_RENDER_SETTINGS,
+        lighting: {
+          ...DEFAULT_RENDER_SETTINGS.lighting,
+          environmentMap: {
+            ...DEFAULT_RENDER_SETTINGS.lighting.environmentMap,
+            source: 'custom',
+            assetId: 'a'.repeat(64),
+          },
+        },
+      },
+    });
+    expect(result.status).toBe('warning');
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: 'hdri-glb', severity: 'warning' }));
+  });
 });

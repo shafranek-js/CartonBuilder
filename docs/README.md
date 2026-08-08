@@ -55,6 +55,7 @@ README не заменяет runtime specification. Research и roadmap не я�
 | Implemented | [`9. render-runtime-specification.md`](9.%20render-runtime-specification.md) | Нормативный контракт Presentation Render, effects и image/3D export | maintainer `src/render` |
 | Historical/Research | [`10. mupdf-capability-spike.md`](10.%20mupdf-capability-spike.md) | Decision record: stock mupdf.js не симулирует overprint; нужен custom WASM wrapper | maintainer `src/artwork`, `src/pdf-renderer` |
 | Implemented | [`11. mupdf-overprint-runtime-specification.md`](11.%20mupdf-overprint-runtime-specification.md) | Нормативный контракт custom MuPDF PDF/AI overprint, process/spot plates и single/tiled renderer; Adobe matrix остаётся release gate | maintainer `src/pdf-renderer`, `src/artwork` |
+| Implemented | [`12. hdri-environment-runtime-specification.md`](12.%20hdri-environment-runtime-specification.md) | Нормативный контракт HDR/EXR environment maps, IBL, PMREM и archive v4 | maintainer `src/render`, `src/preview3d`, `src/project` |
 | Historical/Research | [`Техническое задание по внедрению MuPDF.js для PDF-AI Overprint Preview.htm`](Техническое%20задание%20по%20внедрению%20MuPDF.js%20для%20PDF-AI%20Overprint%20Preview.htm) | Входное ТЗ: внедрение MuPDF.js для PDF/AI Overprint Preview | maintainer `src/pdf-renderer` |
 | Implemented | [`../handoff.md`](../handoff.md) | Точка передачи текущего состояния и backlog документации | текущий maintainer; обновлять при handoff |
 
@@ -124,11 +125,18 @@ Canonical for: <scope, or "not canonical">
 тестами Wave 6:
 
 - динамические artwork sublayers, Scale X/Y и независимый `Constrain proportions`;
-- archive manifest version 3, массивы assets/previews и импорт v1/v2;
+- archive manifest version 4, массивы assets/previews, render-assets и импорт v1-v3;
+- HDRI/EXR environment maps, linear-light 1K/2K/4K runtime caps, bounded
+  two-entry PMREM cache, usage modes, diagnostics and custom-map recovery;
 - сохранение раскладки при изменении Box Dimensions и отдельный Reset Box;
 - File/Edit menus, Contacts, Box Presets, scene presets и diagnostics;
 - Render preflight, Floor Reflection strength/softness/fade и PNG/JPG export UI;
 - DPR 1/2, Chrome/Edge matrix и stress-test evidence.
+
+Wave 7B production hardening is the current HDRI release gate: unit runtime
+preparation tests, Chromium all-map/cap/custom/context/20-cycle E2E, the same
+Edge smoke subset, production build and `graphify update .`. Geometry Fidelity
+is intentionally tracked as the separate next Wave 8.
 
 Этот список является release-проверкой фактов, а не основанием считать
 непроверенную функцию Implemented.
@@ -141,6 +149,8 @@ Canonical for: <scope, or "not canonical">
 - [ ] каждый документ имеет один статус и понятного владельца;
 - [ ] Implemented docs совпадают с кодом и тестами;
 - [ ] README описывает доступные пользователю шаги и ограничения;
+- [ ] HDRI release gate includes effective-cap, LRU, fallback and recovery
+  evidence; transient diagnostics are not persisted;
 - [ ] schema/archive changes имеют migration notes;
 - [ ] Planned функции не выдаются за текущие;
 - [ ] Historical/Research документы явно помечены как ненормативные;
