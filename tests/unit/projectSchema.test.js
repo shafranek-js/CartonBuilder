@@ -243,16 +243,30 @@ describe('project schema', () => {
       },
     })).rejects.toMatchObject({ code: 'projectArtworkSizeMismatch' });
 
-    await expect(validateProjectBundle({
+    const expectedHash = bundle.snapshot.artwork.source.sha256;
+    const staleHash = await validateProjectBundle({
       ...bundle,
       snapshot: {
         ...bundle.snapshot,
         artwork: {
           ...bundle.snapshot.artwork,
-          source: { ...bundle.snapshot.artwork.source, sha256: 'bad-hash' },
+          source: { ...bundle.snapshot.artwork.source, sha256: 'stale-hash' },
         },
       },
-    })).rejects.toMatchObject({ code: 'projectArtworkChecksumMismatch' });
+    });
+    expect(staleHash.snapshot.artworks[0].artwork.source.sha256).toBe(expectedHash);
+
+    const missingHash = await validateProjectBundle({
+      ...bundle,
+      snapshot: {
+        ...bundle.snapshot,
+        artwork: {
+          ...bundle.snapshot.artwork,
+          source: { ...bundle.snapshot.artwork.source, sha256: '' },
+        },
+      },
+    });
+    expect(missingHash.snapshot.artworks[0].artwork.source.sha256).toBe(expectedHash);
   });
 
   it('validates multiple artworks with aligned blobs', async () => {

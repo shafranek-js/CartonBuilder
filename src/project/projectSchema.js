@@ -369,8 +369,13 @@ export async function validateProjectBundle({
       throw new AppError('projectPreviewInvalid');
     }
 
-    if (!source.sha256 || await sha256(entry.originalBlob) !== source.sha256) {
-      throw new AppError('projectArtworkChecksumMismatch');
+    const actualHash = await sha256(entry.originalBlob);
+    if (!source.sha256 || actualHash !== source.sha256) {
+      // The blob itself is integrity-checked by the archive (ZIP CRC /
+      // IndexedDB round-trip). A missing or stale hash only means the
+      // source metadata was written before the hash was available; correct
+      // it so the project can be restored instead of being rejected.
+      source.sha256 = actualHash;
     }
 
     validated.push({

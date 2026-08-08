@@ -1451,8 +1451,12 @@ export function createArtworkApp({
       return true;
     } catch (error) {
       if (error?.name === 'AbortError' || generation !== pdfRenderGeneration) return true;
+      // The overprint setting has already been applied; a failing re-render
+      // must not flip the toggle back off. The preview stays at whatever
+      // quality the renderer managed and retries naturally on the next
+      // refresh.
       console.error(error);
-      return false;
+      return true;
     } finally {
       if (generation === pdfRenderGeneration) pdfRenderController = null;
     }

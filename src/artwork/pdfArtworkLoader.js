@@ -61,6 +61,7 @@ async function openPdf(file, signal, extension, promptPassword, passwordKey) {
   throwIfAborted(signal);
   const bytes = new Uint8Array(await file.arrayBuffer());
   throwIfAborted(signal);
+  const sourceHash = await hashBytes(bytes);
   const client = getMuPdfClient();
   const docId = crypto.randomUUID();
   let opened;
@@ -71,7 +72,7 @@ async function openPdf(file, signal, extension, promptPassword, passwordKey) {
     throw error;
   }
   if (opened.needsPassword) {
-    const key = passwordKey || await hashBytes(bytes);
+    const key = passwordKey || sourceHash;
     try {
       const password = await resolvePassword(promptPassword, key);
       if (password == null) {
@@ -95,11 +96,11 @@ async function openPdf(file, signal, extension, promptPassword, passwordKey) {
       throw error;
     }
   }
-  return { client, docId, bytes, opened };
+  return { client, docId, bytes, opened, sourceHash };
 }
 
 async function withPdf(file, signal, extension, promptPassword, passwordKey, callback) {
-  const { client, docId, opened } = await openPdf(
+  const { client, docId, opened, sourceHash } = await openPdf(
     file,
     signal,
     extension,
@@ -107,7 +108,7 @@ async function withPdf(file, signal, extension, promptPassword, passwordKey, cal
     passwordKey,
   );
   try {
-    return await callback({ client, docId, opened });
+    return await callback({ client, docId, opened, sourceHash });
   } finally {
     try {
       await client.closeDocument(docId);
@@ -127,7 +128,7 @@ export async function loadPdfArtwork(file, {
   overprintMode = 0,
 } = {}) {
   const extension = getFileKind(file);
-  return withPdf(file, signal, extension, promptPassword, passwordKey, async ({ client, docId, opened }) => {
+  return withPdf(file, signal, extension, promptPassword, passwordKey, async ({ client, docId, opened, sourceHash }) => {
     const pageCount = opened.pageCount;
     const pageIndex = pageCount > 1 ? await choosePage(pageCount) : 0;
     throwIfAborted(signal);
@@ -162,6 +163,7 @@ export async function loadPdfArtwork(file, {
       heightPx: rendered.height,
       previewWidthPx: rendered.width,
       previewHeightPx: rendered.height,
+      sha256: sourceHash,
       pageIndex,
       pageCount,
       vector: true,
