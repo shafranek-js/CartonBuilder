@@ -7,6 +7,7 @@ import {
   readProjectArchive,
 } from '../../src/project/projectArchive.js';
 import { DEFAULT_RENDER_SETTINGS } from '../../src/render/RenderSettings.js';
+import { CURRENT_PROJECT_SCHEMA_VERSION } from '../../src/project/projectSchema.js';
 import { DEFAULT_BOARD_APPEARANCE } from '../../src/render/BoardAppearance.js';
 
 async function createArtworkEntry(fileName) {
@@ -96,7 +97,7 @@ describe('.carton project archive', () => {
 
     expect(restored.snapshot).toMatchObject({
       ...snapshot,
-      schemaVersion: 7,
+      schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
       render: {
         ...snapshot.render,
         background: {
@@ -153,6 +154,37 @@ describe('.carton project archive', () => {
     expect(new Uint8Array(await restored.renderAssets[0].blob.arrayBuffer())).toEqual(
       new Uint8Array(await backgroundBlob.arrayBuffer()),
     );
+  });
+
+  it('embeds and restores a custom HDR environment as a separate render asset', async () => {
+    const { snapshot, artworkBlobs } = await createFixture();
+    const environmentBlob = new Blob([
+      '#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 4\n',
+      new Uint8Array([1, 2, 3, 4]),
+    ], { type: 'image/vnd.radiance' });
+    const environmentHash = await sha256(environmentBlob);
+    const renderAsset = {
+      kind: 'environment',
+      assetId: environmentHash,
+      sha256: environmentHash,
+      fileName: 'custom.hdr',
+      mimeType: 'image/vnd.radiance',
+      width: 4,
+      height: 2,
+      blob: environmentBlob,
+    };
+    snapshot.render.lighting.environmentMap = {
+      ...structuredClone(DEFAULT_RENDER_SETTINGS.lighting.environmentMap),
+      source: 'custom',
+      assetId: environmentHash,
+    };
+
+    const archive = await createProjectArchive({ snapshot, artworkBlobs, renderAssets: [renderAsset] });
+    const restored = await readProjectArchive(archive);
+
+    expect(restored.renderAssets).toHaveLength(1);
+    expect(restored.renderAssets[0].kind).toBe('environment');
+    expect(restored.snapshot.render.lighting.environmentMap.assetId).toBe(environmentHash);
   });
 
   it('rejects non-project ZIP data', async () => {

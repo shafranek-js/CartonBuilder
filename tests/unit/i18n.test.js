@@ -22,6 +22,9 @@ describe('localized errors', () => {
   it('translates known error codes and hides internal messages', () => {
     setLocale('ru', documentStub());
     expect(getUserErrorMessage(new AppError('artworkFileEmpty'))).toBe('Файл макета пуст.');
+    expect(getUserErrorMessage(new AppError('renderEnvironmentTooLarge'))).toBe(
+      'Размер карты окружения не должен превышать 128 МиБ.',
+    );
     expect(getUserErrorMessage(new Error('private internal detail'), 'artworkLoadFailed')).toBe(
       'Не удалось загрузить макет.',
     );

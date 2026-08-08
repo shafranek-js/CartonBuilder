@@ -5,6 +5,7 @@ playwright-report/
 test-results/
 coverage/
 *.log
+graphify-out/
 
 # MuPDF build toolchain (clone mupdf source + submodules ~320 MB)
 scratch/mupdf-src/

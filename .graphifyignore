@@ -1,0 +1,6 @@
+graphify-out/
+dist/
+scratch/
+debug-*.png
+test-results/
+playwright-report/

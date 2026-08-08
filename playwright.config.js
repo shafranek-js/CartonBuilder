@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
+const previewPort = process.env.PLAYWRIGHT_PORT || '4173';
+const previewDir = process.env.PLAYWRIGHT_OUT_DIR || 'dist';
+
 export default defineConfig({
   testDir: './tests/e2e',
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
@@ -9,7 +12,7 @@ export default defineConfig({
   // CI assertions patient without changing the local feedback loop.
   expect: { timeout: process.env.CI ? 30_000 : 5_000 },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: `http://127.0.0.1:${previewPort}`,
     browserName: 'chromium',
     channel: process.env.PLAYWRIGHT_BROWSER === 'edge' ? 'msedge' : undefined,
     headless: true,
@@ -18,14 +21,14 @@ export default defineConfig({
     storageState: {
       cookies: [],
       origins: [{
-        origin: 'http://127.0.0.1:4173',
+        origin: `http://127.0.0.1:${previewPort}`,
         localStorage: [{ name: 'carton-builder-first-run-example-v1', value: 'true' }],
       }],
     },
   },
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
+    command: `node node_modules/vite/bin/vite.js preview --outDir ${previewDir} --host 127.0.0.1 --port ${previewPort}`,
+    url: `http://127.0.0.1:${previewPort}`,
     reuseExistingServer: true,
     timeout: 30_000,
   },

@@ -4,6 +4,7 @@ import { normalizeRenderAsset, validateRenderAssets } from './renderAssets.js';
 function cloneMetadata(asset) {
   if (!asset) return null;
   return {
+    kind: asset.kind || 'background',
     assetId: asset.assetId,
     sha256: asset.sha256,
     fileName: asset.fileName,

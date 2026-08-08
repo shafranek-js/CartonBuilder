@@ -26,6 +26,7 @@ export class WebGLCartonRenderer {
     renderSettings,
     boardAppearance,
     backgroundAsset = null,
+    environmentAsset = null,
     windowRef = window,
     onContextLost = () => {},
     onContextRestored = () => {},
@@ -35,6 +36,8 @@ export class WebGLCartonRenderer {
     this.finishSummary = getFinishSummary(sceneModel);
     this.windowRef = windowRef;
     this.backgroundAsset = backgroundAsset || null;
+    this.environmentAsset = environmentAsset || null;
+    this.environmentAssetResolution = renderSettings.lighting.environmentMap?.resolutionCap || 2048;
     this.qualityState = 'interactive';
     this.contextState = 'ready';
     this.contextRecoveryCount = 0;
@@ -61,6 +64,8 @@ export class WebGLCartonRenderer {
       hemisphereIntensity: renderSettings.lighting.environmentIntensity,
       environmentPreset: renderSettings.lighting.environment,
       environmentIntensity: renderSettings.lighting.environmentIntensity,
+      environmentMap: renderSettings.lighting.environmentMap,
+      environmentAsset,
       cameraPreset: renderSettings.camera.preset === 'custom' ? 'isometric' : renderSettings.camera.preset,
       cameraFov: renderSettings.camera.fov,
       cameraFocalLength: renderSettings.camera.focalLength,
@@ -146,6 +151,9 @@ export class WebGLCartonRenderer {
     }
     if (!previous || previous.lighting.environment !== settings.lighting.environment) {
       this.scene.setEnvironment(settings.lighting.environment);
+    }
+    if (!previous || JSON.stringify(previous.lighting.environmentMap) !== JSON.stringify(settings.lighting.environmentMap)) {
+      this.scene.setEnvironmentMap?.(settings.lighting.environmentMap, { render: false });
     }
     if (!previous || previous.shadows.enabled !== settings.shadows.enabled) this.scene.setShadowsEnabled(settings.shadows.enabled);
     if (!previous || previous.shadows.mapSize !== settings.shadows.mapSize) this.scene.setShadowMapSize(settings.shadows.mapSize);
@@ -233,6 +241,23 @@ export class WebGLCartonRenderer {
     if (previousId === nextId) return Promise.resolve(Boolean(nextAsset));
     this.backgroundAsset = nextAsset;
     return this.scene.setBackgroundAsset(nextAsset, { render: true });
+  }
+
+  setEnvironmentAsset(asset) {
+    this.environmentAsset = asset || null;
+    const previous = this.scene.environmentAsset || null;
+    const previousKey = previous
+      ? `${previous.source || 'custom'}:${previous.assetId || previous.presetId || ''}`
+      : '';
+    const nextKey = asset
+      ? `${asset.source || 'custom'}:${asset.assetId || asset.presetId || ''}`
+      : '';
+    const nextResolution = this.scene.environmentMap?.resolutionCap || 2048;
+    if (previousKey === nextKey && this.environmentAssetResolution === nextResolution) {
+      return Promise.resolve(Boolean(asset));
+    }
+    this.environmentAssetResolution = nextResolution;
+    return this.scene.setEnvironmentAsset?.(asset, { render: true });
   }
 
   setEffects(effects) {

@@ -1,5 +1,11 @@
 import { AppError } from '../errors.js';
 import { sha256 } from '../artwork/fileValidation.js';
+import {
+  detectRenderEnvironmentType,
+  MAX_RENDER_ENVIRONMENT_BYTES,
+  normalizeRenderEnvironmentAsset,
+  RENDER_ENVIRONMENT_TYPES,
+} from './environmentAssets.js';
 
 export const MAX_RENDER_BACKGROUND_BYTES = 25 * 1024 * 1024;
 export const MAX_RENDER_BACKGROUND_PIXELS = 50 * 1000 * 1000;
@@ -77,6 +83,9 @@ export async function validateRenderBackground(file, {
 
 export function normalizeRenderAsset(asset) {
   if (!asset || typeof asset !== 'object') return null;
+  if (asset.kind === 'environment' || RENDER_ENVIRONMENT_TYPES[asset.mimeType]) {
+    return normalizeRenderEnvironmentAsset(asset);
+  }
   const mimeType = RENDER_BACKGROUND_TYPES[asset.mimeType] ? asset.mimeType : '';
   const assetId = String(asset.assetId || asset.sha256 || '').trim().slice(0, 128);
   if (!assetId || !mimeType || !(asset.blob instanceof Blob)) return null;
@@ -101,12 +110,19 @@ export async function validateRenderAssets(assets = []) {
     if (!/^[a-f0-9]{64}$/i.test(entry.assetId) || !/^[a-f0-9]{64}$/i.test(entry.sha256)) {
       throw new AppError('projectRenderAssetInvalid');
     }
-    const detectedType = detectRenderBackgroundType(
+    const detectedType = entry.kind === 'environment'
+      ? detectRenderEnvironmentType(
+        new Uint8Array(await entry.blob.slice(0, 64 * 1024).arrayBuffer()),
+      )
+      : detectRenderBackgroundType(
       new Uint8Array(await entry.blob.slice(0, 16).arrayBuffer()),
-    );
+      );
     if (detectedType !== entry.mimeType) throw new AppError('projectRenderAssetInvalid');
     if (seen.has(entry.assetId)) continue;
-    if (entry.blob.size > MAX_RENDER_BACKGROUND_BYTES) {
+    if (entry.kind === 'environment' && entry.blob.size > MAX_RENDER_ENVIRONMENT_BYTES) {
+      throw new AppError('renderEnvironmentTooLarge');
+    }
+    if (entry.kind !== 'environment' && entry.blob.size > MAX_RENDER_BACKGROUND_BYTES) {
       throw new AppError('renderBackgroundTooLarge');
     }
     if (entry.sha256 !== await sha256(entry.blob)) {

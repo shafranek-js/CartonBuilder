@@ -355,6 +355,11 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
   expect(content).toContain('"rootId":"front"');
   expect(content).toContain('data:image/png;base64,');
   expect(content).toContain('id="viewer"');
+  expect(content).toContain('id="embeddedViewerData"');
+  expect(content).toContain('id="modelsPanel"');
+  expect(content).toContain('id="settingsPanel"');
+  expect(content).toContain('id="exportStandalone"');
+  expect(content).not.toContain('cdn.jsdelivr.net');
 
   const viewerPage = await page.context().newPage();
   const errors = [];
@@ -387,6 +392,14 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
   }));
   expect(viewerState.bgPicker).toBe(true);
   expect(viewerState.bgValue).toBe('#e8e8e8');
+  await viewerPage.getByRole('button', { name: 'Models', exact: true }).click();
+  await expect(viewerPage.locator('#modelsPanel')).toBeVisible();
+  await viewerPage.locator('[data-model-id="carton-glb"]').click();
+  await expect.poll(() => viewerPage.locator('#status').textContent()).toContain('GLB');
+  await viewerPage.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(viewerPage.locator('#settingsPanel')).toBeVisible();
+  await viewerPage.locator('#toneMapping').selectOption('AgX');
+  await expect(viewerPage.locator('#toneMapping')).toHaveValue('AgX');
   await viewerPage.close();
 });
 

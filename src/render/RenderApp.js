@@ -211,7 +211,7 @@ export function createRenderApp({
     environmentMapBackgroundIntensityValue: documentRef.getElementById('renderEnvironmentMapBackgroundIntensityValue'),
     environmentMapBackgroundBlur: documentRef.getElementById('renderEnvironmentMapBackgroundBlur'),
     environmentMapBackgroundBlurValue: documentRef.getElementById('renderEnvironmentMapBackgroundBlurValue'),
-    environmentMapResolution: documentRef.getElementById('renderEnvironmentMapResolution'),
+    environmentMapResolution: documentRef.getElementById('renderEnvironmentResolution'),
     clearEnvironmentMap: documentRef.getElementById('renderClearEnvironmentMapButton'),
     exposure: documentRef.getElementById('renderExposure'),
     exposureValue: documentRef.getElementById('renderExposureValue'),
@@ -1070,8 +1070,22 @@ export function createRenderApp({
     }
     if (elements.environmentMapResolution) elements.environmentMapResolution.value = String(environmentMap.resolutionCap);
     if (elements.environmentMapFileName) {
-      elements.environmentMapFileName.textContent = environmentAsset?.fileName
-        || t('renderEnvironmentNoFile');
+      const environmentDiagnostics = renderer?.getDiagnostics?.()?.environmentMap;
+      if (!environmentAsset) {
+        elements.environmentMapFileName.textContent = t('renderEnvironmentNoFile');
+      } else if (environmentDiagnostics?.fallbackReason) {
+        const requested = `${Number(environmentDiagnostics.requestedResolution || environmentMap.resolutionCap) / 1024}K`;
+        elements.environmentMapFileName.textContent = `${environmentAsset.fileName} · ${requested} → Neutral Softbox · fallback: ${environmentDiagnostics.fallbackReason}`;
+      } else if (environmentDiagnostics?.effectiveResolution) {
+        const requested = `${Number(environmentDiagnostics.requestedResolution || environmentMap.resolutionCap) / 1024}K`;
+        const effective = `${Number(environmentDiagnostics.effectiveResolution) / 1024}K`;
+        const status = environmentDiagnostics.fallbackReason
+          ? ` · fallback: ${environmentDiagnostics.fallbackReason}`
+          : ` · ${environmentDiagnostics.cacheHit ? 'cache hit' : 'prepared'}`;
+        elements.environmentMapFileName.textContent = `${environmentAsset.fileName} · ${requested} → ${effective}${status}`;
+      } else {
+        elements.environmentMapFileName.textContent = environmentAsset.fileName;
+      }
     }
     elements.exposure.value = String(state.lighting.exposure);
     elements.exposureValue.value = state.lighting.exposure.toFixed(2);
@@ -1227,6 +1241,15 @@ export function createRenderApp({
       `draw calls: ${diagnostics.calls || 0}`,
       `geometries/textures: ${diagnostics.geometries || 0}/${diagnostics.textures || 0}`,
     ];
+    if (diagnostics.environmentMap) {
+      const environment = diagnostics.environmentMap;
+      const requested = environment.requestedResolution ? `${environment.requestedResolution} px` : 'n/a';
+      const effective = environment.effectiveResolution ? `${environment.effectiveResolution}×${environment.height || 0}` : 'Neutral Softbox';
+      const status = environment.fallbackReason
+        ? `fallback: ${environment.fallbackReason}`
+        : environment.cacheHit ? 'cache hit' : 'cache miss';
+      lines.push(`environment: ${environment.assetId || environment.source || 'procedural'} · requested ${requested} · effective ${effective} · ${status} · cache ${environment.cacheEntries || 0}/2`);
+    }
     if (diagnostics.lastExport) {
       lines.push(`last export: ${diagnostics.lastExport.width}×${diagnostics.lastExport.height} px · ${diagnostics.lastExport.durationMs} ms`);
     }
@@ -1241,9 +1264,18 @@ export function createRenderApp({
       markRenderPresetModified();
     }
     updateControls();
-    renderer?.setBackgroundAsset?.(backgroundAsset);
-    renderer?.setEnvironmentAsset?.(environmentAsset);
+    // Apply the serializable environment-map state before attaching a loaded
+    // asset. This keeps a cap change from being overwritten by an in-flight
+    // load that started with the previous map/cap pair.
     renderer?.updateSettings(state, { render });
+    renderer?.setBackgroundAsset?.(backgroundAsset);
+    const environmentSelection = state.lighting?.environmentMap || {};
+    const environmentAssetMatchesState = !environmentAsset
+      || (environmentSelection.source === 'builtin'
+        && environmentAsset.source === 'builtin'
+        && environmentAsset.presetId === environmentSelection.presetId)
+      || (environmentSelection.source === 'custom' && environmentAsset.assetId === environmentSelection.assetId);
+    if (environmentAssetMatchesState) renderer?.setEnvironmentAsset?.(environmentAsset);
     if (notify) notifyStateChange();
   }
 

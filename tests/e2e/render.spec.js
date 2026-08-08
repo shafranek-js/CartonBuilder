@@ -370,7 +370,7 @@ test('loads a bundled Poly Haven HDRI lazily into the live Render viewport', asy
       },
     },
   });
-  await expect(page.locator('#renderEnvironmentMapFileName')).toHaveText('abandoned_hall_01_4k.hdr', { timeout: 30_000 });
+  await expect(page.locator('#renderEnvironmentMapFileName')).toContainText('abandoned_hall_01_4k.hdr', { timeout: 30_000 });
   await expect(page.locator('#renderRecovery')).toBeHidden();
   await expect(page.locator('#renderBusy')).toBeHidden();
   expect(requests.some((url) => url.endsWith('/abandoned_hall_01_4k.hdr'))).toBe(true);
@@ -378,6 +378,76 @@ test('loads a bundled Poly Haven HDRI lazily into the live Render viewport', asy
   const updatedCanvas = await page.locator('#renderCanvas').screenshot();
   expect(updatedCanvas.equals(initialCanvas)).toBe(false);
 });
+
+test('applies HDRI runtime caps and keeps all bundled maps usable', async ({ page }) => {
+  test.setTimeout(process.env.CI ? 360_000 : 240_000);
+  await openRender(page);
+  const preset = page.locator('#renderEnvironmentMapPreset');
+  const presets = [
+    'polyhaven-abandoned-hall-01',
+    'polyhaven-abandoned-waterworks',
+    'polyhaven-empty-warehouse-01',
+    'polyhaven-abandoned-workshop',
+    'polyhaven-peppermint-powerplant',
+  ];
+  await page.locator('#renderEnvironmentResolution').selectOption('1024');
+  for (const presetId of presets) {
+    await preset.selectOption(presetId);
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState().lighting.environmentMap.presetId), { timeout: 45_000 })
+      .toBe(presetId);
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
+      .toMatchObject({ presetId, source: 'builtin', effectiveResolution: expect.any(Number), fallbackReason: null });
+  }
+  let lowResolutionCanvas = null;
+  for (const resolution of ['1024', '2048', '4096']) {
+    await page.locator('#renderEnvironmentResolution').selectOption(resolution);
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap.requestedResolution), { timeout: 45_000 })
+      .toBe(Number(resolution));
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap.effectiveResolution), { timeout: 45_000 })
+      .toBeLessThanOrEqual(Number(resolution));
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap.cacheEntries), { timeout: 45_000 })
+      .toBeLessThanOrEqual(2);
+    const canvas = await page.locator('#renderCanvas').screenshot({ animations: 'disabled' });
+    if (resolution === '1024') lowResolutionCanvas = canvas;
+    if (resolution === '4096' && lowResolutionCanvas) expect(canvas.equals(lowResolutionCanvas)).toBe(false);
+  }
+  await expect(page.locator('#renderRecovery')).toBeHidden();
+  expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(Buffer.alloc(0));
+});
+
+test('loads a custom HDRI and exposes bounded runtime diagnostics', async ({ page }) => {
+  await openRender(page);
+  const response = await page.request.get('/render-environments/polyhaven/abandoned_hall_01_4k.hdr');
+  expect(response.ok()).toBe(true);
+  await page.locator('#renderEnvironmentMapFile').setInputFiles({
+    name: 'custom-environment.hdr',
+    mimeType: 'image/vnd.radiance',
+    buffer: await response.body(),
+  });
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState().lighting.environmentMap.source), { timeout: 45_000 })
+    .toBe('custom');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
+    .toMatchObject({ source: 'custom', effectiveResolution: expect.any(Number), cacheEntries: expect.any(Number) });
+  await page.locator('#renderEnvironmentMapUsage').selectOption('both');
+  await page.locator('#renderBackgroundMode').selectOption('environment');
+  await expect(page.locator('#renderRecovery')).toBeHidden();
+});
+
+test('captures a stable bundled HDRI 2K both baseline', async ({ page }) => {
+  await openRender(page, 'wave7b-hdri-baseline-fixture.png');
+  await page.locator('#renderEnvironmentMapPreset').selectOption('polyhaven-abandoned-hall-01');
+  await page.locator('#renderEnvironmentResolution').selectOption('2048');
+  await page.locator('#renderEnvironmentMapUsage').selectOption('both');
+  await page.locator('#renderBackgroundMode').selectOption('environment');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 60_000 })
+    .toMatchObject({ presetId: 'polyhaven-abandoned-hall-01', effectiveResolution: 2048, fallbackReason: null });
+  await expect(page.locator('#renderRecovery')).toBeHidden();
+  expect(await page.locator('#renderCanvas').screenshot({ animations: 'disabled' })).toMatchSnapshot('wave7b-hdri-both.png', {
+    threshold: 0.15,
+    maxDiffPixelRatio: process.env.CI ? 0.02 : 0.01,
+  });
+});
+
 
 test('applies floor reflection strength, softness and fade to the live Render scene', async ({ page }) => {
   await openRender(page);
@@ -611,6 +681,8 @@ test.describe('Wave 5 deterministic Render baselines', () => {
       });
       await render.whenStable();
     });
+    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 60_000 }))).toBe(true);
+    await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 60_000 });
     expect(await canvas.screenshot({ animations: 'disabled', timeout: 30_000 })).toMatchSnapshot('wave5-transparent.png', {
       threshold: 0.15,
       maxDiffPixelRatio: snapshotDiffPixelRatio,
@@ -619,6 +691,9 @@ test.describe('Wave 5 deterministic Render baselines', () => {
 
   test('blocks impossible exports and recovers from a lost graphics context', async ({ page }) => {
     await openRender(page, 'wave5-lifecycle-fixture.png');
+    await page.locator('#renderEnvironmentMapPreset').selectOption('polyhaven-abandoned-hall-01');
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap.effectiveResolution), { timeout: 45_000 })
+      .toBeGreaterThan(0);
     await page.locator('#renderDiagnosticsDrawer').locator('summary').click();
     await expect(page.locator('#renderDiagnosticsOutput')).toContainText('health:');
     await page.locator('#renderPngButton').click();
@@ -641,6 +716,8 @@ test.describe('Wave 5 deterministic Render baselines', () => {
       { timeout: 30_000 },
     ).toBeGreaterThan(0);
     expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
+      .toMatchObject({ source: 'builtin', effectiveResolution: expect.any(Number), fallbackReason: null });
     expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(Buffer.alloc(0));
   });
 
@@ -665,5 +742,36 @@ test.describe('Wave 5 deterministic Render baselines', () => {
     const after = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
     expect(after.geometries).toBeLessThanOrEqual(baseline.geometries + 1);
     expect(settledSamples[1].textures).toBe(settledSamples[0].textures);
+  });
+
+  test('keeps HDRI runtime resources bounded across 20 map/cap switches', async ({ page }) => {
+    test.setTimeout(process.env.CI ? 900_000 : 600_000);
+    await openRender(page, 'wave7b-hdri-stress-fixture.png');
+    const baseline = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
+    const presets = [
+      'polyhaven-abandoned-hall-01',
+      'polyhaven-abandoned-waterworks',
+    ];
+    const caps = ['1024', '2048', '4096'];
+    for (let index = 0; index < 20; index += 1) {
+      await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 60_000 });
+      const presetId = presets[index % presets.length];
+      await page.locator('#renderEnvironmentMapPreset').selectOption(presetId);
+      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState().lighting.environmentMap.presetId), { timeout: 60_000 })
+        .toBe(presetId);
+      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 90_000 })
+        .toMatchObject({ presetId, effectiveResolution: expect.any(Number) });
+      await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 60_000 });
+      await page.locator('#renderEnvironmentResolution').selectOption(caps[index % caps.length]);
+      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
+        .toMatchObject({ effectiveResolution: expect.any(Number) });
+    }
+    const after = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
+    expect(after.environmentMap.cacheEntries).toBeLessThanOrEqual(2);
+    // Each bounded PMREM entry owns a small fixed set of GPU textures; two
+    // entries are therefore allowed above the procedural baseline.
+    expect(after.textures).toBeLessThanOrEqual(baseline.textures + 12);
+    expect(after.geometries).toBeLessThanOrEqual(baseline.geometries + 1);
+    await expect(page.locator('#renderRecovery')).toBeHidden();
   });
 });

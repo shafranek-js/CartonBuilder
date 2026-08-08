@@ -220,4 +220,34 @@ describe('createInteractive3dHtml', () => {
     expect(html).toContain('let phi = Math.PI / 2;');
     expect(html).toContain('autoRotateEnabled = true;');
   });
+
+  it('embeds presentation state and an offline GLB model with template controls', async () => {
+    const glb = new Blob([new Uint8Array([0x67, 0x6c, 0x54, 0x46, 0x02, 0, 0, 0])], {
+      type: 'model/gltf-binary',
+    });
+    const blob = await createInteractive3dHtml({
+      boxModel: buildCompleteBox(),
+      artworks: fakeEntries(),
+      glbBlob: glb,
+      renderState: {
+        camera: { projection: 'orthographic', cameraDistance: 3 },
+        lighting: { environmentMap: { intensity: 0.8, rotation: 15 } },
+      },
+      previewState: { foldProgress: 0.5, lightAzimuth: 180 },
+      locale: 'ru',
+      composeTexture: stubTextureComposer(),
+    });
+    const html = await blob.text();
+
+    expect(html).toContain('id="embeddedViewerData"');
+    expect(html).toContain('"modelId":"carton"');
+    expect(html).toContain('data:model/gltf-binary;base64,Z2xURgIA');
+    expect(html).toContain('id="modelsPanel"');
+    expect(html).toContain('id="settingsPanel"');
+    expect(html).toContain('id="exportStandalone"');
+    expect(html).toContain('id="toneMapping"');
+    expect(html).toContain('id="keyColor"');
+    expect(html).not.toContain('cdn.jsdelivr.net');
+    expect(html).not.toMatch(/<script[^>]+src=/i);
+  });
 });

@@ -428,6 +428,7 @@ artworkApp = createArtworkApp({
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
+  getPreview3dState: () => preview3dFacade?.getState?.() || null,
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
   onArtworkQualityChanged: async ({ kind } = {}) => {
     const refreshes = [];

@@ -63,6 +63,22 @@ and repeated texture replacement. `test:e2e:smoke` is the fast release gate;
 `test:e2e:stress` runs the 20-cycle resource checks. The scheduled Windows
 release job also runs `npm run test:e2e:edge` against Microsoft Edge.
 
+## Code knowledge graph (Graphify)
+
+The repository includes a project-scoped Graphify skill for Codex in
+`.codex/skills/graphify/` and guidance in `AGENTS.md`. To recreate the local
+graph on a new machine, install the official package and build the AST graph:
+
+```bash
+uv tool install graphifyy
+graphify install --project --platform codex
+graphify extract . --code-only --no-cluster
+```
+
+The generated `graphify-out/` directory is local-only and ignored by Git. Use
+`graphify query "..."` for scoped architecture questions and `graphify update .`
+after code changes.
+
 ## Architecture
 
 - `src/model/` — DOM-independent box geometry, serialization, and cut/fold
@@ -175,7 +191,13 @@ contract explicit: presentation PNG/JPG use the framed pixel dimensions,
 the physical dieline size, and HTML is a responsive interactive viewer. HTML
 texture quality can be set to Auto, 600, 1200, or 2400 DPI; Auto follows the
 highest artwork Render quality while raster sources remain capped by native
-pixels.
+pixels. The exported HTML is a self-contained offline viewer: it includes the
+procedural carton, a compact embedded GLB model, model replacement for local
+`.glb` files, fold/camera controls, HDRI/light/shadow/exposure/tone-mapping
+settings, video audio, optional music, EN/RU language controls, persistent
+settings, JSON settings import/export, and re-export of the current standalone
+viewer. No CDN or remote HDRI is required. The procedural carton remains the
+canonical model for fold/open; arbitrary replacement GLBs are static models.
 
 Preview settings are split into two independently scrollable panels around the
 viewport: the left panel contains scene presets, export quality, style and
@@ -203,6 +225,14 @@ Render also provides Uncoated, Matte, and Gloss board profiles; 1:1, 4:3,
 16:9, and 3:4 frames; environment/light/shadow controls; embedded image,
 solid or transparent backgrounds; optional floor reflection/shadow controls;
 and PNG/JPG still export at preset, custom pixel, or print sizes (cm/in + PPI).
+HDRI/EXR environment maps are supported as linear-light IBL assets with
+procedural Neutral Softbox fallback, independent lighting/background usage,
+rotation, intensity and blur controls. Bundled and custom maps use a 1K/2K/4K
+runtime resolution cap (2K by default), with automatic device fallback and a
+bounded two-entry PMREM cache; the Render diagnostics show requested/effective
+resolution and fallback status. Custom maps are hashed and embedded as
+separate render assets in project archive v4; GLB export warns that viewers do
+not receive the HDRI or backplate.
 Packaging finish layers can be marked as Print, Finish, or Print + Finish. Spot
 gloss, metallic foil, emboss and deboss masks are derived from the same artwork
 layers and use alpha/luminance mask selection, intensity, foil color/roughness,
@@ -231,9 +261,10 @@ The optional path-tracing experiment is only exposed with
 `VITE_ENABLE_RENDER_PATH_TRACING=true`; it is not part of the production raster
 pipeline and requires a separately installed compatible addon.
 
-All Render controls, including Board appearance, output sizing and background
-assets, are saved immediately in browser storage and included in the current
-project snapshot. Embedded background images are packed into `.carton` archives
+All Render controls, including Board appearance, output sizing, background and
+environment-map settings, are saved immediately in browser storage and included
+in the current project snapshot. Embedded background images and HDR/EXR maps are
+packed into `.carton` archives as separate render assets
 and restored without external file links. They are restored after a page reload,
 IndexedDB autosave restore, or `.carton` import. GPU resources, progress, and
 renderer diagnostics remain transient. WebGL 2 is required for the presentation scene;
