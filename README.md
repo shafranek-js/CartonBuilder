@@ -175,7 +175,13 @@ contract explicit: presentation PNG/JPG use the framed pixel dimensions,
 the physical dieline size, and HTML is a responsive interactive viewer. HTML
 texture quality can be set to Auto, 600, 1200, or 2400 DPI; Auto follows the
 highest artwork Render quality while raster sources remain capped by native
-pixels.
+pixels. The exported HTML is a self-contained offline viewer: it includes the
+procedural carton, a compact embedded GLB model, model replacement for local
+`.glb` files, fold/camera controls, HDRI/light/shadow/exposure/tone-mapping
+settings, video audio, optional music, EN/RU language controls, persistent
+settings, JSON settings import/export, and re-export of the current standalone
+viewer. No CDN or remote HDRI is required. The procedural carton remains the
+canonical model for fold/open; arbitrary replacement GLBs are static models.
 
 Preview settings are split into two independently scrollable panels around the
 viewport: the left panel contains scene presets, export quality, style and

@@ -174,6 +174,7 @@ export function createArtworkApp({
   getRenderState = () => DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance = () => null,
   getRenderAssets = () => [],
+  getPreview3dState = () => null,
   onRenderStateChanged = () => {},
   onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
@@ -3237,10 +3238,14 @@ export function createArtworkApp({
       } else if (type === 'html') {
         const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
         const renderState = sanitizeRenderSettings(getRenderState());
+        const previewState = getPreview3dState?.() || null;
         blob = await createInteractive3dHtml({
           boxModel,
           artworks: exportArtworks,
           htmlQuality: renderState.quality.html,
+          renderState,
+          previewState,
+          locale: documentRef.documentElement.lang || 'en',
           documentRef,
         });
         suggestedName = 'carton-3d.html';
@@ -3299,10 +3304,14 @@ export function createArtworkApp({
       const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
       const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
       const renderState = sanitizeRenderSettings(getRenderState());
+      const previewState = getPreview3dState?.() || null;
       const blob = await createInteractive3dHtml({
         boxModel,
         artworks: exportArtworks,
         htmlQuality: renderState.quality.html,
+        renderState,
+        previewState,
+        locale: documentRef.documentElement.lang || 'en',
         documentRef,
       });
 

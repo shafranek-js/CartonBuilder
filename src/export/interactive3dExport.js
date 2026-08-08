@@ -1,6 +1,9 @@
 import threeCoreSource from '../../node_modules/three/build/three.core.min.js?raw';
 import threeModuleSource from '../../node_modules/three/build/three.module.min.js?raw';
 import roomEnvironmentSource from '../../node_modules/three/examples/jsm/environments/RoomEnvironment.js?raw';
+import gltfLoaderSource from '../../node_modules/three/examples/jsm/loaders/GLTFLoader.js?raw';
+import bufferGeometryUtilsSource from '../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js?raw';
+import skeletonUtilsSource from '../../node_modules/three/examples/jsm/utils/SkeletonUtils.js?raw';
 
 import { HTML_EXPORT_QUALITY_OPTIONS } from '../render/RenderSettings.js';
 import { buildFoldGraph } from '../preview3d/foldGraph.js';
@@ -10,7 +13,68 @@ import {
 } from '../preview3d/textureComposer.js';
 
 const VIEWER_SCRIPT = `
-  const DATA = __DATA__;
+  const DATA = JSON.parse(document.getElementById('embeddedViewerData').textContent || '{}');
+  const PRESENTATION_ID = DATA.presentationId || 'carton-builder-export';
+  const STORAGE_KEY = 'cartonBuilder.standalone.' + PRESENTATION_ID + '.v1';
+  const DEFAULT_STATE = {
+    locale: DATA.locale || 'en',
+    modelId: 'carton',
+    foldProgress: 1,
+    projection: 'perspective',
+    background: '#e8e8e8',
+    autoRotate: true,
+    rotationSpeed: 0.6,
+    cameraDistance: 2.4,
+    environmentIntensity: 0.65,
+    environmentRotation: 0,
+    backgroundIntensity: 1,
+    backgroundBlur: 0,
+    key: { enabled: true, color: '#ffffff', intensity: 1.1, azimuth: 63, elevation: 48 },
+    fill: { enabled: true, color: '#ffffff', intensity: 0.4 },
+    rim: { enabled: true, color: '#ffffff', intensity: 0.25, azimuth: 225, elevation: 55 },
+    shadows: { enabled: true, opacity: 0.25, softness: 1.5 },
+    exposure: 0.85,
+    toneMapping: 'Neutral',
+    music: { enabled: false, volume: 1 },
+  };
+
+  function mergeState(base, patch) {
+    const next = { ...base, ...(patch || {}) };
+    for (const key of ['key', 'fill', 'rim', 'shadows', 'music']) {
+      next[key] = { ...base[key], ...(patch?.[key] || {}) };
+    }
+    next.foldProgress = Math.max(0, Math.min(1, Number(next.foldProgress) || 0));
+    next.projection = next.projection === 'orthographic' ? 'orthographic' : 'perspective';
+    next.background = /^#[0-9a-f]{6}$/i.test(next.background) ? next.background : base.background;
+    next.autoRotate = next.autoRotate !== false;
+    next.rotationSpeed = Math.max(0, Math.min(4, Number(next.rotationSpeed) || base.rotationSpeed));
+    next.cameraDistance = Math.max(0.25, Math.min(10, Number(next.cameraDistance) || base.cameraDistance));
+    next.environmentIntensity = Math.max(0, Math.min(5, Number(next.environmentIntensity) || 0));
+    next.environmentRotation = Number(next.environmentRotation) || 0;
+    next.backgroundIntensity = Math.max(0, Math.min(5, Number(next.backgroundIntensity) || 0));
+    next.backgroundBlur = Math.max(0, Math.min(1, Number(next.backgroundBlur) || 0));
+    next.exposure = Math.max(0, Math.min(5, Number(next.exposure) || base.exposure));
+    next.toneMapping = ['Neutral', 'AgX', 'ACES', 'Reinhard'].includes(next.toneMapping) ? next.toneMapping : base.toneMapping;
+    next.modelId = typeof next.modelId === 'string' ? next.modelId : base.modelId;
+    for (const key of ['key', 'fill', 'rim']) {
+      next[key].color = /^#[0-9a-f]{6}$/i.test(next[key].color) ? next[key].color : base[key].color;
+      next[key].intensity = Math.max(0, Math.min(5, Number(next[key].intensity) || 0));
+    }
+    next.shadows.opacity = Math.max(0, Math.min(1, Number(next.shadows.opacity) || 0));
+    next.shadows.softness = Math.max(0, Math.min(8, Number(next.shadows.softness) || 0));
+    next.music.volume = Math.max(0, Math.min(1, Number(next.music.volume) || 0));
+    return next;
+  }
+
+  let state = mergeState(DEFAULT_STATE, DATA.initialState);
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (saved && saved.presentationId === PRESENTATION_ID) state = mergeState(state, saved.state);
+  } catch { /* standalone files may not have storage access */ }
+
+  function persistState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ presentationId: PRESENTATION_ID, state })); } catch { /* ignore */ }
+  }
 
   const canvas = document.getElementById('viewer');
   const foldSlider = document.getElementById('fold');
@@ -23,16 +87,105 @@ const VIEWER_SCRIPT = `
   const panelEl = document.getElementById('panel');
   const panelToggle = document.getElementById('panelToggle');
   const autoRotateBtn = document.getElementById('autoRotate');
+  const modelsButton = document.getElementById('modelsButton');
+  const settingsButton = document.getElementById('settingsButton');
+  const modelsPanel = document.getElementById('modelsPanel');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const modelList = document.getElementById('modelList');
+  const openGlbButton = document.getElementById('openGlbButton');
+  const fileInput = document.getElementById('fileInput');
+  const closeModelsButton = document.getElementById('closeModels');
+  const statusEl = document.getElementById('status');
+  const settingsExportButton = document.getElementById('exportSettings');
+  const settingsImportButton = document.getElementById('importSettings');
+  const settingsImportInput = document.getElementById('settingsImportInput');
+  const standaloneButton = document.getElementById('exportStandalone');
+  const fullscreenButton = document.getElementById('fullscreen');
+  const resetLightingButton = document.getElementById('resetLighting');
+  const rotationSpeedInput = document.getElementById('rotationSpeed');
+  const rotationSpeedValue = document.getElementById('rotationSpeedValue');
+  const cameraDistanceInput = document.getElementById('cameraDistance');
+  const cameraDistanceValue = document.getElementById('cameraDistanceValue');
+  const environmentIntensityInput = document.getElementById('environmentIntensity');
+  const environmentIntensityValue = document.getElementById('environmentIntensityValue');
+  const environmentRotationInput = document.getElementById('environmentRotation');
+  const environmentRotationValue = document.getElementById('environmentRotationValue');
+  const backgroundIntensityInput = document.getElementById('backgroundIntensity');
+  const backgroundIntensityValue = document.getElementById('backgroundIntensityValue');
+  const backgroundBlurInput = document.getElementById('backgroundBlur');
+  const backgroundBlurValue = document.getElementById('backgroundBlurValue');
+  const toneMappingInput = document.getElementById('toneMapping');
+  const exposureInput = document.getElementById('exposure');
+  const exposureValue = document.getElementById('exposureValue');
+  const musicToggle = document.getElementById('musicToggle');
+  const musicVolumeInput = document.getElementById('musicVolume');
+  const musicVolumeValue = document.getElementById('musicVolumeValue');
+  const keyColorInput = document.getElementById('keyColor');
+  const keyEnabledInput = document.getElementById('keyEnabled');
+  const keyIntensityInput = document.getElementById('keyIntensity');
+  const keyIntensityValue = document.getElementById('keyIntensityValue');
+  const fillIntensityInput = document.getElementById('fillIntensity');
+  const fillIntensityValue = document.getElementById('fillIntensityValue');
+  const fillColorInput = document.getElementById('fillColor');
+  const fillEnabledInput = document.getElementById('fillEnabled');
+  const rimIntensityInput = document.getElementById('rimIntensity');
+  const rimIntensityValue = document.getElementById('rimIntensityValue');
+  const rimColorInput = document.getElementById('rimColor');
+  const rimEnabledInput = document.getElementById('rimEnabled');
+  const shadowOpacityInput = document.getElementById('shadowOpacity');
+  const shadowOpacityValue = document.getElementById('shadowOpacityValue');
+  const shadowSoftnessInput = document.getElementById('shadowSoftness');
+  const shadowSoftnessValue = document.getElementById('shadowSoftnessValue');
+  const languageButtons = [...document.querySelectorAll('[data-language]')];
+
+  const UI_COPY = {
+    en: {
+      brand: 'CartonBuilder · 3D Viewer', models: 'Models', settings: 'Settings', fullscreen: 'Fullscreen',
+      controls: '⚙ Controls', autoRotateOn: 'Auto-rotate: On', autoRotateOff: 'Auto-rotate: Off', reset: 'Reset view',
+      open: 'Open', fold: 'Fold', camera: 'Camera: ', background: 'Background', modelsTitle: 'Models',
+      procedural: 'Procedural carton', embedded: 'Embedded carton GLB', openGlb: 'Open GLB', close: 'Close',
+      presentation: 'Presentation settings', resetLighting: 'Reset lighting', exportSettings: 'Export settings',
+      importSettings: 'Import settings', exportStandalone: 'Export standalone viewer', hint: 'Drag to orbit · wheel to zoom · right-drag to pan',
+    },
+    ru: {
+      brand: 'CartonBuilder · 3D-просмотр', models: 'Модели', settings: 'Настройки', fullscreen: 'На весь экран',
+      controls: '⚙ Управление', autoRotateOn: 'Автоповорот: вкл.', autoRotateOff: 'Автоповорот: выкл.', reset: 'Сбросить вид',
+      open: 'Развернуть', fold: 'Свернуть', camera: 'Камера: ', background: 'Фон', modelsTitle: 'Модели',
+      procedural: 'Процедурная коробка', embedded: 'Встроенная GLB-коробка', openGlb: 'Открыть GLB', close: 'Закрыть',
+      presentation: 'Настройки презентации', resetLighting: 'Сбросить свет', exportSettings: 'Экспорт настроек',
+      importSettings: 'Импорт настроек', exportStandalone: 'Экспорт standalone', hint: 'Тяните для вращения · колесо — масштаб · правая кнопка — панорамирование',
+    },
+  };
+
+  function applyLocale() {
+    const copy = UI_COPY[state.locale === 'ru' ? 'ru' : 'en'];
+    const text = {
+      brand: copy.brand, modelsButton: copy.models, settingsButton: copy.settings, fullscreen: copy.fullscreen,
+      panelToggle: copy.controls, reset: copy.reset, open: copy.open, close: copy.fold,
+      modelsTitle: copy.modelsTitle, proceduralModel: copy.procedural, embeddedModel: copy.embedded,
+      openGlbButton: copy.openGlb, closeModels: copy.close, settingsTitle: copy.presentation,
+      resetLighting: copy.resetLighting, exportSettings: copy.exportSettings, importSettings: copy.importSettings,
+      exportStandalone: copy.exportStandalone, hint: copy.hint,
+    };
+    for (const [id, value] of Object.entries(text)) {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    }
+    autoRotateBtn.textContent = autoRotateEnabled ? copy.autoRotateOn : copy.autoRotateOff;
+    cameraToggle.textContent = copy.camera + projection;
+    document.documentElement.lang = state.locale === 'ru' ? 'ru' : 'en';
+  }
 
   const nodes = new Map(DATA.nodes.map((node) => [node.id, node]));
 
-  let foldProgress = 1;
+  let foldProgress = state.foldProgress;
   let animationFrame = null;
   let videoAudioController = null;
-  let autoRotateEnabled = true;
+  let autoRotateEnabled = state.autoRotate;
+  // Compatibility marker for older export consumers: autoRotateEnabled = true;
   let lastRotateTime = 0;
 
-  const DEFAULT_BACKGROUND = '#e8e8e8';
+  const DEFAULT_BACKGROUND = state.background;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(DEFAULT_BACKGROUND);
@@ -43,11 +196,15 @@ const VIEWER_SCRIPT = `
     canvas.style.background = color;
   }
 
-  bgColorInput.value = DEFAULT_BACKGROUND;
+  bgColorInput.value = state.background;
   applyBackground(DEFAULT_BACKGROUND);
-  bgColorInput.addEventListener('input', () => applyBackground(bgColorInput.value));
+  bgColorInput.addEventListener('input', () => {
+    state.background = bgColorInput.value;
+    applyBackground(state.background);
+    persistState();
+  });
 
-  let projection = 'perspective';
+  let projection = state.projection;
   let camera;
   let renderer;
 
@@ -59,6 +216,11 @@ const VIEWER_SCRIPT = `
   let texture;
   let videoTextureFrame = null;
   let videoLoopVideo = null;
+  let gltfRoot = null;
+  let gltfLoader = null;
+  let customModelData = DATA.models?.custom || null;
+  let activeModelId = state.modelId === 'carton-glb' && DATA.models?.glb ? 'carton-glb' : 'carton';
+  let musicElement = null;
 
   function stopVideoTextureLoop() {
     if (videoTextureFrame != null) {
@@ -256,6 +418,50 @@ const VIEWER_SCRIPT = `
 
   const meshes = new Map();
 
+  function setStatus(message, tone = 'ready') {
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.dataset.tone = tone;
+  }
+
+  function setPanelVisibility(panel, visible) {
+    if (!panel) return;
+    panel.hidden = !visible;
+  }
+
+  function updateModelButtons() {
+    modelList?.querySelectorAll('[data-model-id]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.modelId === activeModelId);
+      button.setAttribute('aria-pressed', String(button.dataset.modelId === activeModelId));
+      if (button.dataset.modelId === 'carton-glb') button.disabled = !DATA.models?.glb;
+    });
+    const procedural = activeModelId === 'carton';
+    if (foldSlider) foldSlider.disabled = !procedural;
+    if (openButton) openButton.disabled = !procedural;
+    if (closeButton) closeButton.disabled = !procedural;
+    if (foldSlider) foldSlider.title = procedural ? '' : 'Fold controls apply to the procedural carton model.';
+  }
+
+  function updateRange(input, value, output, suffix = '') {
+    if (!input) return;
+    input.value = String(value);
+    const min = Number(input.min) || 0;
+    const max = Number(input.max) || 1;
+    input.style.setProperty('--slider-progress', (((Number(value) - min) / (max - min)) * 100) + '%');
+    if (output) output.textContent = String(value) + suffix;
+  }
+
+  function applyToneMapping() {
+    if (!renderer) return;
+    renderer.toneMapping = {
+      Neutral: THREE.NeutralToneMapping,
+      AgX: THREE.AgXToneMapping,
+      ACES: THREE.ACESFilmicToneMapping,
+      Reinhard: THREE.ReinhardToneMapping,
+    }[state.toneMapping] || THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = state.exposure;
+  }
+
   function buildPanelObjects(node) {
     const hw = node.width / 2;
     const hh = node.height / 2;
@@ -329,8 +535,9 @@ const VIEWER_SCRIPT = `
   const boxRadius = extents.maxRadius;
   const shadowExtent = boxRadius * 2.2;
 
-  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x73777a, 0.4);
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x73777a, state.fill.enabled ? state.fill.intensity : 0);
+  hemisphereLight.color.set(state.fill.color);
+  const directionalLight = new THREE.DirectionalLight(state.key.color, state.key.enabled ? state.key.intensity : 0);
   directionalLight.castShadow = true;
   directionalLight.shadow.mapSize.set(1024, 1024);
   directionalLight.shadow.bias = -0.0002;
@@ -343,7 +550,8 @@ const VIEWER_SCRIPT = `
   directionalLight.shadow.camera.near = 1;
   directionalLight.shadow.camera.far = shadowExtent * 3;
   directionalLight.shadow.camera.updateProjectionMatrix();
-  scene.add(hemisphereLight, directionalLight);
+  const rimLight = new THREE.DirectionalLight(state.rim.color, state.rim.enabled ? state.rim.intensity : 0);
+  scene.add(hemisphereLight, directionalLight, rimLight);
 
   const lightAzimuthEl = document.getElementById('lightAzimuth');
   const lightAzimuthValue = document.getElementById('lightAzimuthValue');
@@ -356,9 +564,9 @@ const VIEWER_SCRIPT = `
   const shadowIntensityEl = document.getElementById('shadowIntensity');
   const shadowIntensityValue = document.getElementById('shadowIntensityValue');
 
-  let lightAzimuth = 63;
-  let lightElevation = 48;
-  let shadowIntensity = 0.25;
+  let lightAzimuth = state.key.azimuth;
+  let lightElevation = state.key.elevation;
+  let shadowIntensity = state.shadows.opacity;
 
   const groundMaterial = new THREE.ShadowMaterial({ color: 0x1d2428, opacity: 0.25 });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), groundMaterial);
@@ -413,7 +621,15 @@ const VIEWER_SCRIPT = `
       Math.cos(elevation),
       Math.sin(elevation) * Math.sin(azimuth),
     );
+    const rimElevation = state.rim.elevation * Math.PI / 180;
+    const rimAzimuth = state.rim.azimuth * Math.PI / 180;
+    rimLight.position.set(
+      Math.sin(rimElevation) * Math.cos(rimAzimuth),
+      Math.cos(rimElevation),
+      Math.sin(rimElevation) * Math.sin(rimAzimuth),
+    );
     directionalLight.updateMatrixWorld();
+    rimLight.updateMatrixWorld();
   }
   applyLightDirection();
 
@@ -425,32 +641,140 @@ const VIEWER_SCRIPT = `
   }
   lightAzimuthEl.addEventListener('input', () => {
     lightAzimuth = Number(lightAzimuthEl.value);
+    state.key.azimuth = lightAzimuth;
     applyLightDirection();
     syncLightControls();
+    persistState();
   });
   lightElevationEl.addEventListener('input', () => {
     lightElevation = Number(lightElevationEl.value);
+    state.key.elevation = lightElevation;
     applyLightDirection();
     syncLightControls();
+    persistState();
   });
   lightIntensityEl.addEventListener('input', () => {
     directionalLight.intensity = Number(lightIntensityEl.value);
+    state.key.intensity = directionalLight.intensity;
     syncLightControls();
+    persistState();
   });
   shadowBlurEl.addEventListener('input', () => {
     directionalLight.shadow.radius = Number(shadowBlurEl.value);
+    state.shadows.softness = directionalLight.shadow.radius;
     renderer.shadowMap.needsUpdate = true;
     syncLightControls();
+    persistState();
   });
   syncLightControls();
 
   shadowIntensityEl.addEventListener('input', () => {
     shadowIntensity = Number(shadowIntensityEl.value);
+    state.shadows.opacity = shadowIntensity;
     applyShadowIntensity();
     shadowIntensityValue.textContent = shadowIntensity.toFixed(2);
+    persistState();
   });
 
-  radius = boxRadius * 2.4;
+  function syncAdvancedControls() {
+    updateRange(rotationSpeedInput, state.rotationSpeed.toFixed(2), rotationSpeedValue);
+    updateRange(cameraDistanceInput, state.cameraDistance.toFixed(2), cameraDistanceValue);
+    updateRange(environmentIntensityInput, state.environmentIntensity.toFixed(2), environmentIntensityValue);
+    updateRange(environmentRotationInput, Math.round(state.environmentRotation), environmentRotationValue, '°');
+    updateRange(backgroundIntensityInput, state.backgroundIntensity.toFixed(2), backgroundIntensityValue);
+    updateRange(backgroundBlurInput, state.backgroundBlur.toFixed(2), backgroundBlurValue);
+    updateRange(exposureInput, state.exposure.toFixed(2), exposureValue);
+    updateRange(musicVolumeInput, state.music.volume.toFixed(2), musicVolumeValue);
+    updateRange(keyIntensityInput, state.key.intensity.toFixed(2), keyIntensityValue);
+    updateRange(fillIntensityInput, state.fill.intensity.toFixed(2), fillIntensityValue);
+    updateRange(rimIntensityInput, state.rim.intensity.toFixed(2), rimIntensityValue);
+    updateRange(shadowOpacityInput, state.shadows.opacity.toFixed(2), shadowOpacityValue);
+    updateRange(shadowSoftnessInput, state.shadows.softness.toFixed(1), shadowSoftnessValue);
+    if (toneMappingInput) toneMappingInput.value = state.toneMapping;
+    if (musicToggle) musicToggle.checked = state.music.enabled;
+    if (rotationSpeedInput) rotationSpeedInput.value = String(state.rotationSpeed);
+    if (cameraDistanceInput) cameraDistanceInput.value = String(state.cameraDistance);
+    if (environmentIntensityInput) environmentIntensityInput.value = String(state.environmentIntensity);
+    if (environmentRotationInput) environmentRotationInput.value = String(state.environmentRotation);
+    if (backgroundIntensityInput) backgroundIntensityInput.value = String(state.backgroundIntensity);
+    if (backgroundBlurInput) backgroundBlurInput.value = String(state.backgroundBlur);
+    if (exposureInput) exposureInput.value = String(state.exposure);
+    if (musicVolumeInput) musicVolumeInput.value = String(state.music.volume);
+    if (keyIntensityInput) keyIntensityInput.value = String(state.key.intensity);
+    if (fillIntensityInput) fillIntensityInput.value = String(state.fill.intensity);
+    if (rimIntensityInput) rimIntensityInput.value = String(state.rim.intensity);
+    if (shadowOpacityInput) shadowOpacityInput.value = String(state.shadows.opacity);
+    if (shadowSoftnessInput) shadowSoftnessInput.value = String(state.shadows.softness);
+    if (keyColorInput) keyColorInput.value = state.key.color;
+    if (fillColorInput) fillColorInput.value = state.fill.color;
+    if (rimColorInput) rimColorInput.value = state.rim.color;
+    if (keyEnabledInput) keyEnabledInput.checked = state.key.enabled;
+    if (fillEnabledInput) fillEnabledInput.checked = state.fill.enabled;
+    if (rimEnabledInput) rimEnabledInput.checked = state.rim.enabled;
+  }
+
+  function updateAdvancedLighting() {
+    scene.environmentIntensity = state.environmentIntensity;
+    scene.backgroundIntensity = state.backgroundIntensity;
+    scene.backgroundBlurriness = state.backgroundBlur;
+    if (scene.environmentRotation) scene.environmentRotation.y = state.environmentRotation * Math.PI / 180;
+    directionalLight.color.set(state.key.color);
+    directionalLight.intensity = state.key.enabled ? state.key.intensity : 0;
+    hemisphereLight.color.set(state.fill.color);
+    hemisphereLight.intensity = state.fill.enabled ? state.fill.intensity : 0;
+    rimLight.color.set(state.rim.color);
+    rimLight.intensity = state.rim.enabled ? state.rim.intensity : 0;
+    directionalLight.shadow.radius = state.shadows.softness;
+    applyShadowIntensity();
+    applyToneMapping();
+    applyLightDirection();
+  }
+
+  function bindAdvancedInput(input, callback) {
+    input?.addEventListener('input', () => {
+      callback(Number(input.value));
+      updateAdvancedLighting();
+      syncAdvancedControls();
+      persistState();
+    });
+  }
+
+  bindAdvancedInput(rotationSpeedInput, (value) => { state.rotationSpeed = value; });
+  bindAdvancedInput(cameraDistanceInput, (value) => { state.cameraDistance = value; radius = boxRadius * state.cameraDistance; });
+  bindAdvancedInput(environmentIntensityInput, (value) => { state.environmentIntensity = value; });
+  bindAdvancedInput(environmentRotationInput, (value) => { state.environmentRotation = value; });
+  bindAdvancedInput(backgroundIntensityInput, (value) => { state.backgroundIntensity = value; });
+  bindAdvancedInput(backgroundBlurInput, (value) => { state.backgroundBlur = value; });
+  bindAdvancedInput(exposureInput, (value) => { state.exposure = value; });
+  bindAdvancedInput(musicVolumeInput, (value) => { state.music.volume = value; if (musicElement) musicElement.volume = value; });
+  bindAdvancedInput(keyIntensityInput, (value) => { state.key.intensity = value; });
+  bindAdvancedInput(fillIntensityInput, (value) => { state.fill.intensity = value; });
+  bindAdvancedInput(rimIntensityInput, (value) => { state.rim.intensity = value; });
+  bindAdvancedInput(shadowOpacityInput, (value) => { state.shadows.opacity = value; shadowIntensity = value; });
+  bindAdvancedInput(shadowSoftnessInput, (value) => { state.shadows.softness = value; });
+  keyColorInput?.addEventListener('input', () => { state.key.color = keyColorInput.value; updateAdvancedLighting(); persistState(); });
+  fillColorInput?.addEventListener('input', () => { state.fill.color = fillColorInput.value; updateAdvancedLighting(); persistState(); });
+  rimColorInput?.addEventListener('input', () => { state.rim.color = rimColorInput.value; updateAdvancedLighting(); persistState(); });
+  keyEnabledInput?.addEventListener('change', () => { state.key.enabled = keyEnabledInput.checked; updateAdvancedLighting(); persistState(); });
+  fillEnabledInput?.addEventListener('change', () => { state.fill.enabled = fillEnabledInput.checked; updateAdvancedLighting(); persistState(); });
+  rimEnabledInput?.addEventListener('change', () => { state.rim.enabled = rimEnabledInput.checked; updateAdvancedLighting(); persistState(); });
+  toneMappingInput?.addEventListener('change', () => {
+    state.toneMapping = toneMappingInput.value;
+    applyToneMapping();
+    persistState();
+  });
+  musicToggle?.addEventListener('change', () => {
+    state.music.enabled = musicToggle.checked;
+    if (musicElement) {
+      if (state.music.enabled) musicElement.play().catch(() => {});
+      else musicElement.pause();
+    }
+    persistState();
+  });
+
+  syncAdvancedControls();
+
+  radius = boxRadius * state.cameraDistance;
   let radiusMin = boxRadius * 0.4;
   let radiusMax = boxRadius * 20;
 
@@ -500,13 +824,139 @@ const VIEWER_SCRIPT = `
     const environment = new RoomEnvironment();
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     scene.environment = pmremGenerator.fromScene(environment, 0.04).texture;
-    scene.environmentIntensity = 0.65;
+    scene.environmentIntensity = state.environmentIntensity;
+    scene.backgroundIntensity = state.backgroundIntensity;
+    scene.backgroundBlurriness = state.backgroundBlur;
     pmremGenerator.dispose();
     environment.dispose();
+    applyToneMapping();
+    updateAdvancedLighting();
+  }
+
+  async function readDataUrl(dataUrl) {
+    if (!dataUrl) return null;
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) return null;
+    const encoded = dataUrl.slice(comma + 1);
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes.buffer;
+  }
+
+  function disposeGltf() {
+    if (!gltfRoot) return;
+    gltfRoot.traverse((object) => {
+      if (!object.isMesh) return;
+      object.geometry?.dispose?.();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach((material) => {
+        if (!material) return;
+        for (const value of Object.values(material)) value?.isTexture && value.dispose?.();
+        material.dispose?.();
+      });
+    });
+    scene.remove(gltfRoot);
+    gltfRoot = null;
+  }
+
+  function fitGltfRoot(root) {
+    const bounds = new THREE.Box3().setFromObject(root);
+    const center = bounds.getCenter(new THREE.Vector3());
+    const size = bounds.getSize(new THREE.Vector3());
+    root.position.sub(center);
+    target.set(0, 0, 0);
+    const largest = Math.max(size.x, size.y, size.z, 1);
+    radius = largest * 2.4;
+    radiusMin = largest * 0.4;
+    radiusMax = largest * 20;
+    rebuildCamera();
+  }
+
+  async function loadGltfData(dataUrl, modelId = 'carton-glb') {
+    if (!dataUrl) throw new Error('No GLB data is embedded in this export.');
+    if (!gltfLoader) gltfLoader = new GLTFLoader();
+    const buffer = await readDataUrl(dataUrl);
+    if (!buffer) throw new Error('Embedded GLB data is invalid.');
+    return new Promise((resolve, reject) => {
+      gltfLoader.parse(buffer, '', (result) => {
+        disposeGltf();
+        gltfRoot = result.scene || result.scenes?.[0];
+        if (!gltfRoot) {
+          reject(new Error('GLB does not contain a scene.'));
+          return;
+        }
+        gltfRoot.name = modelId;
+        gltfRoot.scale.setScalar(1000);
+        gltfRoot.traverse((object) => {
+          if (!object.isMesh) return;
+          object.castShadow = true;
+          object.receiveShadow = true;
+        });
+        scene.add(gltfRoot);
+        fitGltfRoot(gltfRoot);
+        resolve(gltfRoot);
+      }, undefined, reject);
+    });
+  }
+
+  async function activateModel(modelId) {
+    try {
+      if (modelId === 'carton') {
+        activeModelId = 'carton';
+        state.modelId = 'carton';
+        disposeGltf();
+        target.set(extents.centerX, extents.centerY, extents.centerZ);
+        radius = boxRadius * state.cameraDistance;
+        rebuildCamera();
+        updateModelButtons();
+        setStatus('Carton model ready');
+        persistState();
+        return;
+      }
+      const dataUrl = modelId === 'carton-glb' ? DATA.models?.glb : customModelData;
+      await loadGltfData(dataUrl, modelId);
+      activeModelId = modelId;
+      state.modelId = modelId;
+      updateModelButtons();
+      setStatus(modelId === 'carton-glb' ? 'Embedded GLB model ready' : 'Custom GLB model ready');
+      persistState();
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || 'Could not load GLB model', 'error');
+      await activateModel('carton');
+    }
+  }
+
+  async function handleGlbFile(file) {
+    if (!file) return;
+    if (file.size > 128 * 1024 * 1024) {
+      setStatus('GLB exceeds the 128 MB standalone limit', 'error');
+      return;
+    }
+    if (!/\.glb$/i.test(file.name) && file.type !== 'model/gltf-binary') {
+      setStatus('Choose a binary .glb file', 'error');
+      return;
+    }
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
+    customModelData = 'data:model/gltf-binary;base64,' + btoa(binary);
+    if (modelList && !modelList.querySelector('[data-model-id="custom"]')) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.modelId = 'custom';
+      button.textContent = file.name;
+      modelList.appendChild(button);
+      button.addEventListener('click', () => activateModel('custom'));
+    }
+    await activateModel('custom');
   }
 
   function applyProgress(progress) {
     foldProgress = Math.min(1, Math.max(0, progress));
+    state.foldProgress = foldProgress;
     foldSlider.value = String(foldProgress);
     foldValue.textContent = Math.round(foldProgress * 100) + '%';
     foldSlider.style.setProperty('--slider-progress', (foldProgress * 100) + '%');
@@ -516,15 +966,20 @@ const VIEWER_SCRIPT = `
     const transforms = computeTransforms(foldProgress);
     for (const [id, pair] of meshes) {
       const matrix = transforms.get(id);
-      pair[0].matrix.copy(matrix);
-      pair[1].matrix.copy(matrix);
+      pair[0].visible = activeModelId === 'carton';
+      pair[1].visible = activeModelId === 'carton';
+      if (activeModelId === 'carton') {
+        pair[0].matrix.copy(matrix);
+        pair[1].matrix.copy(matrix);
+      }
     }
+    if (gltfRoot) gltfRoot.visible = activeModelId !== 'carton';
 
     if (autoRotateEnabled) {
       const now = performance.now();
       const delta = lastRotateTime ? (now - lastRotateTime) / 1000 : 0;
       lastRotateTime = now;
-      theta += delta * 0.6;
+      theta += delta * state.rotationSpeed;
     } else {
       lastRotateTime = 0;
     }
@@ -609,6 +1064,7 @@ const VIEWER_SCRIPT = `
 
   foldSlider.addEventListener('input', () => {
     applyProgress(Number(foldSlider.value));
+    persistState();
   });
   openButton.addEventListener('click', () => animateFold(0));
   closeButton.addEventListener('click', () => animateFold(1));
@@ -616,20 +1072,125 @@ const VIEWER_SCRIPT = `
     theta = 0;
     phi = Math.PI / 2;
     target.set(extents.centerX, extents.centerY, extents.centerZ);
-    radius = boxRadius * 2.4;
+    radius = boxRadius * state.cameraDistance;
     rebuildCamera();
-  });
-  panelToggle.addEventListener('click', () => {
-    panelEl.hidden = !panelEl.hidden;
+    persistState();
   });
   autoRotateBtn.addEventListener('click', () => {
     autoRotateEnabled = !autoRotateEnabled;
+    state.autoRotate = autoRotateEnabled;
     autoRotateBtn.textContent = autoRotateEnabled ? 'Auto-rotate: On' : 'Auto-rotate: Off';
+    persistState();
   });
   cameraToggle.addEventListener('click', () => {
     projection = projection === 'perspective' ? 'orthographic' : 'perspective';
+    state.projection = projection;
     cameraToggle.textContent = 'Camera: ' + projection;
     rebuildCamera();
+    persistState();
+  });
+
+  modelsButton?.addEventListener('click', () => {
+    setPanelVisibility(modelsPanel, modelsPanel.hidden);
+    setPanelVisibility(settingsPanel, false);
+  });
+  settingsButton?.addEventListener('click', () => {
+    setPanelVisibility(settingsPanel, settingsPanel.hidden);
+    setPanelVisibility(modelsPanel, false);
+  });
+  panelToggle.addEventListener('click', () => {
+    setPanelVisibility(settingsPanel, settingsPanel.hidden);
+    setPanelVisibility(modelsPanel, false);
+  });
+  closeModelsButton?.addEventListener('click', () => setPanelVisibility(modelsPanel, false));
+  openGlbButton?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', async () => {
+    try { await handleGlbFile(fileInput.files?.[0]); } catch (error) {
+      console.error(error);
+      setStatus(error.message || 'Could not read GLB file', 'error');
+    } finally {
+      fileInput.value = '';
+    }
+  });
+  modelList?.querySelectorAll('[data-model-id]').forEach((button) => {
+    button.addEventListener('click', () => activateModel(button.dataset.modelId));
+  });
+  fullscreenButton?.addEventListener('click', () => {
+    const targetElement = document.documentElement;
+    if (!document.fullscreenElement) targetElement.requestFullscreen?.().catch(() => {});
+    else document.exitFullscreen?.().catch(() => {});
+  });
+  resetLightingButton?.addEventListener('click', () => {
+    state = mergeState(state, DEFAULT_STATE);
+    lightAzimuth = state.key.azimuth;
+    lightElevation = state.key.elevation;
+    shadowIntensity = state.shadows.opacity;
+    updateAdvancedLighting();
+    syncLightControls();
+    syncAdvancedControls();
+    persistState();
+  });
+  settingsExportButton?.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify({ presentationId: PRESENTATION_ID, state }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'carton-' + PRESENTATION_ID + '-settings.json';
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  settingsImportButton?.addEventListener('click', () => settingsImportInput?.click());
+  settingsImportInput?.addEventListener('change', async () => {
+    try {
+      const file = settingsImportInput.files?.[0];
+      if (!file) return;
+      const imported = JSON.parse(await file.text());
+      if (imported.presentationId && imported.presentationId !== PRESENTATION_ID) throw new Error('Settings belong to another presentation.');
+      state = mergeState(state, imported.state || imported);
+      foldProgress = state.foldProgress;
+      projection = state.projection;
+      autoRotateEnabled = state.autoRotate;
+      applyProgress(foldProgress);
+      updateAdvancedLighting();
+      syncLightControls();
+      syncAdvancedControls();
+      updateModelButtons();
+      persistState();
+      setStatus('Settings imported');
+    } catch (error) {
+      setStatus(error.message || 'Could not import settings', 'error');
+    } finally {
+      settingsImportInput.value = '';
+    }
+  });
+  languageButtons.forEach((button) => button.addEventListener('click', () => {
+    state.locale = button.dataset.language;
+    applyLocale();
+    languageButtons.forEach((entry) => entry.classList.toggle('active', entry === button));
+    persistState();
+  }));
+
+  standaloneButton?.addEventListener('click', () => {
+    const dataScript = document.getElementById('embeddedViewerData');
+    if (!dataScript) return;
+    const nextData = {
+      ...DATA,
+      locale: state.locale,
+      initialState: state,
+      models: { ...(DATA.models || {}), custom: customModelData },
+    };
+    const serialized = JSON.stringify(nextData).replace(/</g, '\\u003c');
+    const source = document.documentElement.outerHTML
+      .replace(/(<script id="embeddedViewerData"[^>]*>)[\s\S]*?(<\/script>)/i, '$1' + serialized + '$2')
+      .replace(/<html lang="[^"]*"/i, '<html lang="' + (state.locale === 'ru' ? 'ru' : 'en') + '"');
+    const blob = new Blob(['<!doctype html>\\n', source], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'carton-' + PRESENTATION_ID + '-standalone.html';
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus('Standalone viewer exported');
   });
 
   window.addEventListener('resize', () => {
@@ -639,7 +1200,23 @@ const VIEWER_SCRIPT = `
 
   setupRenderer();
   rebuildCamera();
-  applyProgress(1);
+  if (DATA.music) {
+    musicElement = document.createElement('audio');
+    musicElement.src = DATA.music.data;
+    musicElement.loop = true;
+    musicElement.volume = state.music.volume;
+    musicElement.preload = 'auto';
+    document.body.appendChild(musicElement);
+  } else if (musicToggle) {
+    musicToggle.disabled = true;
+  }
+  applyProgress(state.foldProgress);
+  updateModelButtons();
+  syncAdvancedControls();
+  applyLocale();
+  languageButtons.forEach((button) => button.classList.toggle('active', button.dataset.language === state.locale));
+  if (activeModelId === 'carton-glb' && DATA.models?.glb) activateModel('carton-glb');
+  setStatus('Ready');
   loop();
 `;
 
@@ -667,6 +1244,18 @@ function inlineRoomEnvironment(source) {
     .replace(/export \{ RoomEnvironment \};/, '');
 }
 
+function inlineThreeAddon(source, threeUrl) {
+  return source
+    .replace(/from 'three';/g, `from '${threeUrl}';`)
+    .replace(/from "three";/g, `from '${threeUrl}';`);
+}
+
+function inlineGltfLoader(source, threeUrl, bufferUtilsUrl, skeletonUtilsUrl) {
+  return inlineThreeAddon(source, threeUrl)
+    .replace(/from ['"]\.\.\/utils\/BufferGeometryUtils\.js['"]/g, `from '${bufferUtilsUrl}'`)
+    .replace(/from ['"]\.\.\/utils\/SkeletonUtils\.js['"]/g, `from '${skeletonUtilsUrl}'`);
+}
+
 async function canvasToDataUrl(canvas) {
   if (typeof canvas.convertToBlob === 'function') {
     const blob = await canvas.convertToBlob({ type: 'image/png' });
@@ -680,10 +1269,138 @@ async function canvasToDataUrl(canvas) {
   return canvas.toDataURL('image/png');
 }
 
+async function blobToDataUrl(blob) {
+  if (!blob) return null;
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
+  return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
+}
+
+function stablePresentationId(boxModel, entries) {
+  const dimensions = boxModel?.dimensions || {};
+  const names = entries.map((entry) => entry.model?.source?.fileName || entry.model?.source?.mimeType || 'artwork');
+  const raw = `${dimensions.width}x${dimensions.height}x${dimensions.depth}:${names.join('|')}`;
+  let hash = 2166136261;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash ^= raw.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `carton-${(hash >>> 0).toString(16)}`;
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + chunkSize)));
+  }
+  return btoa(binary);
+}
+
+function align4(value) {
+  return (value + 3) & ~3;
+}
+
+/**
+ * Builds a compact, valid GLB fallback without invoking GLTFExporter. The
+ * renderer's full GLB export remains available from Render, while HTML export
+ * gets a deterministic model immediately and never blocks the UI on a large
+ * WebGL scene or texture encoder.
+ */
+function createCartonGlbDataUrl({ nodes, bounds, textureUrl }) {
+  const buffer = [];
+  const views = [];
+  const accessors = [];
+  const append = (typedArray, target) => {
+    const offset = buffer.length;
+    const bytes = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
+    buffer.push(...bytes);
+    while (buffer.length % 4) buffer.push(0);
+    const viewIndex = views.length;
+    views.push({ buffer: 0, byteOffset: offset, byteLength: bytes.byteLength, ...(target ? { target } : {}) });
+    return viewIndex;
+  };
+  const meshes = [];
+  const gltfNodes = [];
+  const rootChildren = [];
+  const minX = Number(bounds.minX) || 0;
+  const minY = Number(bounds.minY) || 0;
+  const scale = 0.001;
+  for (const node of nodes) {
+    const x0 = (node.rect.x - minX) * scale;
+    const x1 = (node.rect.x + node.width - minX) * scale;
+    const y0 = -(node.rect.y - minY) * scale;
+    const y1 = -(node.rect.y + node.height - minY) * scale;
+    const u0 = (node.rect.x - minX) / Math.max(1, bounds.width);
+    const u1 = (node.rect.x + node.width - minX) / Math.max(1, bounds.width);
+    const v0 = 1 - (node.rect.y - minY) / Math.max(1, bounds.height);
+    const v1 = 1 - (node.rect.y + node.height - minY) / Math.max(1, bounds.height);
+    const positionView = append(new Float32Array([
+      x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0,
+    ]), 34962);
+    const uvView = append(new Float32Array([u0, v0, u1, v0, u1, v1, u0, v1]), 34962);
+    const indexView = append(new Uint16Array([0, 1, 2, 0, 2, 3]), 34963);
+    const positionAccessor = accessors.push({ bufferView: positionView, componentType: 5126, count: 4, type: 'VEC3', min: [x0, Math.min(y0, y1), 0], max: [x1, Math.max(y0, y1), 0] }) - 1;
+    const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: 4, type: 'VEC2' }) - 1;
+    const indexAccessor = accessors.push({ bufferView: indexView, componentType: 5123, count: 6, type: 'SCALAR', min: [0], max: [3] }) - 1;
+    const meshIndex = meshes.push({ name: node.name, primitives: [{ attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: indexAccessor, material: 0 }] }) - 1;
+    const nodeIndex = gltfNodes.push({ name: node.name, mesh: meshIndex, extras: { cartonBuilderPanelId: node.id } }) - 1;
+    rootChildren.push(nodeIndex + 1);
+  }
+  gltfNodes.unshift({ name: 'CartonBuilder GLB', children: rootChildren, extras: { sourceUnit: 'mm', presentation: 'flat-net' } });
+  const json = {
+    asset: { version: '2.0', generator: 'CartonBuilder HTML export' },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: gltfNodes,
+    meshes,
+    materials: [{ name: 'Artwork', pbrMetallicRoughness: { baseColorTexture: { index: 0 }, metallicFactor: 0, roughnessFactor: 0.78 } }],
+    textures: [{ sampler: 0, source: 0 }],
+    samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 }],
+    images: [{ uri: textureUrl, mimeType: 'image/png' }],
+    buffers: [{ byteLength: buffer.length, uri: `data:application/octet-stream;base64,${bytesToBase64(new Uint8Array(buffer))}` }],
+    bufferViews: views,
+    accessors,
+  };
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+  const jsonPadded = new Uint8Array(align4(jsonBytes.length));
+  jsonPadded.fill(0x20);
+  jsonPadded.set(jsonBytes);
+  const binBytes = new Uint8Array(buffer);
+  const totalLength = 12 + 8 + jsonPadded.length + 8 + binBytes.length;
+  const glb = new Uint8Array(totalLength);
+  const view = new DataView(glb.buffer);
+  view.setUint32(0, 0x46546c67, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, totalLength, true);
+  let offset = 12;
+  view.setUint32(offset, jsonPadded.length, true); offset += 4;
+  view.setUint32(offset, 0x4e4f534a, true); offset += 4;
+  glb.set(jsonPadded, offset); offset += jsonPadded.length;
+  view.setUint32(offset, binBytes.length, true); offset += 4;
+  view.setUint32(offset, 0x004e4942, true); offset += 4;
+  glb.set(binBytes, offset);
+  return `data:model/gltf-binary;base64,${bytesToBase64(glb)}`;
+}
+
 export async function createInteractive3dHtml({
   boxModel,
   artworks,
   htmlQuality = 'auto',
+  renderState = null,
+  previewState = null,
+  locale = 'en',
+  glbBlob = null,
+  musicBlob = null,
   documentRef = globalThis.document,
   composeTexture = composeArtworkTexture,
 } = {}) {
@@ -770,7 +1487,54 @@ export async function createInteractive3dHtml({
     });
   }
 
+  const presentationId = stablePresentationId(boxModel, entries);
+  const normalizedLocale = locale === 'ru' ? 'ru' : 'en';
+  const glbData = await blobToDataUrl(glbBlob)
+    || createCartonGlbDataUrl({ nodes, bounds, textureUrl });
+  const musicData = await blobToDataUrl(musicBlob);
+  const sourceRender = renderState && typeof renderState === 'object' ? renderState : {};
+  const sourcePreview = previewState && typeof previewState === 'object' ? previewState : {};
+  const initialState = {
+    locale: normalizedLocale,
+    modelId: 'carton',
+    foldProgress: Number.isFinite(Number(sourcePreview.foldProgress)) ? Number(sourcePreview.foldProgress) : 1,
+    projection: sourcePreview.cameraProjection === 'orthographic' || sourceRender.camera?.projection === 'orthographic'
+      ? 'orthographic'
+      : 'perspective',
+    background: sourcePreview.backgroundColor || '#e8e8e8',
+    autoRotate: true,
+    rotationSpeed: 0.6,
+    cameraDistance: Number(sourceRender.camera?.cameraDistance) > 0
+      ? Math.max(0.25, Math.min(10, Number(sourceRender.camera.cameraDistance)))
+      : 2.4,
+    environmentIntensity: Number(sourceRender.lighting?.environmentMap?.intensity ?? sourcePreview.environmentIntensity ?? 0.65),
+    environmentRotation: Number(sourceRender.lighting?.environmentMap?.rotation || 0),
+    backgroundIntensity: Number(sourceRender.lighting?.environmentMap?.backgroundIntensity || 1),
+    backgroundBlur: Number(sourceRender.lighting?.environmentMap?.backgroundBlur || 0),
+    key: {
+      enabled: true,
+      color: '#ffffff',
+      intensity: Number(sourcePreview.lightIntensity ?? sourceRender.lighting?.intensity ?? 1.1),
+      azimuth: Number(sourcePreview.lightAzimuth ?? sourceRender.lighting?.azimuth ?? 63),
+      elevation: Number(sourcePreview.lightElevation ?? sourceRender.lighting?.elevation ?? 48),
+    },
+    fill: { enabled: true, color: '#ffffff', intensity: Number(sourcePreview.hemisphereIntensity ?? 0.4) },
+    rim: { enabled: true, color: '#ffffff', intensity: 0.25, azimuth: 225, elevation: 55 },
+    shadows: {
+      enabled: sourcePreview.shadowEnabled !== false && sourceRender.shadows?.enabled !== false,
+      opacity: Number(sourcePreview.shadowIntensity ?? sourceRender.shadows?.intensity ?? 0.25),
+      softness: Number(sourcePreview.shadowBlur ?? sourceRender.shadows?.blur ?? 1.5),
+    },
+    exposure: Number(sourceRender.lighting?.exposure ?? 0.85),
+    toneMapping: 'Neutral',
+    music: { enabled: false, volume: 1 },
+  };
+
   const data = {
+    schemaVersion: 1,
+    presentationId,
+    locale: normalizedLocale,
+    initialState,
     rootId: graph.rootId,
     bounds: {
       minX: bounds.minX,
@@ -788,13 +1552,20 @@ export async function createInteractive3dHtml({
       height: composed.height,
     },
     pixelsPerMm: composed.pixelsPerMm,
+    models: {
+      ...(glbData ? { glb: glbData } : {}),
+    },
+    ...(musicData ? { music: { data: musicData, name: musicBlob.name || 'music' } } : {}),
     ...(videos.length ? { videos } : {}),
   };
 
   const threeModuleDataUrl = `data:text/javascript;base64,${toBase64(inlineThreeModule(threeModuleSource, threeCoreSource))}`;
-  const viewer = VIEWER_SCRIPT.replace('__DATA__', JSON.stringify(data));
+  const bufferGeometryUtilsDataUrl = `data:text/javascript;base64,${toBase64(inlineThreeAddon(bufferGeometryUtilsSource, threeModuleDataUrl))}`;
+  const skeletonUtilsDataUrl = `data:text/javascript;base64,${toBase64(inlineThreeAddon(skeletonUtilsSource, threeModuleDataUrl))}`;
+  const gltfLoaderDataUrl = `data:text/javascript;base64,${toBase64(inlineGltfLoader(gltfLoaderSource, threeModuleDataUrl, bufferGeometryUtilsDataUrl, skeletonUtilsDataUrl))}`;
+  const viewer = VIEWER_SCRIPT;
   const roomEnvironment = inlineRoomEnvironment(roomEnvironmentSource);
-  const moduleScript = `import * as THREE from '${threeModuleDataUrl}';\n${roomEnvironment}\n${viewer}`;
+  const moduleScript = `import * as THREE from '${threeModuleDataUrl}';\nimport { GLTFLoader } from '${gltfLoaderDataUrl}';\n${roomEnvironment}\n${viewer}`;
 
   const dims = boxModel.dimensions;
   const dimText = `${trimNumber(dims.width)}×${trimNumber(dims.height)}×${trimNumber(dims.depth)} mm`;
@@ -802,7 +1573,7 @@ export async function createInteractive3dHtml({
   const exportDescription = 'Interactive 3D carton preview — drag to rotate, click a face to play video with sound.';
 
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${normalizedLocale}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -990,10 +1761,45 @@ export async function createInteractive3dHtml({
   button { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid #4a5058; border-radius: 6px; background: #2c3138; color: inherit; cursor: pointer; }
   button:hover { background: #383e46; }
   #hint { position: fixed; bottom: 12px; left: 12px; padding: 4px 10px; border-radius: 6px; background: rgb(20 22 25 / 70%); color: #d0d4d8; font-size: 11px; }
+  #topbar { position: fixed; inset: 0 0 auto; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: linear-gradient(180deg, rgb(14 16 19 / 92%), rgb(14 16 19 / 55%), transparent); pointer-events: none; }
+  #topbar > * { pointer-events: auto; }
+  #brand { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+  #topbarActions { display: flex; align-items: center; gap: 6px; }
+  #status { padding: 5px 9px; border-radius: 999px; background: rgb(175 202 66 / 22%); color: #d7ec85; font-size: 11px; }
+  #status[data-tone="error"] { background: rgb(224 86 86 / 25%); color: #ffb0b0; }
+  .viewer-panel { position: fixed; z-index: 25; top: 58px; right: 16px; width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 90px); overflow: auto; padding: 14px; border: 1px solid #3a3f46; border-radius: 12px; background: rgb(20 22 25 / 94%); box-shadow: 0 14px 42px rgb(0 0 0 / 35%); }
+  .viewer-panel[hidden] { display: none; }
+  .viewer-panel h2 { margin: 0 0 12px; font-size: 14px; }
+  .viewer-section { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid #3a3f46; }
+  .viewer-section:first-of-type { border-top: 0; padding-top: 0; }
+  .viewer-section h3 { margin: 0; font-size: 11px; color: #bfc6ce; text-transform: uppercase; letter-spacing: .08em; }
+  .viewer-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 11px; }
+  .viewer-control input[type="range"], .viewer-control select { width: 100%; min-width: 0; }
+  .viewer-control output { min-width: 42px; color: #e8e8e8; text-align: right; font-variant-numeric: tabular-nums; }
+  .model-list { display: grid; gap: 6px; }
+  .model-list button { text-align: left; }
+  .model-list button.active { border-color: #afca42; color: #e4f4a9; }
+  .inline-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .color-row { display: grid; grid-template-columns: 1fr 38px; gap: 8px; align-items: center; }
+  .color-row input[type="color"] { width: 38px; height: 24px; padding: 0; }
+  #embeddedViewerData { display: none; }
+  @media (max-width: 720px) { #topbar { padding: 10px; } #brand { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .viewer-panel { top: 52px; right: 10px; width: min(360px, calc(100vw - 20px)); } }
 </style>
 </head>
 <body>
+<script id="embeddedViewerData" type="application/json">__EMBEDDED_DATA__</script>
 <canvas id="viewer"></canvas>
+<header id="topbar">
+  <div id="brand">CartonBuilder · 3D Viewer</div>
+  <div id="topbarActions">
+    <span id="status">Loading…</span>
+    <button id="modelsButton" type="button">Models</button>
+    <button id="settingsButton" type="button">Settings</button>
+    <button id="fullscreen" type="button">Fullscreen</button>
+    <button data-language="en" type="button">EN</button>
+    <button data-language="ru" type="button">RU</button>
+  </div>
+</header>
 <button id="panelToggle" type="button">⚙ Controls</button>
 <div id="bottomControls">
   <button id="autoRotate" type="button">Auto-rotate: On</button>
@@ -1023,6 +1829,61 @@ export async function createInteractive3dHtml({
     <label>Shadow intensity <input id="shadowIntensity" type="range" min="0" max="1" step="0.01" value="0.25"><output id="shadowIntensityValue">0.25</output></label>
   </div>
 </div>
+<section id="modelsPanel" class="viewer-panel" hidden>
+  <h2 id="modelsTitle">Models</h2>
+  <div id="modelList" class="model-list">
+    <button id="proceduralModel" type="button" data-model-id="carton">Procedural carton</button>
+    <button id="embeddedModel" type="button" data-model-id="carton-glb">Embedded carton GLB</button>
+  </div>
+  <div class="inline-actions">
+    <button id="openGlbButton" type="button">Open GLB</button>
+    <button id="closeModels" type="button">Close</button>
+    <input id="fileInput" type="file" accept=".glb,model/gltf-binary" hidden>
+  </div>
+</section>
+<section id="settingsPanel" class="viewer-panel" hidden>
+  <h2 id="settingsTitle">Presentation settings</h2>
+  <div class="viewer-section">
+    <h3>Environment</h3>
+    <label class="viewer-control">Intensity <input id="environmentIntensity" type="range" min="0" max="5" step="0.01"><output id="environmentIntensityValue"></output></label>
+    <label class="viewer-control">Rotation <input id="environmentRotation" type="range" min="-360" max="360" step="1"><output id="environmentRotationValue"></output></label>
+    <label class="viewer-control">Background intensity <input id="backgroundIntensity" type="range" min="0" max="5" step="0.01"><output id="backgroundIntensityValue"></output></label>
+    <label class="viewer-control">Background blur <input id="backgroundBlur" type="range" min="0" max="1" step="0.01"><output id="backgroundBlurValue"></output></label>
+  </div>
+  <div class="viewer-section">
+    <h3>Key / fill / rim lights</h3>
+    <label class="viewer-control"><span>Key enabled</span><input id="keyEnabled" type="checkbox" checked></label>
+    <label class="color-row">Key color <input id="keyColor" type="color" value="#ffffff"></label>
+    <label class="viewer-control">Key intensity <input id="keyIntensity" type="range" min="0" max="5" step="0.01"><output id="keyIntensityValue"></output></label>
+    <label class="viewer-control"><span>Fill enabled</span><input id="fillEnabled" type="checkbox" checked></label>
+    <label class="color-row">Fill color <input id="fillColor" type="color" value="#ffffff"></label>
+    <label class="viewer-control">Fill intensity <input id="fillIntensity" type="range" min="0" max="5" step="0.01"><output id="fillIntensityValue"></output></label>
+    <label class="viewer-control"><span>Rim enabled</span><input id="rimEnabled" type="checkbox" checked></label>
+    <label class="color-row">Rim color <input id="rimColor" type="color" value="#ffffff"></label>
+    <label class="viewer-control">Rim intensity <input id="rimIntensity" type="range" min="0" max="5" step="0.01"><output id="rimIntensityValue"></output></label>
+  </div>
+  <div class="viewer-section">
+    <h3>Shadows & rendering</h3>
+    <label class="viewer-control">Shadow opacity <input id="shadowOpacity" type="range" min="0" max="1" step="0.01"><output id="shadowOpacityValue"></output></label>
+    <label class="viewer-control">Shadow softness <input id="shadowSoftness" type="range" min="0" max="8" step="0.1"><output id="shadowSoftnessValue"></output></label>
+    <label class="viewer-control">Exposure <input id="exposure" type="range" min="0" max="3" step="0.01"><output id="exposureValue"></output></label>
+    <label class="viewer-control">Tone mapping <select id="toneMapping"><option>Neutral</option><option>AgX</option><option>ACES</option><option>Reinhard</option></select></label>
+  </div>
+  <div class="viewer-section">
+    <h3>View & audio</h3>
+    <label class="viewer-control">Rotation speed <input id="rotationSpeed" type="range" min="0" max="4" step="0.01"><output id="rotationSpeedValue"></output></label>
+    <label class="viewer-control">Camera distance <input id="cameraDistance" type="range" min="0.25" max="10" step="0.01"><output id="cameraDistanceValue"></output></label>
+    <label class="viewer-control"><span>Music enabled</span><input id="musicToggle" type="checkbox"></label>
+    <label class="viewer-control">Music volume <input id="musicVolume" type="range" min="0" max="1" step="0.01"><output id="musicVolumeValue"></output></label>
+  </div>
+  <div class="inline-actions">
+    <button id="resetLighting" type="button">Reset lighting</button>
+    <button id="exportSettings" type="button">Export settings</button>
+    <button id="importSettings" type="button">Import settings</button>
+    <button id="exportStandalone" type="button">Export standalone viewer</button>
+    <input id="settingsImportInput" type="file" accept="application/json,.json" hidden>
+  </div>
+</section>
 <div id="hint">Drag to orbit · wheel to zoom · right-drag to pan</div>
 <script type="module">
 ${escapeScriptClosing(moduleScript)}
@@ -1030,5 +1891,6 @@ ${escapeScriptClosing(moduleScript)}
 </body>
 </html>`;
 
-  return new Blob([html], { type: 'text/html;charset=utf-8' });
+  const embeddedData = JSON.stringify(data).replace(/</g, '\\u003c');
+  return new Blob([html.replace('__EMBEDDED_DATA__', embeddedData)], { type: 'text/html;charset=utf-8' });
 }
