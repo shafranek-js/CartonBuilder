@@ -770,7 +770,10 @@ test.describe('Wave 5 deterministic Render baselines', () => {
   });
 
   test('keeps HDRI runtime resources bounded across 20 map/cap switches', async ({ page }) => {
-    test.setTimeout(process.env.CI ? 900_000 : 600_000);
+    // Hosted SwiftShader can spend roughly a minute per PMREM/map switch.
+    // Keep the assertion strict while allowing the full 20-cycle resource
+    // gate to finish instead of failing solely on the outer test timeout.
+    test.setTimeout(process.env.CI ? 1_800_000 : 600_000);
     await openRender(page, 'wave7b-hdri-stress-fixture.png');
     const baseline = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
     const presets = [
