@@ -1,4 +1,4 @@
-import { t } from '../i18n.js';
+import { getUserErrorMessage, t } from '../i18n.js';
 import { enhanceSlider } from '../ui/SliderStepper.js';
 import { ARTWORK_RENDER_QUALITY_OPTIONS } from '../artwork/ArtworkModel.js';
 import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
@@ -37,6 +37,11 @@ import {
 } from './RenderPresetStore.js';
 import { getRenderAsset, saveRenderAsset } from './RenderAssetStore.js';
 import { normalizeRenderAsset, validateRenderBackground } from './renderAssets.js';
+import {
+  getEnvironmentMapPreset,
+  loadBuiltInEnvironmentAsset,
+  validateRenderEnvironment,
+} from './environmentAssets.js';
 import { generateNeutralRenderThumbnail } from './PresetThumbnailService.js';
 import {
   cameraPositionFromHeading,
@@ -106,6 +111,7 @@ function renderPreflightIssueText(entry) {
     case 'turntable-budget': return t('renderPreflightTurntableBudget', { frames: details.frames, width: details.width, height: details.height });
     case 'jpeg-background': return t('renderPreflightJpegBackground');
     case 'basic-glb-finishes': return t('renderPreflightBasicGlbFinishes');
+    case 'hdri-glb': return t('renderPreflightHdriGlb');
     case 'memory-budget': return t('renderPreflightMemory', { estimated: formatMegabytes(details.estimatedBytes), budget: formatMegabytes(details.memoryBudgetBytes) });
     default: return entry.code;
   }
@@ -195,6 +201,18 @@ export function createRenderApp({
     environment: documentRef.getElementById('renderEnvironment'),
     environmentIntensity: documentRef.getElementById('renderEnvironmentIntensity'),
     environmentIntensityValue: documentRef.getElementById('renderEnvironmentIntensityValue'),
+    environmentMapPreset: documentRef.getElementById('renderEnvironmentMapPreset'),
+    environmentMapFile: documentRef.getElementById('renderEnvironmentMapFile'),
+    environmentMapFileName: documentRef.getElementById('renderEnvironmentMapFileName'),
+    environmentMapUsage: documentRef.getElementById('renderEnvironmentMapUsage'),
+    environmentMapRotation: documentRef.getElementById('renderEnvironmentMapRotation'),
+    environmentMapRotationValue: documentRef.getElementById('renderEnvironmentMapRotationValue'),
+    environmentMapBackgroundIntensity: documentRef.getElementById('renderEnvironmentMapBackgroundIntensity'),
+    environmentMapBackgroundIntensityValue: documentRef.getElementById('renderEnvironmentMapBackgroundIntensityValue'),
+    environmentMapBackgroundBlur: documentRef.getElementById('renderEnvironmentMapBackgroundBlur'),
+    environmentMapBackgroundBlurValue: documentRef.getElementById('renderEnvironmentMapBackgroundBlurValue'),
+    environmentMapResolution: documentRef.getElementById('renderEnvironmentMapResolution'),
+    clearEnvironmentMap: documentRef.getElementById('renderClearEnvironmentMapButton'),
     exposure: documentRef.getElementById('renderExposure'),
     exposureValue: documentRef.getElementById('renderExposureValue'),
     backgroundMode: documentRef.getElementById('renderBackgroundMode'),
@@ -336,6 +354,8 @@ export function createRenderApp({
   let viewUndoTimer = null;
   let renderUndoTimer = null;
   let backgroundAsset = null;
+  let environmentAsset = null;
+  let environmentAssetLoadGeneration = 0;
   let availableRenderAssets = Array.isArray(initialRenderAssets)
     ? initialRenderAssets.map(normalizeRenderAsset).filter(Boolean)
     : [];
@@ -356,23 +376,29 @@ export function createRenderApp({
     const entries = Array.isArray(assets) ? assets.map(normalizeRenderAsset).filter(Boolean) : [];
     availableRenderAssets = entries.length ? entries : availableRenderAssets;
     const assetId = state.background?.image?.assetId;
-    backgroundAsset = availableRenderAssets.find((asset) => asset.assetId === assetId) || null;
-    return Boolean(backgroundAsset);
+    backgroundAsset = availableRenderAssets.find((asset) => asset.kind !== 'environment' && asset.assetId === assetId) || null;
+    const environmentAssetId = state.lighting?.environmentMap?.assetId;
+    environmentAsset = availableRenderAssets.find((asset) => asset.kind === 'environment' && asset.assetId === environmentAssetId) || null;
+    return Boolean(backgroundAsset || environmentAsset);
   }
 
   restoreRenderAssets(initialRenderAssets);
 
   function getRenderAssets() {
-    return backgroundAsset ? [backgroundAsset] : [];
+    return [
+      backgroundAsset,
+      environmentAsset?.source === 'builtin' ? null : environmentAsset,
+    ].filter(Boolean);
   }
 
   async function ensureBackgroundAsset() {
     const assetId = state.background?.image?.assetId;
     if (!assetId || backgroundAsset?.assetId === assetId) return backgroundAsset;
-    backgroundAsset = availableRenderAssets.find((asset) => asset.assetId === assetId) || null;
+    backgroundAsset = availableRenderAssets.find((asset) => asset.kind !== 'environment' && asset.assetId === assetId) || null;
     if (backgroundAsset) return backgroundAsset;
     try {
-      backgroundAsset = await getRenderAsset(assetId);
+      const candidate = await getRenderAsset(assetId);
+      backgroundAsset = candidate?.kind === 'environment' ? null : candidate;
     } catch {
       backgroundAsset = null;
     }
@@ -381,6 +407,80 @@ export function createRenderApp({
       backgroundAsset,
     ];
     return backgroundAsset;
+  }
+
+  async function ensureEnvironmentAsset({ surfaceError = false } = {}) {
+    const environmentMap = state.lighting?.environmentMap || {};
+    if (environmentMap.source === 'builtin') {
+      const preset = getEnvironmentMapPreset(environmentMap.presetId);
+      if (!preset?.assetUrl) {
+        if (environmentAsset?.source === 'builtin') environmentAsset = null;
+        return null;
+      }
+      if (environmentAsset?.source === 'builtin' && environmentAsset.presetId === preset.id) return environmentAsset;
+      const generation = ++environmentAssetLoadGeneration;
+      try {
+        const fetchFn = typeof windowRef.fetch === 'function'
+          ? windowRef.fetch.bind(windowRef)
+          : globalThis.fetch;
+        const asset = await loadBuiltInEnvironmentAsset(preset.id, fetchFn);
+        if (generation !== environmentAssetLoadGeneration || state.lighting?.environmentMap?.presetId !== preset.id) return null;
+        environmentAsset = asset;
+        return environmentAsset;
+      } catch (error) {
+        environmentAsset = null;
+        if (surfaceError) throw error;
+        return null;
+      }
+    }
+
+    const assetId = environmentMap.assetId;
+    if (!assetId || environmentAsset?.assetId === assetId) return environmentAsset;
+    environmentAsset = availableRenderAssets.find((asset) => asset.kind === 'environment' && asset.assetId === assetId) || null;
+    if (environmentAsset) return environmentAsset;
+    try {
+      const candidate = await getRenderAsset(assetId);
+      environmentAsset = candidate?.kind === 'environment' ? candidate : null;
+    } catch {
+      environmentAsset = null;
+    }
+    if (environmentAsset) availableRenderAssets = [
+      ...availableRenderAssets.filter((asset) => asset.assetId !== environmentAsset.assetId),
+      environmentAsset,
+    ];
+    return environmentAsset;
+  }
+
+  async function setEnvironmentMapFile(file) {
+    const asset = await validateRenderEnvironment(file);
+    environmentAssetLoadGeneration += 1;
+    try { await saveRenderAsset(asset); } catch { /* in-memory fallback remains usable */ }
+    environmentAsset = asset;
+    availableRenderAssets = [
+      ...availableRenderAssets.filter((entry) => entry.assetId !== asset.assetId),
+      asset,
+    ];
+    const next = clone(state);
+    next.lighting.environmentMap = {
+      ...next.lighting.environmentMap,
+      source: 'custom',
+      assetId: asset.assetId,
+    };
+    updateState(next);
+    return clone(asset);
+  }
+
+  function clearEnvironmentMap() {
+    environmentAssetLoadGeneration += 1;
+    environmentAsset = null;
+    const next = clone(state);
+    next.lighting.environmentMap = {
+      ...next.lighting.environmentMap,
+      source: 'builtin',
+      presetId: 'neutral-softbox',
+      assetId: '',
+    };
+    updateState(next);
   }
 
   async function setBackgroundImage(file) {
@@ -950,6 +1050,29 @@ export function createRenderApp({
     elements.environmentIntensity.value = String(state.lighting.environmentIntensity);
     elements.environmentIntensityValue.value = state.lighting.environmentIntensity.toFixed(2);
     setRangeProgress(elements.environmentIntensity, state.lighting.environmentIntensity);
+    const environmentMap = state.lighting.environmentMap;
+    if (elements.environmentMapPreset) elements.environmentMapPreset.value = environmentMap.source === 'builtin' ? environmentMap.presetId : environmentMap.source;
+    if (elements.environmentMapUsage) elements.environmentMapUsage.value = environmentMap.usage;
+    if (elements.environmentMapRotation) {
+      elements.environmentMapRotation.value = String(environmentMap.rotation);
+      if (elements.environmentMapRotationValue) elements.environmentMapRotationValue.value = `${Math.round(environmentMap.rotation)}°`;
+      setRangeProgress(elements.environmentMapRotation, environmentMap.rotation);
+    }
+    if (elements.environmentMapBackgroundIntensity) {
+      elements.environmentMapBackgroundIntensity.value = String(environmentMap.backgroundIntensity);
+      if (elements.environmentMapBackgroundIntensityValue) elements.environmentMapBackgroundIntensityValue.value = environmentMap.backgroundIntensity.toFixed(2);
+      setRangeProgress(elements.environmentMapBackgroundIntensity, environmentMap.backgroundIntensity);
+    }
+    if (elements.environmentMapBackgroundBlur) {
+      elements.environmentMapBackgroundBlur.value = String(environmentMap.backgroundBlur);
+      if (elements.environmentMapBackgroundBlurValue) elements.environmentMapBackgroundBlurValue.value = environmentMap.backgroundBlur.toFixed(2);
+      setRangeProgress(elements.environmentMapBackgroundBlur, environmentMap.backgroundBlur);
+    }
+    if (elements.environmentMapResolution) elements.environmentMapResolution.value = String(environmentMap.resolutionCap);
+    if (elements.environmentMapFileName) {
+      elements.environmentMapFileName.textContent = environmentAsset?.fileName
+        || t('renderEnvironmentNoFile');
+    }
     elements.exposure.value = String(state.lighting.exposure);
     elements.exposureValue.value = state.lighting.exposure.toFixed(2);
     setRangeProgress(elements.exposure, state.lighting.exposure);
@@ -1119,6 +1242,7 @@ export function createRenderApp({
     }
     updateControls();
     renderer?.setBackgroundAsset?.(backgroundAsset);
+    renderer?.setEnvironmentAsset?.(environmentAsset);
     renderer?.updateSettings(state, { render });
     if (notify) notifyStateChange();
   }
@@ -1146,6 +1270,7 @@ export function createRenderApp({
   async function syncScene({ force = false, purpose = 'render-screen', targetDpi = null } = {}) {
     if (!active || disposed) return false;
     await ensureBackgroundAsset();
+    await ensureEnvironmentAsset();
     const signatures = currentSignatures();
     const structureChanged = force || !renderer || signatures.structure !== structureSignature;
     const artworkChanged = force || !renderer || signatures.artwork !== artworkSignature;
@@ -1202,6 +1327,7 @@ export function createRenderApp({
           renderSettings: state,
           boardAppearance,
           backgroundAsset,
+          environmentAsset,
           windowRef,
           onContextLost: () => {
             renderContextState = 'lost';
@@ -1799,6 +1925,51 @@ export function createRenderApp({
   elements.intensity.addEventListener('input', (event) => change((next) => { next.lighting.intensity = Number(event.target.value); }));
   elements.environment.addEventListener('change', (event) => change((next) => { next.lighting.environment = event.target.value; }));
   elements.environmentIntensity.addEventListener('input', (event) => change((next) => { next.lighting.environmentIntensity = Number(event.target.value); }));
+  elements.environmentMapPreset?.addEventListener('change', async (event) => {
+    const value = event.target.value;
+    if (value === 'custom') return;
+    environmentAssetLoadGeneration += 1;
+    environmentAsset = null;
+    const next = clone(state);
+    next.lighting.environmentMap = {
+      ...next.lighting.environmentMap,
+      source: value === 'none' ? 'none' : 'builtin',
+      presetId: value === 'none' ? 'no-reflections' : value,
+      assetId: '',
+    };
+    updateState(next);
+    const preset = getEnvironmentMapPreset(next.lighting.environmentMap.presetId);
+    if (!preset?.assetUrl || !active) return;
+    elements.status.textContent = t('renderEnvironmentLoading');
+    try {
+      const loadedAsset = await ensureEnvironmentAsset({ surfaceError: true });
+      if (!loadedAsset || state.lighting?.environmentMap?.presetId !== preset.id) return;
+      await renderer?.setEnvironmentAsset?.(loadedAsset);
+      updateControls();
+      renderer?.render?.();
+      elements.status.textContent = t('renderEnvironmentLoaded');
+    } catch (error) {
+      elements.status.textContent = getUserErrorMessage(error, 'renderEnvironmentInvalid');
+    }
+  });
+  elements.environmentMapFile?.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      await setEnvironmentMapFile(file);
+      elements.status.textContent = t('renderEnvironmentLoaded');
+    } catch (error) {
+      elements.status.textContent = getUserErrorMessage(error, 'renderEnvironmentInvalid');
+    } finally {
+      event.target.value = '';
+    }
+  });
+  elements.clearEnvironmentMap?.addEventListener('click', clearEnvironmentMap);
+  elements.environmentMapUsage?.addEventListener('change', (event) => change((next) => { next.lighting.environmentMap.usage = event.target.value; }));
+  elements.environmentMapRotation?.addEventListener('input', (event) => change((next) => { next.lighting.environmentMap.rotation = Number(event.target.value); }));
+  elements.environmentMapBackgroundIntensity?.addEventListener('input', (event) => change((next) => { next.lighting.environmentMap.backgroundIntensity = Number(event.target.value); }));
+  elements.environmentMapBackgroundBlur?.addEventListener('input', (event) => change((next) => { next.lighting.environmentMap.backgroundBlur = Number(event.target.value); }));
+  elements.environmentMapResolution?.addEventListener('change', (event) => change((next) => { next.lighting.environmentMap.resolutionCap = Number(event.target.value); }));
   elements.exposure.addEventListener('input', (event) => change((next) => { next.lighting.exposure = Number(event.target.value); }));
   elements.backgroundMode.addEventListener('change', (event) => change((next) => { next.background.mode = event.target.value; }));
   elements.backgroundColor.addEventListener('input', (event) => change((next) => { next.background.color = event.target.value; }));
@@ -2028,6 +2199,8 @@ export function createRenderApp({
     restoreRenderAssets,
     setBackgroundImage,
     clearBackgroundImage,
+    setEnvironmentMapFile,
+    clearEnvironmentMap,
     getBoardAppearance() {
       return cloneBoardAppearance(boardAppearance);
     },

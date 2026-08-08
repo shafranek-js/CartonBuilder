@@ -33,16 +33,19 @@ import {
   Scene,
   ShadowMaterial,
   SphereGeometry,
-  SRGBColorSpace,
   ShaderMaterial,
   Texture,
   Vector2,
   Vector3,
   WebGLRenderTarget,
   WebGLRenderer,
+  EquirectangularReflectionMapping,
+  SRGBColorSpace,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 
 import { buildFoldGraph } from './foldGraph.js';
@@ -59,6 +62,7 @@ import {
   focalLengthToFov,
   fovToFocalLength,
 } from '../render/cameraState.js';
+import { ENVIRONMENT_MAP_PRESETS, sanitizeEnvironmentMap } from '../render/environmentAssets.js';
 
 const CAMERA_DIRECTION = new Vector3(1, 1, 1).normalize();
 const PERSPECTIVE_FOV = 35;
@@ -410,6 +414,8 @@ export class BoxScene {
     hemisphereIntensity = 1.7,
     environmentPreset = 'studio',
     environmentIntensity = 0.65,
+    environmentMap = null,
+    environmentAsset = null,
     cameraPreset = 'isometric',
     cameraFov = PERSPECTIVE_FOV,
     cameraFocalLength = null,
@@ -475,8 +481,12 @@ export class BoxScene {
     this.pointerStart = null;
     this.suppressCameraChange = 0;
     this.environmentTexture = null;
+    this.environmentEquirectangular = null;
     this.environmentRenderTarget = null;
     this.pmremGenerator = null;
+    this.environmentMap = sanitizeEnvironmentMap(environmentMap);
+    this.environmentAsset = environmentAsset || null;
+    this.environmentLoadGeneration = 0;
 
     this.renderer = new WebGLRenderer({
       canvas,
@@ -607,6 +617,7 @@ export class BoxScene {
     this.suppressCameraChange -= 1;
     this.updateBackgroundBackplate();
     this.setBackgroundAsset(backgroundAsset, { render: false });
+    if (this.environmentAsset) this.setEnvironmentAsset(this.environmentAsset, { render: false });
 
     this.raycaster = new Raycaster();
     this.pointer = new Vector2();
@@ -1089,6 +1100,7 @@ export class BoxScene {
       else disposeEnvironmentScene(environmentScene);
     }
     previous?.dispose?.();
+    this.applyEnvironment();
   }
 
   applyEnvironment() {
@@ -1096,8 +1108,98 @@ export class BoxScene {
       this.scene.environment = null;
       return;
     }
-    this.scene.environment = this.environmentTexture;
-    this.scene.environmentIntensity = this.environmentIntensity;
+    const map = this.environmentMap || {};
+    const usesLighting = map.source !== 'none' && (map.usage === 'lighting' || map.usage === 'both');
+    const usesBackground = map.usage === 'background' || map.usage === 'both';
+    this.scene.environment = usesLighting ? this.environmentTexture : null;
+    this.scene.environmentIntensity = Number(map.intensity ?? this.environmentIntensity) || 0;
+    this.scene.environmentRotation?.set?.(0, Number(map.rotation || 0) * Math.PI / 180, 0);
+    if (this.backgroundMode === 'environment' && usesBackground) {
+      this.scene.background = this.environmentEquirectangular || this.scene.background || new Color(this.backgroundColor);
+      if (this.scene.background) {
+        this.scene.backgroundIntensity = Number(map.backgroundIntensity ?? 1) || 1;
+        this.scene.backgroundBlurriness = Number(map.backgroundBlur ?? 0) || 0;
+        this.scene.backgroundRotation?.set?.(0, Number(map.rotation || 0) * Math.PI / 180, 0);
+      }
+    } else if (this.backgroundMode === 'environment') {
+      this.scene.background = null;
+    }
+  }
+
+  setEnvironmentMap(environmentMap = null, { render = true } = {}) {
+    this.environmentMap = sanitizeEnvironmentMap(environmentMap);
+    const builtIn = ENVIRONMENT_MAP_PRESETS.find((entry) => entry.id === this.environmentMap.presetId);
+    if (this.environmentMap.source === 'builtin' && builtIn) {
+      this.environmentPreset = builtIn.legacyPreset;
+      const usesPackagedTexture = builtIn.kind === 'packaged'
+        && this.environmentAsset?.source === 'builtin'
+        && this.environmentAsset?.presetId === builtIn.id
+        && this.environmentEquirectangular;
+      if (!usesPackagedTexture) this.ensureEnvironment();
+    } else if (this.environmentMap.source === 'none') {
+      this.environmentPreset = 'none';
+      this.ensureEnvironment();
+    }
+    this.applyEnvironment();
+    if (render) this.render();
+  }
+
+  async setEnvironmentAsset(asset = null, { render = true } = {}) {
+    const generation = ++this.environmentLoadGeneration;
+    this.environmentAsset = asset || null;
+    if (!asset?.blob) {
+      this.environmentEquirectangular?.dispose?.();
+      this.environmentEquirectangular = null;
+      this.environmentMap = sanitizeEnvironmentMap({ ...this.environmentMap, source: 'builtin', assetId: '' });
+      this.ensureEnvironment();
+      if (render) this.render();
+      return false;
+    }
+    try {
+      const buffer = await asset.blob.arrayBuffer();
+      const loader = asset.mimeType === 'application/vnd.openexr' ? new EXRLoader() : new HDRLoader();
+      // DataTextureLoader.parse() returns raw texture data; createDataTexture()
+      // applies the loader metadata and gives PMREMGenerator the image object
+      // (`width`, `height`, and `data`) it expects.
+      const texture = loader.createDataTexture(buffer);
+      if (generation !== this.environmentLoadGeneration || this.disposed) {
+        texture?.dispose?.();
+        return false;
+      }
+      texture.mapping = EquirectangularReflectionMapping;
+      texture.colorSpace = NoColorSpace;
+      texture.needsUpdate = true;
+      this.environmentEquirectangular?.dispose?.();
+      this.environmentEquirectangular = texture;
+      const isBuiltInAsset = asset?.source === 'builtin';
+      this.environmentMap = sanitizeEnvironmentMap({
+        ...this.environmentMap,
+        source: isBuiltInAsset ? 'builtin' : 'custom',
+        presetId: isBuiltInAsset ? asset.presetId : this.environmentMap.presetId,
+        assetId: isBuiltInAsset ? '' : asset.assetId,
+      });
+      this.ensureEnvironmentFromTexture(texture);
+      this.applyEnvironment();
+      if (render) this.render();
+      return true;
+    } catch (error) {
+      // A bad map must never leave the viewport blank. Keep the neutral
+      // procedural studio active and let the caller surface the error.
+      console.warn('Could not load HDR environment map; using procedural fallback.', error);
+      this.environmentMap = sanitizeEnvironmentMap({ ...this.environmentMap, source: 'builtin', assetId: '' });
+      this.environmentPreset = 'studio';
+      this.ensureEnvironment();
+      if (render) this.render();
+      return false;
+    }
+  }
+
+  ensureEnvironmentFromTexture(texture) {
+    if (this.pmremGenerator == null) this.pmremGenerator = new PMREMGenerator(this.renderer);
+    const previous = this.environmentRenderTarget;
+    this.environmentRenderTarget = this.pmremGenerator.fromEquirectangular(texture);
+    this.environmentTexture = this.environmentRenderTarget.texture;
+    previous?.dispose?.();
   }
 
   setScenePreset(preset, { render = true } = {}) {
@@ -1245,17 +1347,24 @@ export class BoxScene {
   }
 
   setBackgroundMode(mode, color = this.backgroundColor, { render = true } = {}) {
-    this.backgroundMode = ['transparent', 'image'].includes(mode) ? mode : 'solid';
+    this.backgroundMode = ['transparent', 'image', 'environment'].includes(mode) ? mode : 'solid';
     this.backgroundColor = color || this.backgroundColor || '#e8eaeb';
     if (this.backgroundMode === 'transparent') {
       this.scene.background = null;
       this.renderer.setClearColor(0x000000, 0);
+    } else if (this.backgroundMode === 'environment') {
+      const usage = this.environmentMap?.usage;
+      this.scene.background = usage === 'background' || usage === 'both'
+        ? this.environmentEquirectangular || new Color(this.backgroundColor)
+        : null;
+      this.renderer.setClearColor(0x000000, 1);
     } else {
-      if (!this.scene.background) this.scene.background = new Color(this.backgroundColor);
+      if (!this.scene.background || !this.scene.background.isColor) this.scene.background = new Color(this.backgroundColor);
       else this.scene.background.set(this.backgroundColor);
       this.renderer.setClearColor(this.backgroundColor, 1);
     }
     this.updateBackgroundBackplate();
+    if (this.backgroundMode === 'environment') this.applyEnvironment();
     this.applyFloorReflectionSettings();
     if (render) this.render();
   }
@@ -1756,6 +1865,7 @@ export class BoxScene {
       plane.material?.dispose();
     }
     this.backgroundTexture?.dispose?.();
+    this.environmentEquirectangular?.dispose?.();
     if (this.backgroundObjectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
       URL.revokeObjectURL(this.backgroundObjectUrl);
     }

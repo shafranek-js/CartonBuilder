@@ -323,6 +323,62 @@ test('uses a separate closed presentation scene and persists render controls', a
   await expect(page.locator('#renderViewportSummary')).toHaveText('Export viewport: 4096 × 2304px (16:9)');
 });
 
+test('applies built-in IBL controls live without losing the Render viewport', async ({ page }) => {
+  await openRender(page);
+  const initialCanvas = await page.locator('#renderCanvas').screenshot();
+
+  await page.locator('#renderEnvironmentMapPreset').selectOption('warm-studio');
+  await page.locator('#renderEnvironmentMapUsage').selectOption('both');
+  await page.locator('#renderBackgroundMode').selectOption('environment');
+  await page.locator('#renderEnvironmentMapRotation').fill('120');
+  await page.locator('#renderEnvironmentMapBackgroundIntensity').fill('0.65');
+  await page.locator('#renderEnvironmentMapBackgroundBlur').fill('0.2');
+
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState())).toMatchObject({
+    background: { mode: 'environment' },
+    lighting: {
+      environmentMap: {
+        source: 'builtin',
+        presetId: 'warm-studio',
+        usage: 'both',
+        rotation: 120,
+        backgroundIntensity: 0.65,
+        backgroundBlur: 0.2,
+      },
+    },
+  });
+  await expect(page.locator('#renderRecovery')).toBeHidden();
+  await expect(page.locator('#renderBusy')).toBeHidden();
+  const updatedCanvas = await page.locator('#renderCanvas').screenshot();
+  expect(updatedCanvas.equals(initialCanvas)).toBe(false);
+});
+
+test('loads a bundled Poly Haven HDRI lazily into the live Render viewport', async ({ page }) => {
+  await openRender(page);
+  const requests = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/render-environments/polyhaven/')) requests.push(request.url());
+  });
+  const initialCanvas = await page.locator('#renderCanvas').screenshot();
+
+  await page.locator('#renderEnvironmentMapPreset').selectOption('polyhaven-abandoned-hall-01');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState())).toMatchObject({
+    lighting: {
+      environmentMap: {
+        source: 'builtin',
+        presetId: 'polyhaven-abandoned-hall-01',
+      },
+    },
+  });
+  await expect(page.locator('#renderEnvironmentMapFileName')).toHaveText('abandoned_hall_01_4k.hdr', { timeout: 30_000 });
+  await expect(page.locator('#renderRecovery')).toBeHidden();
+  await expect(page.locator('#renderBusy')).toBeHidden();
+  expect(requests.some((url) => url.endsWith('/abandoned_hall_01_4k.hdr'))).toBe(true);
+
+  const updatedCanvas = await page.locator('#renderCanvas').screenshot();
+  expect(updatedCanvas.equals(initialCanvas)).toBe(false);
+});
+
 test('applies floor reflection strength, softness and fade to the live Render scene', async ({ page }) => {
   await openRender(page);
 

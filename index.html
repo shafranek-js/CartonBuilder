@@ -974,13 +974,38 @@
                 </select>
               </label>
               <div class="light-control"><span data-i18n="environmentIntensity3d">Ambient</span><input id="renderEnvironmentIntensity" type="range" min="0" max="5" step="0.05" value="0.4"><output id="renderEnvironmentIntensityValue">0.40</output></div>
+              <label class="field"><span data-i18n="renderEnvironmentMap">HDRI / IBL map</span>
+                <select id="renderEnvironmentMapPreset">
+                  <option value="neutral-softbox" data-i18n="renderEnvironmentNeutralSoftbox">Neutral Softbox</option>
+                  <option value="high-key" data-i18n="renderEnvironmentHighKey">High Key</option>
+                  <option value="warm-studio" data-i18n="renderEnvironmentWarmStudio">Warm Studio</option>
+                  <option value="cool-studio" data-i18n="renderEnvironmentCoolStudio">Cool Studio</option>
+                  <option value="dark-studio" data-i18n="renderEnvironmentDarkStudio">Dark Studio</option>
+                  <option value="no-reflections" data-i18n="renderEnvironmentNoReflections">No Reflections</option>
+                  <option value="polyhaven-abandoned-hall-01" data-i18n="renderEnvironmentAbandonedHall">Abandoned Hall 01 · Poly Haven</option>
+                  <option value="polyhaven-abandoned-waterworks" data-i18n="renderEnvironmentAbandonedWaterworks">Abandoned Waterworks · Poly Haven</option>
+                  <option value="polyhaven-empty-warehouse-01" data-i18n="renderEnvironmentEmptyWarehouse">Empty Warehouse 01 · Poly Haven</option>
+                  <option value="polyhaven-abandoned-workshop" data-i18n="renderEnvironmentAbandonedWorkshop">Abandoned Workshop · Poly Haven</option>
+                  <option value="polyhaven-peppermint-powerplant" data-i18n="renderEnvironmentPeppermintPowerplant">Peppermint Powerplant · Poly Haven</option>
+                  <option value="custom" data-i18n="renderEnvironmentCustom">Custom file</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="renderEnvironmentFile">HDR / EXR file</span><input id="renderEnvironmentMapFile" type="file" accept=".hdr,.exr,image/vnd.radiance,application/vnd.openexr"></label>
+              <p class="quality-help" id="renderEnvironmentMapFileName" data-i18n="renderEnvironmentNoFile">No environment map selected.</p>
+              <p class="quality-help" data-i18n="renderEnvironmentAttribution">Poly Haven environments are bundled locally under CC0.</p>
+              <div class="button-row"><button id="renderClearEnvironmentMapButton" type="button" data-i18n="renderEnvironmentClear">Reset to neutral</button></div>
+              <label class="field"><span data-i18n="renderEnvironmentUsage">Use map for</span><select id="renderEnvironmentMapUsage"><option value="lighting" data-i18n="renderEnvironmentLightingOnly">Lighting</option><option value="background" data-i18n="renderEnvironmentBackgroundOnly">Background</option><option value="both" data-i18n="renderEnvironmentLightingAndBackground">Lighting + background</option></select></label>
+              <div class="light-control"><span data-i18n="renderEnvironmentRotation">Rotation</span><input id="renderEnvironmentMapRotation" type="range" min="-360" max="360" step="1" value="0"><output id="renderEnvironmentMapRotationValue">0°</output></div>
+              <div class="light-control"><span data-i18n="renderEnvironmentBackgroundIntensity">Background intensity</span><input id="renderEnvironmentMapBackgroundIntensity" type="range" min="0" max="5" step="0.05" value="1"><output id="renderEnvironmentMapBackgroundIntensityValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="renderEnvironmentBackgroundBlur">Background blur</span><input id="renderEnvironmentMapBackgroundBlur" type="range" min="0" max="1" step="0.01" value="0"><output id="renderEnvironmentMapBackgroundBlurValue">0.00</output></div>
+              <label class="field"><span data-i18n="renderEnvironmentResolution">Resolution cap</span><select id="renderEnvironmentResolution"><option value="1024">1K</option><option value="2048">2K</option><option value="4096">4K</option></select></label>
               <div class="light-control"><span data-i18n="renderExposure">Exposure</span><input id="renderExposure" type="range" min="0.1" max="3" step="0.05" value="0.85"><output id="renderExposureValue">0.85</output></div>
             </details>
 
             <details open class="tool-section">
               <summary data-i18n="renderBackground">Background</summary>
               <label class="field"><span data-i18n="renderBackgroundMode">Mode</span>
-                <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="image" data-i18n="renderBackgroundImage">Image</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
+                <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="image" data-i18n="renderBackgroundImage">Image</option><option value="environment" data-i18n="renderBackgroundEnvironment">Environment</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
               </label>
               <label class="field"><span data-i18n="backgroundColor3d">Color</span><input id="renderBackgroundColor" type="color" value="#d9dcde"></label>
               <label class="field"><span data-i18n="renderBackgroundImageFile">Image file</span><input id="renderBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"></label>
