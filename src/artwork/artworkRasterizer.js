@@ -8,6 +8,10 @@ export const ARTWORK_RASTER_LIMITS = Object.freeze({
   maxPixels: 24_000_000,
 });
 
+const ALL_PROCESS_MASK = 0x0f;
+const SPOT_BEHAVIOR_VISIBLE = 1;
+const SPOT_BEHAVIOR_DISABLED = 2;
+
 function finitePositive(value, fallback = 1) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
@@ -88,6 +92,64 @@ function getSafeDpi(widthMm, heightMm, requestedDpi) {
   };
 }
 
+function normalizeProcessVisibility(value) {
+  return Array.isArray(value)
+    ? [0, 1, 2, 3].map((index) => value[index] !== false)
+    : [true, true, true, true];
+}
+
+function getSpotVisibility(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value;
+}
+
+function getKnownSpotCount(spots, requestedCount = null) {
+  const explicitCount = Number(requestedCount);
+  let count = Number.isInteger(explicitCount) && explicitCount >= 0 ? explicitCount : 0;
+  for (const id of Object.keys(spots)) {
+    if (/^\d+$/.test(id)) count = Math.max(count, Number(id) + 1);
+  }
+  return count;
+}
+
+/**
+ * Resolve the plate state that must be used for every PDF-compatible render.
+ * A persisted separation selection always uses mode 2, even when the global
+ * Overprint Preview toggle is off.
+ */
+export function resolvePdfRenderOptions(artwork, {
+  defaultOverprintMode = getOverprintMode(),
+  spotCount = null,
+} = {}) {
+  const state = artwork?.pdfSeparationVisibility;
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    return {
+      overprintMode: Number(defaultOverprintMode) > 0 ? 1 : 0,
+      processMask: ALL_PROCESS_MASK,
+      spotBehaviors: null,
+    };
+  }
+
+  const process = normalizeProcessVisibility(state.process);
+  const processMask = process.reduce(
+    (mask, visible, index) => mask | (visible ? (1 << index) : 0),
+    0,
+  );
+  const spots = getSpotVisibility(state.spots);
+  const count = getKnownSpotCount(spots, spotCount);
+  const spotBehaviors = count > 0
+    ? Array.from({ length: count }, (_, index) => (
+      spots[String(index)] === false ? SPOT_BEHAVIOR_DISABLED : SPOT_BEHAVIOR_VISIBLE
+    ))
+    : null;
+
+  return {
+    overprintMode: 2,
+    processMask,
+    spotBehaviors,
+  };
+}
+
 async function rasterizeImageBlob(blob, {
   widthMm,
   heightMm,
@@ -148,6 +210,7 @@ export async function rasterizeArtwork({
   createImageBitmapFn = globalThis.createImageBitmap,
   renderPdf = renderPdfWithLayers,
   overprint = false,
+  plateOptions = null,
 } = {}) {
   const artwork = entry?.model || entry;
   if (!artwork?.hasArtwork || !artwork.source) throw new Error('Artwork source is required.');
@@ -162,6 +225,9 @@ export async function rasterizeArtwork({
   });
   const safeRequest = getSafeDpi(widthMm, heightMm, dpi);
   const safeDpi = safeRequest.dpi;
+  const resolvedPlateOptions = plateOptions || resolvePdfRenderOptions(artwork, {
+    defaultOverprintMode: overprint ? 1 : getOverprintMode(),
+  });
 
   if ((artwork.source.vector || artwork.source.mimeType === 'application/pdf') && entry.originalBlob) {
     const rendered = await renderPdf(entry.originalBlob, {
@@ -175,7 +241,7 @@ export async function rasterizeArtwork({
       pageBox: artwork.source.pageBox || 'CropBox',
       passwordKey: artwork.source.sha256 || '',
       session: artwork.source.id || null,
-      overprintMode: getOverprintMode(),
+      ...resolvedPlateOptions,
     });
     return {
       blob: rendered.previewBlob,
@@ -209,10 +275,11 @@ export async function rasterizeArtwork({
   };
 }
 
-export function getArtworkRasterSignature(entry, purpose = 'preview') {
+export function getArtworkRasterSignature(entry, purpose = 'preview', { plateOptions = null } = {}) {
   const artwork = entry?.model || entry;
   const source = artwork?.source || {};
   const quality = artwork?.quality?.[purpose === 'preview' ? 'preview' : 'render'] || 'auto';
+  const resolvedPlateOptions = plateOptions || resolvePdfRenderOptions(artwork);
   return JSON.stringify({
     id: source.id || '',
     sha256: source.sha256 || '',
@@ -223,6 +290,9 @@ export function getArtworkRasterSignature(entry, purpose = 'preview') {
     heightMm: artwork?.unrotatedHeightMm || 0,
     quality,
     purpose,
-    overprint: getOverprintMode(),
+    pdfSeparationVisibility: artwork?.pdfSeparationVisibility || null,
+    overprintMode: resolvedPlateOptions.overprintMode,
+    processMask: resolvedPlateOptions.processMask,
+    spotBehaviors: resolvedPlateOptions.spotBehaviors,
   });
 }

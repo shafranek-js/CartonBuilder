@@ -23,7 +23,12 @@ import {
 import { saveOrDownloadFile } from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
-import { getArtworkRasterSignature, rasterizeArtwork, resolveArtworkDpi } from './artworkRasterizer.js';
+import {
+  getArtworkRasterSignature,
+  rasterizeArtwork,
+  resolveArtworkDpi,
+  resolvePdfRenderOptions,
+} from './artworkRasterizer.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 import { DEFAULT_PAGE_BOX, PAGE_BOXES } from './pdfArtworkLoader.js';
 import { getOverprintMode, isOverprintEnabled, setOverprintEnabled as setOverprintSetting } from './overprintSettings.js';
@@ -568,7 +573,8 @@ export function createArtworkApp({
     const targetDpi = getPreviewResourceDpi();
     const candidates = artworks.filter((entry) => entry.model.hasArtwork && entry.originalBlob);
     const pending = candidates.filter((entry) => {
-      const signature = `${getArtworkRasterSignature(entry, 'preview')}|${targetDpi.toFixed(2)}`;
+      const plateOptions = getEntryPdfRenderOptions(entry);
+      const signature = `${getArtworkRasterSignature(entry, 'preview', { plateOptions })}|${targetDpi.toFixed(2)}`;
       return force || previewResourceSignatures.get(entry.model.source.id) !== signature;
     });
     if (!pending.length) return false;
@@ -578,6 +584,7 @@ export function createArtworkApp({
     const generation = ++previewResourceGeneration;
     try {
       for (const entry of pending) {
+        const plateOptions = getEntryPdfRenderOptions(entry);
         const entryTargetDpi = resolveArtworkDpi(entry.model.quality?.preview, {
           purpose: 'preview',
           requiredDpi: targetDpi,
@@ -589,12 +596,13 @@ export function createArtworkApp({
           requiredDpi: targetDpi,
           signal: controller.signal,
           documentRef,
+          plateOptions,
         });
         if (generation !== previewResourceGeneration || controller.signal.aborted || disposed) return false;
         entry.displayBlob = rendered.blob;
         previewResourceSignatures.set(
           entry.model.source.id,
-          `${getArtworkRasterSignature(entry, 'preview')}|${targetDpi.toFixed(2)}`,
+          `${getArtworkRasterSignature(entry, 'preview', { plateOptions })}|${targetDpi.toFixed(2)}`,
         );
       }
       renderer.setArtworks(artworks);
@@ -1349,6 +1357,7 @@ export function createArtworkApp({
     renderPdfLayers();
     scheduleSave();
 
+    invalidatePreviewResources(entry);
     pdfRenderController?.abort();
     const controller = new AbortController();
     pdfRenderController = controller;
@@ -1363,7 +1372,7 @@ export function createArtworkApp({
         pageBox: artwork.source.pageBox || DEFAULT_PAGE_BOX,
         passwordKey: artwork.source.sha256 || '',
         session: artwork.source.id || null,
-        overprintMode: getOverprintMode(),
+        ...getEntryPdfRenderOptions(entry),
       });
       if (generation !== pdfRenderGeneration || disposed) return;
       entry.previewBlob = rendered.previewBlob;
@@ -1417,6 +1426,7 @@ export function createArtworkApp({
       return true;
     }
 
+    invalidatePreviewResources(pdfEntries);
     pdfRenderController?.abort();
     const controller = new AbortController();
     pdfRenderController = controller;
@@ -1432,7 +1442,7 @@ export function createArtworkApp({
           pageBox: entry.model.source.pageBox || DEFAULT_PAGE_BOX,
           passwordKey: entry.model.source.sha256 || '',
           session: entry.model.source.id || null,
-          overprintMode: getOverprintMode(),
+          ...getEntryPdfRenderOptions(entry),
         });
         if (generation !== pdfRenderGeneration || disposed || controller.signal.aborted) return true;
         entry.previewBlob = rendered.previewBlob;
@@ -1442,10 +1452,11 @@ export function createArtworkApp({
       renderer.setArtworks(artworks);
       render();
       await refreshPreviewResources({ force: true });
-      if (getOverprintMode() > 0 && pdfEntries.some((entry) => (
-        previewResourceSignatures.get(entry.model.source.id)
-        !== `${getArtworkRasterSignature(entry, 'preview')}|${getPreviewResourceDpi().toFixed(2)}`
-      ))) {
+      if (pdfEntries.some((entry) => {
+        const plateOptions = getEntryPdfRenderOptions(entry);
+        return previewResourceSignatures.get(entry.model.source.id)
+          !== `${getArtworkRasterSignature(entry, 'preview', { plateOptions })}|${getPreviewResourceDpi().toFixed(2)}`;
+      })) {
         await refreshPreviewResources({ force: true });
       }
       Promise.resolve(onArtworkQualityChanged({ kind: 'overprint' })).catch(() => {});
@@ -1495,6 +1506,88 @@ export function createArtworkApp({
 
   const pdfSeparationsCache = new Map();
 
+  function setupDialogDragging(dialog, handle) {
+    if (!dialog || !handle) return;
+    let drag = null;
+
+    const clampPosition = () => {
+      if (!dialog.open || !dialog.style.left || !dialog.style.top) return;
+      const rect = dialog.getBoundingClientRect();
+      const margin = 8;
+      const maxLeft = Math.max(margin, windowRef.innerWidth - rect.width - margin);
+      const maxTop = Math.max(margin, windowRef.innerHeight - rect.height - margin);
+      const left = Math.min(maxLeft, Math.max(margin, Number.parseFloat(dialog.style.left)));
+      const top = Math.min(maxTop, Math.max(margin, Number.parseFloat(dialog.style.top)));
+      if (Number.isFinite(left)) dialog.style.left = `${left}px`;
+      if (Number.isFinite(top)) dialog.style.top = `${top}px`;
+    };
+
+    const stopDragging = (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      drag = null;
+      dialog.classList.remove('is-dragging');
+      if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    };
+
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !dialog.open) return;
+      const rect = dialog.getBoundingClientRect();
+      dialog.style.right = 'auto';
+      dialog.style.bottom = 'auto';
+      dialog.style.left = `${rect.left}px`;
+      dialog.style.top = `${rect.top}px`;
+      dialog.style.margin = '0';
+      dialog.style.transform = 'none';
+      drag = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+      };
+      dialog.classList.add('is-dragging');
+      handle.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+
+    handle.addEventListener('pointermove', (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const rect = dialog.getBoundingClientRect();
+      const margin = 8;
+      const maxLeft = Math.max(margin, windowRef.innerWidth - rect.width - margin);
+      const maxTop = Math.max(margin, windowRef.innerHeight - rect.height - margin);
+      const left = Math.min(maxLeft, Math.max(margin, event.clientX - drag.offsetX));
+      const top = Math.min(maxTop, Math.max(margin, event.clientY - drag.offsetY));
+      dialog.style.left = `${left}px`;
+      dialog.style.top = `${top}px`;
+    });
+
+    handle.addEventListener('pointerup', stopDragging);
+    handle.addEventListener('pointercancel', stopDragging);
+    windowRef.addEventListener('resize', clampPosition);
+  }
+
+  setupDialogDragging(
+    separationsDialog,
+    separationsDialog?.querySelector('[data-dialog-drag-handle]'),
+  );
+
+  function getEntryPdfRenderOptions(entry) {
+    const model = entry?.model || entry;
+    const cached = pdfSeparationsCache.get(model?.source?.id);
+    return resolvePdfRenderOptions(model, { spotCount: cached?.names?.length });
+  }
+
+  function invalidatePreviewResources(entries = artworks) {
+    previewResourceController?.abort();
+    previewResourceController = null;
+    previewResourceGeneration += 1;
+    const targets = Array.isArray(entries) ? entries : [entries];
+    for (const entry of targets) {
+      if (!entry) continue;
+      entry.displayBlob = null;
+      if (entry.model?.source?.id) previewResourceSignatures.delete(entry.model.source.id);
+    }
+  }
+
   function getSeparationVisibility() {
     const visibility = artwork.pdfSeparationVisibility;
     return {
@@ -1502,25 +1595,9 @@ export function createArtworkApp({
         ? [0, 1, 2, 3].map((index) => visibility.process[index] !== false)
         : [true, true, true, true],
       spots: visibility?.spots && typeof visibility.spots === 'object'
-        ? visibility.spots
+        ? { ...visibility.spots }
         : {},
     };
-  }
-
-  function getProcessMask() {
-    return getSeparationVisibility().process.reduce(
-      (mask, visible, index) => mask | (visible ? (1 << index) : 0),
-      0,
-    );
-  }
-
-  function buildSeparationBehaviors() {
-    const visibility = getSeparationVisibility();
-    const cached = pdfSeparationsCache.get(artwork.source?.id);
-    if (!visibility || !cached || !cached.names?.length) return null;
-    return cached.names.map((_, index) => (
-      visibility.spots[String(index)] !== false ? 1 : 2
-    ));
   }
 
   function renderSeparationsDialog(data) {
@@ -1597,12 +1674,16 @@ export function createArtworkApp({
     const entry = getActiveEntry();
     if (!entry?.originalBlob) return;
     const state = getSeparationVisibility();
+    const cached = pdfSeparationsCache.get(artwork.source.id);
+    for (let spotIndex = 0; spotIndex < (cached?.names?.length || 0); spotIndex += 1) {
+      if (!Object.hasOwn(state.spots, String(spotIndex))) state.spots[String(spotIndex)] = true;
+    }
     state.spots[String(index)] = visible;
     artwork.pdfSeparationVisibility = state;
     scheduleSave();
-    const cached = pdfSeparationsCache.get(artwork.source.id);
     if (cached) renderSeparationsDialog(cached);
 
+    invalidatePreviewResources(entry);
     pdfRenderController?.abort();
     const controller = new AbortController();
     pdfRenderController = controller;
@@ -1617,9 +1698,7 @@ export function createArtworkApp({
         pageBox: artwork.source.pageBox || DEFAULT_PAGE_BOX,
         passwordKey: artwork.source.sha256 || '',
         session: artwork.source.id || null,
-        overprintMode: 2,
-        processMask: getProcessMask(),
-        separationBehaviors: buildSeparationBehaviors(),
+        ...getEntryPdfRenderOptions(entry),
       });
       if (generation !== pdfRenderGeneration || disposed) return;
       entry.previewBlob = rendered.previewBlob;
@@ -1643,10 +1722,17 @@ export function createArtworkApp({
     const state = getSeparationVisibility();
     state.process[index] = visible;
     artwork.pdfSeparationVisibility = state;
-    scheduleSave();
     const cached = pdfSeparationsCache.get(artwork.source.id);
+    if (cached) {
+      for (let spotIndex = 0; spotIndex < (cached.names?.length || 0); spotIndex += 1) {
+        if (!Object.hasOwn(state.spots, String(spotIndex))) state.spots[String(spotIndex)] = true;
+      }
+      artwork.pdfSeparationVisibility = state;
+    }
+    scheduleSave();
     if (cached) renderSeparationsDialog(cached);
 
+    invalidatePreviewResources(entry);
     pdfRenderController?.abort();
     const controller = new AbortController();
     pdfRenderController = controller;
@@ -1661,9 +1747,7 @@ export function createArtworkApp({
         pageBox: artwork.source.pageBox || DEFAULT_PAGE_BOX,
         passwordKey: artwork.source.sha256 || '',
         session: artwork.source.id || null,
-        overprintMode: 2,
-        processMask: getProcessMask(),
-        separationBehaviors: buildSeparationBehaviors(),
+        ...getEntryPdfRenderOptions(entry),
       });
       if (generation !== pdfRenderGeneration || disposed) return;
       entry.previewBlob = rendered.previewBlob;
@@ -2932,6 +3016,7 @@ export function createArtworkApp({
     if (artwork.source.pageBox === next) return;
     artwork.source.pageBox = next;
     scheduleSave();
+    invalidatePreviewResources(entry);
     pdfRenderController?.abort();
     const controller = new AbortController();
     pdfRenderController = controller;
@@ -2948,7 +3033,7 @@ export function createArtworkApp({
           pageBox: next,
           passwordKey: artwork.source.sha256 || '',
           session: artwork.source.id || null,
-          overprintMode: getOverprintMode(),
+          ...getEntryPdfRenderOptions(entry),
         });
         if (generation !== pdfRenderGeneration || disposed) return;
         entry.previewBlob = rendered.previewBlob;

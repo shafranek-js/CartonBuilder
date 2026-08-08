@@ -44,9 +44,13 @@ async function buildReferenceNet(page) {
 
 async function getPreviewProbe(page, fractionX = 0.5, fractionY = 0.5) {
   return page.evaluate(async ({ fractionX: fx, fractionY: fy }) => {
-    const entry = window.cartonBuilderApp.artwork.getArtworks()[0];
-    if (!entry?.previewBlob) return null;
-    const bitmap = await createImageBitmap(entry.previewBlob);
+    const app = window.cartonBuilderApp.artwork;
+    const activeModel = app.artwork;
+    const entry = app.getArtworks().find((candidate) => candidate.model === activeModel)
+      || app.getArtworks()[0];
+    const blob = entry?.displayBlob || entry?.previewBlob;
+    if (!blob) return null;
+    const bitmap = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
@@ -94,6 +98,8 @@ test('lets the user hide and show a spot plate in the Separations dialog', async
     window.cartonBuilderApp.artwork.artwork.pdfSeparationVisibility?.process?.[0]
   ))).toBe(false);
   const cyanOff = await getPreviewProbe(page);
+  await page.waitForTimeout(2500);
+  expect(await getPreviewProbe(page)).toEqual(cyanOff);
   await cyanToggle.check();
   await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(cyanOff);
 
@@ -101,6 +107,8 @@ test('lets the user hide and show a spot plate in the Separations dialog', async
   await spotToggle.uncheck();
   await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(before);
   const spotOff = await getPreviewProbe(page);
+  await page.waitForTimeout(2500);
+  expect(await getPreviewProbe(page)).toEqual(spotOff);
 
   const visibility = await page.evaluate(() => (
     window.cartonBuilderApp.artwork.artwork.pdfSeparationVisibility
@@ -109,8 +117,52 @@ test('lets the user hide and show a spot plate in the Separations dialog', async
 
   await spotToggle.check();
   await expect.poll(async () => getPreviewProbe(page), { timeout: 30_000 }).not.toEqual(spotOff);
+  await page.locator('#separationsDialog').getByRole('button', { name: 'Close' }).click();
+  await page.locator('#viewMenuTriggerBtn').click();
+  await page.locator('#menuSeparationsBtn').click();
+  await expect(page.locator('.separation-toggle').nth(4)).toBeChecked();
 
   await page.evaluate(() => localStorage.setItem('carton-builder-first-run-example-v1', 'true'));
+});
+
+test('allows the Separations dialog to be moved by its title', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.goto('/');
+  await page.waitForTimeout(1200);
+  await buildReferenceNet(page);
+  await page.locator('.step[data-step-target="artwork"]').click();
+
+  const stamp = Date.now();
+  const pdfPath = join(tmpdir(), `movable-seps-${stamp}.pdf`);
+  await writeFile(pdfPath, Buffer.from(buildSpotOverprintPdf()));
+  await page.locator('#artworkFileInput').setInputFiles(pdfPath);
+  await expect(page.locator('#artworkFileName')).toHaveText(`movable-seps-${stamp}.pdf`);
+  await expect(page.locator('#processingOverlay')).toBeHidden();
+
+  await page.locator('#viewMenuTriggerBtn').click();
+  await page.locator('#menuSeparationsBtn').click();
+  const dialog = page.locator('#separationsDialog');
+  const title = page.locator('#separationsDialogTitle');
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => dialog.evaluate((element) => (
+    getComputedStyle(element, '::backdrop').backgroundColor
+  ))).toBe('rgba(0, 0, 0, 0)');
+
+  const before = await dialog.boundingBox();
+  const titleBox = await title.boundingBox();
+  if (!before || !titleBox) throw new Error('Separations dialog was not measurable.');
+  const startX = titleBox.x + titleBox.width / 2;
+  const startY = titleBox.y + titleBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 120, startY + 70, { steps: 8 });
+  await page.mouse.up();
+
+  const after = await dialog.boundingBox();
+  expect(after).not.toBeNull();
+  expect(after.x).toBeGreaterThan(before.x + 40);
+  expect(after.y).toBeGreaterThan(before.y + 20);
+  await expect(page.locator('.separation-toggle').first()).toBeVisible();
 });
 
 test('toggles Overprint Preview through the custom MuPDF renderer and re-renders the preview', async ({ page }) => {

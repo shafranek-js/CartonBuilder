@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ArtworkModel } from '../../src/artwork/ArtworkModel.js';
 import {
+  getArtworkRasterSignature,
   getRasterDimensions,
   rasterizeArtwork,
   resolveArtworkDpi,
+  resolvePdfRenderOptions,
 } from '../../src/artwork/artworkRasterizer.js';
 
 const bounds = { minX: 0, minY: 0, width: 100, height: 100 };
@@ -21,6 +23,29 @@ describe('artwork rasterizer', () => {
   it('never upscales a raster source and reports limiting', () => {
     expect(getRasterDimensions({ widthMm: 100, heightMm: 50, dpi: 600, nativeWidth: 1000, nativeHeight: 500 }))
       .toMatchObject({ width: 1000, height: 500, limited: true });
+  });
+
+  it('resolves process and spot plate state into stable render options', () => {
+    const model = new ArtworkModel().load({
+      id: 'plates', fileName: 'plates.pdf', mimeType: 'application/pdf', vector: true,
+      widthPx: 1000, heightPx: 500, pageIndex: 0,
+    }, bounds);
+
+    expect(resolvePdfRenderOptions(model, { defaultOverprintMode: 1 })).toEqual({
+      overprintMode: 1,
+      processMask: 15,
+      spotBehaviors: null,
+    });
+
+    model.pdfSeparationVisibility = {
+      process: [false, true, false, true],
+      spots: { '0': false, '1': true },
+    };
+    expect(resolvePdfRenderOptions(model)).toEqual({
+      overprintMode: 2,
+      processMask: 10,
+      spotBehaviors: [2, 1],
+    });
   });
 
   it('passes target DPI and physical width to vector rendering', async () => {
@@ -42,6 +67,34 @@ describe('artwork rasterizer', () => {
       targetWidthMm: model.unrotatedWidthMm,
     }));
     expect(result).toMatchObject({ sourceKind: 'vector', width: 1200, height: 600 });
+  });
+
+  it('passes plate options to high-resolution vector rendering and keys them', async () => {
+    const model = new ArtworkModel().load({
+      id: 'vector-plates', fileName: 'art.pdf', mimeType: 'application/pdf', vector: true,
+      widthPx: 1000, heightPx: 500, pageIndex: 0,
+    }, bounds);
+    model.pdfSeparationVisibility = {
+      process: [false, true, true, true],
+      spots: { '0': false },
+    };
+    const renderPdf = vi.fn(async (_blob, options) => ({
+      previewBlob: new Blob(['png'], { type: 'image/png' }),
+      previewWidthPx: 1200,
+      previewHeightPx: 600,
+      options,
+    }));
+    const entry = { model, originalBlob: new Blob(['pdf'], { type: 'application/pdf' }) };
+    await rasterizeArtwork({ entry, purpose: 'preview', targetDpi: 600, renderPdf });
+
+    expect(renderPdf.mock.calls[0][1]).toMatchObject({
+      overprintMode: 2,
+      processMask: 14,
+      spotBehaviors: [2],
+    });
+    const before = getArtworkRasterSignature(entry);
+    model.pdfSeparationVisibility.process[1] = false;
+    expect(getArtworkRasterSignature(entry)).not.toBe(before);
   });
 
   it('caps oversized vector rasterization before rendering', async () => {

@@ -3295,6 +3295,30 @@ dialog {
   border-radius: 8px;
 }
 
+#separationsDialog {
+  position: fixed;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+
+#separationsDialog.is-dragging,
+#separationsDialog.is-dragging .dialog-drag-handle {
+  user-select: none;
+}
+
+#separationsDialog .dialog-drag-handle {
+  cursor: move;
+  touch-action: none;
+}
+
+#separationsDialog::backdrop {
+  background: transparent;
+}
+
 dialog::backdrop {
   background: rgb(0 0 0 / 45%);
 }
