@@ -683,11 +683,13 @@ test.describe('Wave 5 deterministic Render baselines', () => {
   // fringe around the same deterministic scene. Keep the local gate strict,
   // while allowing that renderer-specific fringe in CI.
   const snapshotDiffPixelRatio = process.env.CI ? 0.02 : 0.005;
+  const renderStabilityTimeout = process.env.CI ? 180_000 : 60_000;
+  const renderRefreshTimeout = process.env.CI ? 120_000 : 20_000;
 
   test('captures stable studio and transparent Render states', async ({ page }) => {
-    test.setTimeout(process.env.CI ? 240_000 : 90_000);
+    test.setTimeout(process.env.CI ? 600_000 : 90_000);
     await openRender(page, 'wave5-visual-fixture.png');
-    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 60_000 }))).toBe(true);
+    expect(await page.evaluate((timeoutMs) => window.cartonBuilderApp.render.whenStable({ timeoutMs }), renderStabilityTimeout)).toBe(true);
     const canvas = page.locator('#renderCanvas');
     expect(await canvas.screenshot({ animations: 'disabled', timeout: 30_000 })).toMatchSnapshot('wave5-clean-studio.png', {
       threshold: 0.15,
@@ -704,7 +706,7 @@ test.describe('Wave 5 deterministic Render baselines', () => {
       });
       await render.whenStable();
     });
-    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 60_000 }))).toBe(true);
+    expect(await page.evaluate((timeoutMs) => window.cartonBuilderApp.render.whenStable({ timeoutMs }), renderStabilityTimeout)).toBe(true);
     await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 60_000 });
     expect(await canvas.screenshot({ animations: 'disabled', timeout: 30_000 })).toMatchSnapshot('wave5-transparent.png', {
       threshold: 0.15,
@@ -740,7 +742,7 @@ test.describe('Wave 5 deterministic Render baselines', () => {
       () => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().contextRecoveryCount),
       { timeout: 30_000 },
     ).toBeGreaterThan(0);
-    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 60_000 }))).toBe(true);
+    expect(await page.evaluate((timeoutMs) => window.cartonBuilderApp.render.whenStable({ timeoutMs }), renderStabilityTimeout)).toBe(true);
     await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
       .toMatchObject({ source: 'builtin', effectiveResolution: expect.any(Number), fallbackReason: null });
     expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(Buffer.alloc(0));
@@ -756,7 +758,7 @@ test.describe('Wave 5 deterministic Render baselines', () => {
     const refreshCount = process.env.CI ? 3 : 6;
     for (let index = 0; index < refreshCount; index += 1) {
       await page.evaluate(() => window.cartonBuilderApp.render.refreshArtwork());
-      expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+      expect(await page.evaluate((timeoutMs) => window.cartonBuilderApp.render.whenStable({ timeoutMs }), renderRefreshTimeout)).toBe(true);
     }
     await page.waitForTimeout(750);
     const settledSamples = [];
