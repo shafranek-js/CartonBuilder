@@ -1,6 +1,11 @@
 graphify-out/
 dist/
+dist-*/
 scratch/
+.codex/
+test/
+*.exr
+*.carton
 debug-*.png
 test-results/
 playwright-report/

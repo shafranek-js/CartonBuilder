@@ -8,12 +8,13 @@ import {
 import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
+import { sanitizeBoardConstruction } from '../model/BoardConstruction.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 12;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 13;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -289,6 +290,17 @@ MIGRATIONS.set(11, (snapshot) => ({
   history: migrateHistoryArtworkSeparations(snapshot.history),
 }));
 
+MIGRATIONS.set(12, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 13,
+  box: {
+    ...snapshot.box,
+    board: sanitizeBoardConstruction({
+      caliperMm: snapshot.box?.board?.caliperMm ?? snapshot.renderAppearance?.thicknessMm,
+    }, snapshot.box?.dimensions),
+  },
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -324,6 +336,11 @@ export function migrateProjectSnapshot(input) {
   if (!snapshot.box) {
     throw new AppError('projectIncomplete');
   }
+
+  snapshot.box = {
+    ...snapshot.box,
+    board: sanitizeBoardConstruction(snapshot.box.board, snapshot.box.dimensions),
+  };
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
   snapshot.render = sanitizeRenderSettings(snapshot.render);

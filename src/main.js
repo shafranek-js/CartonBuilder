@@ -382,11 +382,18 @@ const boxApp = createBoxNetApp({
   onDimensionReset: () => {
     resetArtworkAfterBoxCompletion = true;
     preview3dFacade?.resetForProject();
+    renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
+    preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
     updateStepNavigationStates();
   },
   onLayoutReset: () => {
     preview3dFacade?.resetForProject();
+    renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     updateStepNavigationStates();
+  },
+  onBoardConstructionChange: () => {
+    renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
+    preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
   },
   onChange: () => {
     updateStepNavigationStates();
@@ -461,6 +468,7 @@ renderApp = createRenderApp({
   initialState: storedRenderSettings?.renderSettings || DEFAULT_RENDER_SETTINGS,
   initialBoardAppearance: storedRenderSettings?.boardAppearance,
   onStateChange: () => {
+    preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
     writeRenderSettings({
       renderSettings: renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
       boardAppearance: renderApp?.getBoardAppearance?.(),

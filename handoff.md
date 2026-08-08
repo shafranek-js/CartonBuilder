@@ -1,6 +1,6 @@
 # CartonBuilder — Handoff для следующего разработчика
 
-Дата handoff: 2026-08-03
+Дата handoff: 2026-08-08
 
 Этот документ описывает фактическое состояние приложения и безопасную точку
 продолжения разработки. Нормативные runtime-поведения должны сверяться с
@@ -67,7 +67,7 @@ Render владеет presentation-сценой и тяжёлыми эффект
   crop, viewport, history, file loading, SVG editor renderer.
 - `src/project/` — IndexedDB autosave, project schema, `.carton` archive,
   presets.
-- `src/preview3d/` — lazy Three.js technical renderer, fold graph, texture
+- `src/preview3d/` — lazy Three.js renderer, thickness-aware fold graph, texture
   composer, panel picking, Preview scene presets and lifecycle.
 - `src/render/` — Render settings, solid presentation geometry, Render scene
   model, post-processing, quality states, named Render presets, preflight,
@@ -76,6 +76,12 @@ Render владеет presentation-сценой и тяжёлыми эффект
 - `src/ui/` — box editor, menus, settings, theme and shared UI controls.
 - `src/main.js` — workflow navigation, app wiring, autosave callbacks and
   Preview/Render activation lifecycle.
+
+Wave 8A добавляет `docs/13. geometry-fidelity-runtime-specification.md`:
+canonical `BoxNetModel.board.caliperMm`, schema v13 migration и общий
+thickness-aware solid solver для Studio/Photorealistic Preview, закрытого
+Render, GLB, turntable и standalone HTML. Technical Preview и SVG/PDF остаются
+плоскими.
 
 Canonical state is `BoxNetModel + ArtworkModel[]`. SVG, PDF, Preview and Render
 are adapters and must not become alternate sources of transform or geometry
@@ -128,7 +134,9 @@ Crop неразрушающий: оригинальный asset и скрыты�
 
 Иконки dimensions работают как scrubbers: Width — горизонтальный drag, Height —
 вертикальный, Depth — диагональный. Базовый шаг 0.1; Ctrl/Cmd — 1; Alt — 0.01.
-Отдельный box-proportions chain связывает Width/Height/Depth.
+Отдельный box-proportions chain связывает Width/Height/Depth. Board caliper
+(`0.01–2.00 mm`, dynamic minimum-panel clamp) редактируется в Create Box и
+Render через общее `BoxNetModel.board` состояние.
 
 ## 6. Technical Preview
 
@@ -147,8 +155,8 @@ UI Preview использует три колонки: слева сцена и 
 справа камера, свет, тени и модель. При узком viewport панели складываются под
 центральной областью и прокручиваются независимо.
 
-Preview не должен использовать Render-only GTAO, TAA, DOF, solid presentation
-geometry или path tracing.
+Technical Preview не использует Render-only GTAO, TAA, DOF или path tracing;
+Studio и Photorealistic используют общий thickness-aware solid solver.
 
 ## 7. Presentation Render
 
@@ -163,7 +171,8 @@ Render активен только при полной коробке и нал�
 - 1:1, 4:3, 16:9, 3:4 frame;
 - 2048/4096 long edge;
 - Uncoated/Matte/Gloss profiles;
-- Render-only thickness, bevel, interior and edge colors;
+- Canonical board caliper shared by Create Box, Preview, Render and 3D exports;
+- surface-aware solid thickness, bounded bevel, interior and edge colors;
 - lighting/environment/exposure/background/shadow controls;
 - GTAO, SMAA/native AA, TAA and optional DOF in Render pipeline;
 - interactive → settled → export quality states;
@@ -186,9 +195,9 @@ WebGPU, CMYK/ICC/Pantone/overprint и print-proof validation находятся 
 
 ## 8. Persistence и версии
 
-- Current project schema: **v12** (`src/project/projectSchema.js`).
-- v2 → v10 migrations add per-artwork quality/finish roles and Render board
-  appearance while preserving artwork, box, history and view state.
+- Current project schema: **v13** (`src/project/projectSchema.js`).
+- v2 → v13 migrations add per-artwork quality/finish roles and canonical board
+  construction while preserving artwork, box, history and view state.
 - `.carton` archive manifest export version: **4**.
 - Legacy manifest versions 1, 2 and 3 поддерживаются на import.
 - Current archive stores arrays of artwork assets/previews and optional Render

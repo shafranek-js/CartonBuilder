@@ -56,6 +56,7 @@ README не заменяет runtime specification. Research и roadmap не я�
 | Historical/Research | [`10. mupdf-capability-spike.md`](10.%20mupdf-capability-spike.md) | Decision record: stock mupdf.js не симулирует overprint; нужен custom WASM wrapper | maintainer `src/artwork`, `src/pdf-renderer` |
 | Implemented | [`11. mupdf-overprint-runtime-specification.md`](11.%20mupdf-overprint-runtime-specification.md) | Нормативный контракт custom MuPDF PDF/AI overprint, process/spot plates и single/tiled renderer; Adobe matrix остаётся release gate | maintainer `src/pdf-renderer`, `src/artwork` |
 | Implemented | [`12. hdri-environment-runtime-specification.md`](12.%20hdri-environment-runtime-specification.md) | Нормативный контракт HDR/EXR environment maps, IBL, PMREM и archive v4 | maintainer `src/render`, `src/preview3d`, `src/project` |
+| Implemented | [`13. geometry-fidelity-runtime-specification.md`](13.%20geometry-fidelity-runtime-specification.md) | Нормативный контракт толщины картона, surface-aware hinge и общей solid-геометрии Preview/Render/export | maintainer `src/model`, `src/preview3d`, `src/render`, `src/export` |
 | Historical/Research | [`Техническое задание по внедрению MuPDF.js для PDF-AI Overprint Preview.htm`](Техническое%20задание%20по%20внедрению%20MuPDF.js%20для%20PDF-AI%20Overprint%20Preview.htm) | Входное ТЗ: внедрение MuPDF.js для PDF/AI Overprint Preview | maintainer `src/pdf-renderer` |
 | Implemented | [`../handoff.md`](../handoff.md) | Точка передачи текущего состояния и backlog документации | текущий maintainer; обновлять при handoff |
 
@@ -133,10 +134,10 @@ Canonical for: <scope, or "not canonical">
 - Render preflight, Floor Reflection strength/softness/fade и PNG/JPG export UI;
 - DPR 1/2, Chrome/Edge matrix и stress-test evidence.
 
-Wave 7B production hardening is the current HDRI release gate: unit runtime
-preparation tests, Chromium all-map/cap/custom/context/20-cycle E2E, the same
-Edge smoke subset, production build and `graphify update .`. Geometry Fidelity
-is intentionally tracked as the separate next Wave 8.
+Wave 8A geometry fidelity is the current release gate: canonical board caliper,
+surface-aware solid hinges, Preview/Render/export parity, schema v13 migration,
+unit and Chromium/Edge geometry checks, production build and `graphify update .`.
+Flaps, lock tabs and production crease allowance remain Wave 8B/9 scope.
 
 Этот список является release-проверкой фактов, а не основанием считать
 непроверенную функцию Implemented.

@@ -415,6 +415,11 @@ const VIEWER_SCRIPT = `
     roughness: 0.95,
     metalness: 0,
   });
+  const edgeMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc8c1b5,
+    roughness: 0.9,
+    metalness: 0,
+  });
 
   const meshes = new Map();
 
@@ -470,9 +475,10 @@ const VIEWER_SCRIPT = `
     const v0 = 1 - (node.rect.y - DATA.bounds.minY) / DATA.bounds.height;
     const v1 = 1 - (node.rect.y + node.height - DATA.bounds.minY) / DATA.bounds.height;
 
+    const halfCaliper = Math.max(0, Number(DATA.caliperMm) || 0) / 2;
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-      -hw, -hh, 0, hw, -hh, 0, hw, hh, 0, -hw, hh, 0,
+      -hw, -hh, halfCaliper, hw, -hh, halfCaliper, hw, hh, halfCaliper, -hw, hh, halfCaliper,
     ]), 3));
     geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
       u0, v1, u1, v1, u1, v0, u0, v0,
@@ -485,10 +491,30 @@ const VIEWER_SCRIPT = `
     exterior.matrixAutoUpdate = false;
     exterior.castShadow = true;
     exterior.userData.panelId = node.id;
-    const interior = new THREE.Mesh(geometry, backMaterial);
+    const interiorGeometry = new THREE.BufferGeometry();
+    interiorGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      -hw, -hh, -halfCaliper, hw, -hh, -halfCaliper, hw, hh, -halfCaliper, -hw, hh, -halfCaliper,
+    ]), 3));
+    interiorGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
+      u0, v1, u1, v1, u1, v0, u0, v0,
+    ]), 2));
+    interiorGeometry.setIndex([0, 3, 2, 0, 2, 1]);
+    interiorGeometry.computeVertexNormals();
+    interiorGeometry.computeBoundingSphere();
+    const interior = new THREE.Mesh(interiorGeometry, backMaterial);
     interior.matrixAutoUpdate = false;
-    scene.add(exterior, interior);
-    meshes.set(node.id, [exterior, interior]);
+    const sideGeometry = new THREE.BufferGeometry();
+    sideGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      -hw, -hh, halfCaliper, hw, -hh, halfCaliper, hw, hh, halfCaliper, -hw, hh, halfCaliper,
+      -hw, -hh, -halfCaliper, hw, -hh, -halfCaliper, hw, hh, -halfCaliper, -hw, hh, -halfCaliper,
+    ]), 3));
+    sideGeometry.setIndex([0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7]);
+    sideGeometry.computeVertexNormals();
+    sideGeometry.computeBoundingSphere();
+    const sides = new THREE.Mesh(sideGeometry, edgeMaterial);
+    sides.matrixAutoUpdate = false;
+    scene.add(exterior, interior, sides);
+    meshes.set(node.id, [exterior, interior, sides]);
   }
 
   DATA.nodes.forEach(buildPanelObjects);
@@ -789,9 +815,9 @@ const VIEWER_SCRIPT = `
         const axis = new THREE.Vector3(node.axis[0], node.axis[1], node.axis[2]);
         const rotation = new THREE.Matrix4().makeRotationAxis(axis, node.targetAngle * progress);
         frame = parentFrame.clone()
-          .multiply(new THREE.Matrix4().makeTranslation(node.parentOffset[0], node.parentOffset[1], node.parentOffset[2]))
+          .multiply(new THREE.Matrix4().makeTranslation(node.parentOffset[0], node.parentOffset[1], node.parentOffset[2] + (DATA.caliperMm || 0) / 2))
           .multiply(rotation)
-          .multiply(new THREE.Matrix4().makeTranslation(node.centerOffset[0], node.centerOffset[1], node.centerOffset[2]));
+          .multiply(new THREE.Matrix4().makeTranslation(node.centerOffset[0], node.centerOffset[1], node.centerOffset[2] - (DATA.caliperMm || 0) / 2));
       }
       transforms.set(id, frame);
       node.children.forEach((childId) => visit(childId, frame));
@@ -1316,7 +1342,7 @@ function align4(value) {
  * gets a deterministic model immediately and never blocks the UI on a large
  * WebGL scene or texture encoder.
  */
-function createCartonGlbDataUrl({ nodes, bounds, textureUrl }) {
+function createCartonGlbDataUrl({ nodes, bounds, textureUrl, caliperMm = 0.35 }) {
   const buffer = [];
   const views = [];
   const accessors = [];
@@ -1335,6 +1361,7 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl }) {
   const minX = Number(bounds.minX) || 0;
   const minY = Number(bounds.minY) || 0;
   const scale = 0.001;
+  const halfCaliper = Math.max(0, Number(caliperMm) || 0) * scale / 2;
   for (const node of nodes) {
     const x0 = (node.rect.x - minX) * scale;
     const x1 = (node.rect.x + node.width - minX) * scale;
@@ -1345,18 +1372,26 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl }) {
     const v0 = 1 - (node.rect.y - minY) / Math.max(1, bounds.height);
     const v1 = 1 - (node.rect.y + node.height - minY) / Math.max(1, bounds.height);
     const positionView = append(new Float32Array([
-      x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0,
+      x0, y0, halfCaliper, x1, y0, halfCaliper, x1, y1, halfCaliper, x0, y1, halfCaliper,
+      x0, y0, -halfCaliper, x1, y0, -halfCaliper, x1, y1, -halfCaliper, x0, y1, -halfCaliper,
     ]), 34962);
-    const uvView = append(new Float32Array([u0, v0, u1, v0, u1, v1, u0, v1]), 34962);
-    const indexView = append(new Uint16Array([0, 1, 2, 0, 2, 3]), 34963);
-    const positionAccessor = accessors.push({ bufferView: positionView, componentType: 5126, count: 4, type: 'VEC3', min: [x0, Math.min(y0, y1), 0], max: [x1, Math.max(y0, y1), 0] }) - 1;
-    const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: 4, type: 'VEC2' }) - 1;
-    const indexAccessor = accessors.push({ bufferView: indexView, componentType: 5123, count: 6, type: 'SCALAR', min: [0], max: [3] }) - 1;
+    const uvView = append(new Float32Array([
+      u0, v0, u1, v0, u1, v1, u0, v1,
+      u0, v0, u1, v0, u1, v1, u0, v1,
+    ]), 34962);
+    const indexView = append(new Uint16Array([
+      0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6,
+      0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
+    ]), 34963);
+    const positionAccessor = accessors.push({ bufferView: positionView, componentType: 5126, count: 8, type: 'VEC3', min: [x0, Math.min(y0, y1), -halfCaliper], max: [x1, Math.max(y0, y1), halfCaliper] }) - 1;
+    const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: 8, type: 'VEC2' }) - 1;
+    const indexAccessor = accessors.push({ bufferView: indexView, componentType: 5123, count: 36, type: 'SCALAR', min: [0], max: [7] }) - 1;
     const meshIndex = meshes.push({ name: node.name, primitives: [{ attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: indexAccessor, material: 0 }] }) - 1;
     const nodeIndex = gltfNodes.push({ name: node.name, mesh: meshIndex, extras: { cartonBuilderPanelId: node.id } }) - 1;
     rootChildren.push(nodeIndex + 1);
   }
-  gltfNodes.unshift({ name: 'CartonBuilder GLB', children: rootChildren, extras: { sourceUnit: 'mm', presentation: 'flat-net' } });
+  gltfNodes.unshift({ name: 'CartonBuilder GLB', children: rootChildren, extras: { sourceUnit: 'mm', presentation: 'solid', caliperMm } });
   const json = {
     asset: { version: '2.0', generator: 'CartonBuilder HTML export' },
     scene: 0,
@@ -1413,7 +1448,7 @@ export async function createInteractive3dHtml({
   if (!entries.length) {
     throw new Error('Artwork preview is required for the 3D export.');
   }
-  const graph = buildFoldGraph(boxModel);
+  const graph = buildFoldGraph(boxModel, { caliperMm: boxModel.board?.caliperMm || 0 });
   const bounds = boxModel.getBounds();
   const nodes = [];
   for (const node of graph.nodes.values()) {
@@ -1490,7 +1525,7 @@ export async function createInteractive3dHtml({
   const presentationId = stablePresentationId(boxModel, entries);
   const normalizedLocale = locale === 'ru' ? 'ru' : 'en';
   const glbData = await blobToDataUrl(glbBlob)
-    || createCartonGlbDataUrl({ nodes, bounds, textureUrl });
+    || createCartonGlbDataUrl({ nodes, bounds, textureUrl, caliperMm: boxModel.board?.caliperMm });
   const musicData = await blobToDataUrl(musicBlob);
   const sourceRender = renderState && typeof renderState === 'object' ? renderState : {};
   const sourcePreview = previewState && typeof previewState === 'object' ? previewState : {};
@@ -1532,6 +1567,8 @@ export async function createInteractive3dHtml({
 
   const data = {
     schemaVersion: 1,
+    geometryMode: 'solid',
+    caliperMm: Number(boxModel.board?.caliperMm) || 0.35,
     presentationId,
     locale: normalizedLocale,
     initialState,

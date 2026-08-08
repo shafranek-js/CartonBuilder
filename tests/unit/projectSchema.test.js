@@ -171,6 +171,18 @@ describe('project schema', () => {
     );
   });
 
+  it('migrates v12 render thickness into canonical v13 board caliper', async () => {
+    const { snapshot } = await createBundle();
+    const v12 = migrateProjectSnapshot(snapshot);
+    v12.schemaVersion = 12;
+    delete v12.box.board;
+    v12.renderAppearance = { thicknessMm: 0.82, bevelRadiusMm: 0.1, interiorColor: '#f4f2ec', edgeColor: '#c8c1b5' };
+    const migrated = migrateProjectSnapshot(v12);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
+    expect(migrated.box.board).toEqual({ caliperMm: 0.82 });
+    expect(migrated.renderAppearance.thicknessMm).toBeCloseTo(0.82);
+  });
+
   it('migrates v8 output settings additively to the v9 export contract', async () => {
     const { snapshot } = await createBundle();
     const v8 = migrateProjectSnapshot(snapshot);

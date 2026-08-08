@@ -22,6 +22,7 @@ describe('BoxNetModel', () => {
     const model = new BoxNetModel();
 
     expect(model.dimensions).toEqual({ width: 150, height: 90, depth: 40 });
+    expect(model.board).toEqual({ caliperMm: 0.35 });
     expect(model.panelCount).toBe(1);
     expect(model.getPanel('front')).toMatchObject({
       width: 150,
@@ -177,6 +178,17 @@ describe('BoxNetModel', () => {
     expect(model.panelCount).toBe(6);
     expect(model.getPanel('front')).toMatchObject({ width: 200, height: 100 });
     expect(model.getPanel('bottom')).toMatchObject({ width: 200, height: 50, y: 100 });
+  });
+
+  it('keeps caliper canonical, clamps it to panel dimensions and serializes it', () => {
+    const model = new BoxNetModel({ width: 0.1, height: 0.2, depth: 0.3 }, { caliperMm: 2 });
+    expect(model.board.caliperMm).toBeCloseTo(0.025);
+    model.setBoardCaliper(0.01);
+    expect(model.board.caliperMm).toBeCloseTo(0.01);
+    model.setBoardCaliper(9);
+    expect(model.board.caliperMm).toBeCloseTo(0.025);
+    const restored = BoxNetModel.fromJSON(model.toJSON());
+    expect(restored.board).toEqual(model.board);
   });
 
   it('rejects forged serialized topology and geometry', () => {

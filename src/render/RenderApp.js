@@ -344,7 +344,13 @@ export function createRenderApp({
     ? readRenderSettings(storage)
     : null;
   let state = sanitizeRenderSettings(storedSettings?.renderSettings || initialState);
-  let boardAppearance = sanitizeBoardAppearance(
+  function canonicalBoardAppearance(value = null) {
+    const next = sanitizeBoardAppearance(value);
+    next.thicknessMm = boxModel.board?.caliperMm ?? next.thicknessMm;
+    return next;
+  }
+
+  let boardAppearance = canonicalBoardAppearance(
     storedSettings?.boardAppearance || initialBoardAppearance,
   );
   let namedPresets = [];
@@ -1478,7 +1484,7 @@ export function createRenderApp({
     state = sanitizeRenderSettings(next);
     restoreRenderAssets(availableRenderAssets);
     if (nextBoardAppearance !== undefined) {
-      boardAppearance = sanitizeBoardAppearance(nextBoardAppearance);
+      boardAppearance = canonicalBoardAppearance(nextBoardAppearance);
       renderer?.setBoardAppearance?.(boardAppearance);
     }
     renderer?.setBackgroundAsset?.(backgroundAsset);
@@ -1512,7 +1518,7 @@ export function createRenderApp({
       activeNamedPresetId = getActiveRenderPresetId();
       const activePreset = namedPresets.find((preset) => preset.id === activeNamedPresetId);
       if (activePreset) {
-        boardAppearance = sanitizeBoardAppearance(activePreset.boardAppearance);
+        boardAppearance = canonicalBoardAppearance(activePreset.boardAppearance);
         renderer?.setBoardAppearance?.(boardAppearance);
         persistSettings();
       } else if (activeNamedPresetId) {
@@ -1549,7 +1555,10 @@ export function createRenderApp({
   function updateBoardAppearance(mutator, { notify = true } = {}) {
     const next = cloneBoardAppearance(boardAppearance);
     mutator(next);
-    boardAppearance = sanitizeBoardAppearance(next);
+    if (Number(next.thicknessMm) !== Number(boxModel.board?.caliperMm)) {
+      boxModel.setBoardCaliper(next.thicknessMm);
+    }
+    boardAppearance = canonicalBoardAppearance(next);
     renderer?.setBoardAppearance?.(boardAppearance);
     renderer?.markInteraction?.();
     renderer?.render?.();
@@ -1607,13 +1616,26 @@ export function createRenderApp({
     if (!preset) return false;
     activeNamedPresetId = preset.id;
     setActiveRenderPresetId(activeNamedPresetId);
-    boardAppearance = sanitizeBoardAppearance(preset.boardAppearance);
+    boardAppearance = canonicalBoardAppearance(preset.boardAppearance);
     updateState(preset.renderSettings);
     renderer?.setBoardAppearance?.(boardAppearance);
     persistSettings();
     onStateChange(getState());
     updateControls();
     return true;
+  }
+
+  function setBoardCaliper(caliperMm, { notify = true } = {}) {
+    boxModel.setBoardCaliper(caliperMm);
+    boardAppearance = canonicalBoardAppearance(boardAppearance);
+    renderer?.setBoardAppearance?.(boardAppearance);
+    renderer?.markInteraction?.();
+    renderer?.render?.();
+    updateControls();
+    if (notify) {
+      persistSettings();
+      onStateChange(getState());
+    }
   }
 
   async function removeNamedPreset() {
@@ -2233,6 +2255,7 @@ export function createRenderApp({
     clearBackgroundImage,
     setEnvironmentMapFile,
     clearEnvironmentMap,
+    setBoardCaliper,
     getBoardAppearance() {
       return cloneBoardAppearance(boardAppearance);
     },

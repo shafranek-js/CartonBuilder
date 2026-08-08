@@ -33,7 +33,7 @@ export function sanitizeBoardAppearance(input = null, panel = null) {
     thicknessMm: finiteNumber(
       source.thicknessMm,
       DEFAULT_BOARD_APPEARANCE.thicknessMm,
-      0.05,
+      0.01,
       2,
     ),
     bevelRadiusMm: finiteNumber(

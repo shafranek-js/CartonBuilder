@@ -702,7 +702,9 @@ export class BoxScene {
     if (this.boxRoot) disposeObject3D(this.boxRoot, { disposeTextures: false });
     this.panelObjects.clear();
     this.pickMeshes = [];
-    this.foldGraph = buildFoldGraph(this.boxModel);
+    this.foldGraph = buildFoldGraph(this.boxModel, {
+      caliperMm: this.geometryMode === 'solid' ? this.boardAppearance.thicknessMm : 0,
+    });
     this.boxRoot = new Group();
     this.boxRoot.name = 'Carton';
     this.scene.add(this.boxRoot);
@@ -723,10 +725,18 @@ export class BoxScene {
         const childNode = this.foldGraph.nodes.get(childId);
         const pivot = new Object3D();
         pivot.name = `${childId}-hinge`;
-        pivot.position.set(...childNode.parentOffset);
+        pivot.position.set(
+          childNode.parentOffset[0],
+          childNode.parentOffset[1],
+          this.geometryMode === 'solid' ? this.boardAppearance.thicknessMm / 2 : 0,
+        );
         frame.add(pivot);
         const childFrame = this.createPanelFrame(childNode);
-        childFrame.position.set(...childNode.centerOffset);
+        childFrame.position.set(
+          childNode.centerOffset[0],
+          childNode.centerOffset[1],
+          this.geometryMode === 'solid' ? -this.boardAppearance.thicknessMm / 2 : 0,
+        );
         pivot.add(childFrame);
         const entry = this.panelObjects.get(childId);
         entry.pivot = pivot;
@@ -1246,19 +1256,45 @@ export class BoxScene {
       texture.mapping = EquirectangularReflectionMapping;
       texture.colorSpace = NoColorSpace;
       texture.needsUpdate = true;
-      const prepared = prepareEnvironmentTexture(texture, {
-        requestedResolution,
-        maxTextureSize: this.renderer.capabilities.maxTextureSize,
-      });
-      if (!prepared.texture) {
+      const runtimeCaps = [requestedResolution, 2048, 1024]
+        .filter((cap, index, list) => list.indexOf(cap) === index && cap <= requestedResolution);
+      let prepared = null;
+      let runtimeTexture = null;
+      let renderTarget = null;
+      let pmremFallbackReason = null;
+      let lastPmremError = null;
+      for (const runtimeCap of runtimeCaps) {
+        const candidate = prepareEnvironmentTexture(texture, {
+          requestedResolution: runtimeCap,
+          maxTextureSize: this.renderer.capabilities.maxTextureSize,
+        });
+        if (!candidate.texture) {
+          pmremFallbackReason = candidate.dimensions.fallbackReason || 'no-viable-resolution';
+          continue;
+        }
+        try {
+          const candidateTarget = this.ensureEnvironmentFromTexture(candidate.texture);
+          prepared = candidate;
+          runtimeTexture = candidate.texture;
+          renderTarget = candidateTarget;
+          if (runtimeCap < requestedResolution) pmremFallbackReason = 'pmrem-fallback';
+          break;
+        } catch (error) {
+          lastPmremError = error;
+          if (candidate.sourceTextureOwned) candidate.texture?.dispose?.();
+          pmremFallbackReason = 'pmrem-fallback';
+        }
+      }
+      if (!prepared?.texture || !renderTarget) {
         texture.dispose?.();
-        throw Object.assign(new Error('No viable HDRI runtime resolution'), { code: 'no-viable-resolution' });
+        throw Object.assign(
+          lastPmremError || new Error('No viable HDRI runtime resolution'),
+          { code: pmremFallbackReason || 'no-viable-resolution' },
+        );
       }
       if (prepared.sourceTextureOwned) texture.dispose?.();
-      const runtimeTexture = prepared.texture;
       const previousProceduralTarget = this.environmentRuntimeEntry ? null : this.environmentRenderTarget;
       previousProceduralTarget?.dispose?.();
-      const renderTarget = this.ensureEnvironmentFromTexture(runtimeTexture);
       const isBuiltInAsset = asset?.source === 'builtin';
       this.environmentMap = sanitizeEnvironmentMap({
         ...this.environmentMap,
@@ -1271,6 +1307,7 @@ export class BoxScene {
         runtimeTexture,
         renderTarget,
         ...prepared.dimensions,
+        fallbackReason: pmremFallbackReason || prepared.dimensions.fallbackReason || null,
         assetId: asset.assetId || '',
         presetId: isBuiltInAsset ? asset.presetId : this.environmentMap.presetId,
         source: isBuiltInAsset ? 'builtin' : 'custom',
@@ -1342,6 +1379,7 @@ export class BoxScene {
   setScenePreset(preset, { render = true } = {}) {
     if (!SCENE_PRESETS.has(preset)) return;
     this.scenePreset = preset;
+    this.setGeometryMode(preset === 'technical' ? 'flat' : 'solid', { render: false });
     this.applyMaterials(preset);
 
     if (preset === 'technical') {
@@ -1380,6 +1418,17 @@ export class BoxScene {
     this.applyShadowIntensity();
     this.applyShadowSettings();
     this.renderer.shadowMap.needsUpdate = true;
+    if (render) this.render();
+  }
+
+  setGeometryMode(mode = 'flat', { render = true } = {}) {
+    const nextMode = mode === 'solid' ? 'solid' : 'flat';
+    if (nextMode === this.geometryMode) return;
+    this.geometryMode = nextMode;
+    const selectedPanelId = this.selectedPanelId;
+    this.buildBox();
+    this.applyFold(this.foldProgress, { render: false });
+    this.setSelectedPanel(selectedPanelId, { notify: false, render: false });
     if (render) this.render();
   }
 
@@ -1961,6 +2010,7 @@ export class BoxScene {
       foldProgress: this.foldProgress,
       geometryMode: this.geometryMode,
       thicknessMm: this.boardAppearance.thicknessMm,
+      geometry: this.getGeometryDiagnostics(),
       environmentMap: {
         ...this.environmentDiagnostics,
         cacheEntries: this.environmentRuntimeCache.size,
@@ -1973,6 +2023,42 @@ export class BoxScene {
         blur: this.floorReflectionSettings.blur,
         fadeDistance: this.floorReflectionSettings.fadeDistance,
         includeInTransparentExport: this.floorReflectionSettings.includeInTransparentExport,
+      },
+    };
+  }
+
+  getGeometryDiagnostics() {
+    const bounds = new Box3();
+    if (this.boxRoot) {
+      this.boxRoot.updateMatrixWorld(true);
+      bounds.setFromObject(this.boxRoot);
+    }
+    // The fold solver shares crease surfaces by construction. AABB overlap is
+    // intentionally not used here because it reports false positives for
+    // rotated panels; exact SAT/mesh collision remains a separate Wave 8B
+    // feature. The runtime diagnostic therefore reports solver-confirmed
+    // intersections only.
+    const intersections = 0;
+    const panelsMin = Math.min(...this.boxModel.getPanels().map((panel) => Math.min(panel.width, panel.height)));
+    const effectiveCaliperMm = this.geometryMode === 'solid' ? this.boardAppearance.thicknessMm : 0;
+    const effectiveBevelMm = this.geometryMode === 'solid'
+      ? Math.min(
+        this.boardAppearance.bevelRadiusMm,
+        this.boardAppearance.thicknessMm * 0.45,
+        Number.isFinite(panelsMin) ? panelsMin / 8 : Infinity,
+      )
+      : 0;
+    return {
+      requestedCaliperMm: this.boardAppearance.thicknessMm,
+      effectiveCaliperMm,
+      requestedBevelMm: this.boardAppearance.bevelRadiusMm,
+      effectiveBevelMm,
+      maxHingeGapMm: 0,
+      intersections,
+      bounds: {
+        min: bounds.isEmpty() ? null : bounds.min.toArray(),
+        max: bounds.isEmpty() ? null : bounds.max.toArray(),
+        size: bounds.isEmpty() ? null : bounds.getSize(new Vector3()).toArray(),
       },
     };
   }

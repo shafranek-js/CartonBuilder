@@ -527,6 +527,8 @@ export function createPreview3DApp({
           cameraPreset: state.cameraPreset,
           cameraFov: state.cameraFov,
           backgroundColor: state.backgroundColor || undefined,
+          geometryMode: state.scenePreset === 'technical' ? 'flat' : 'solid',
+          boardAppearance: { thicknessMm: boxModel.board?.caliperMm },
           windowRef,
           onSelection: (panelId) => {
             state.selectedPanelId = panelId;
@@ -669,6 +671,12 @@ export function createPreview3DApp({
     schedulePersist();
     updateControls();
     updateSummary({ announce: true });
+  }
+
+  function setBoardCaliper(caliperMm) {
+    const next = Number(caliperMm);
+    if (!Number.isFinite(next)) return;
+    scene?.setBoardAppearance({ thicknessMm: next });
   }
 
   function selectPanel(panelId) {
@@ -893,6 +901,7 @@ export function createPreview3DApp({
     setFoldProgress,
     setCameraProjection,
     setScenePreset,
+    setBoardCaliper,
     selectPanel,
     resetView,
     render() {

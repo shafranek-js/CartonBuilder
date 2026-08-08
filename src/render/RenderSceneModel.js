@@ -12,6 +12,7 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
   }
   const settings = sanitizeRenderSettings(renderSettings);
   const appearance = sanitizeBoardAppearance(boardAppearance, boxModel.getPanels?.()[0]);
+  appearance.thicknessMm = boxModel.board?.caliperMm ?? appearance.thicknessMm;
   const visibleArtworks = (artworks || [])
     .filter((entry) => entry?.visible !== false && entry.model?.hasArtwork)
     .map((entry) => ({
@@ -38,6 +39,7 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
     box: {
       dimensions: clone(boxModel.dimensions),
       bounds: clone(bounds),
+      board: clone(boxModel.board || { caliperMm: appearance.thicknessMm }),
       panels,
     },
     panelGeometry: panels,

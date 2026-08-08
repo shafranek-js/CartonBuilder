@@ -65,6 +65,9 @@ export function createLazyPreview3DFacade({
       statePatch.scenePreset = value;
       ensureController().then((target) => target?.setScenePreset(value));
     },
+    setBoardCaliper(value) {
+      ensureController().then((target) => target?.setBoardCaliper(value));
+    },
     selectPanel(panelId) {
       statePatch.selectedPanelId = panelId;
       ensureController().then((target) => target?.selectPanel(panelId));

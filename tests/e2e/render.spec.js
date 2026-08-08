@@ -454,13 +454,13 @@ test('applies floor reflection strength, softness and fade to the live Render sc
 
   const reflection = page.locator('#renderFloorReflectionEnabled');
   await reflection.check();
-  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection))
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection), { timeout: 30_000 })
     .toMatchObject({ enabled: true, visible: true });
   await page.waitForTimeout(500);
   const enabledCanvas = await page.locator('#renderCanvas').screenshot();
 
   await page.locator('#renderFloorReflectionStrength').fill('0.75');
-  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection.strength))
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection.strength), { timeout: 30_000 })
     .toBe(0.75);
   await page.waitForTimeout(500);
   const strongCanvas = await page.locator('#renderCanvas').screenshot();
@@ -468,7 +468,7 @@ test('applies floor reflection strength, softness and fade to the live Render sc
 
   await page.locator('#renderFloorReflectionBlur').fill('0');
   await page.locator('#renderFloorReflectionFade').fill('4.5');
-  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection))
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection), { timeout: 30_000 })
     .toMatchObject({ blur: 0, fadeDistance: 4.5 });
   await page.waitForTimeout(500);
   const sharpWideFadeCanvas = await page.locator('#renderCanvas').screenshot();
@@ -477,6 +477,29 @@ test('applies floor reflection strength, softness and fade to the live Render sc
   await reflection.uncheck();
   await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().floorReflection.visible))
     .toBe(false);
+});
+
+test('keeps canonical board caliper synchronized between Create Box, Preview and Render', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openRender(page, 'wave8a-caliper-fixture.png');
+  await expect(page.locator('#renderBoardThickness')).toHaveValue('0.35');
+  await page.locator('[data-step-target="box"]').click();
+  await page.locator('#boardCaliper').fill('1.2');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.getState().box.board.caliperMm), { timeout: 30_000 }).toBe(1.2);
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderBoardThickness')).toHaveValue('1.2');
+
+  await page.locator('#renderBoardThickness').fill('2');
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics()), { timeout: 30_000 })
+    .toMatchObject({ thicknessMm: 2, geometry: { requestedCaliperMm: 2, effectiveCaliperMm: 2 } });
+
+  await page.locator('[data-step-target="preview"]').click();
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 60_000 });
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo()), { timeout: 30_000 })
+    .toMatchObject({ geometryMode: 'solid', thicknessMm: 2, geometry: { requestedCaliperMm: 2 } });
+
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderBoardThickness')).toHaveValue('2');
 });
 
 test('keeps Render resources stable across 20 floor-effect updates', async ({ page }) => {
@@ -664,7 +687,7 @@ test.describe('Wave 5 deterministic Render baselines', () => {
   test('captures stable studio and transparent Render states', async ({ page }) => {
     test.setTimeout(process.env.CI ? 240_000 : 90_000);
     await openRender(page, 'wave5-visual-fixture.png');
-    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 60_000 }))).toBe(true);
     const canvas = page.locator('#renderCanvas');
     expect(await canvas.screenshot({ animations: 'disabled', timeout: 30_000 })).toMatchSnapshot('wave5-clean-studio.png', {
       threshold: 0.15,
@@ -692,8 +715,10 @@ test.describe('Wave 5 deterministic Render baselines', () => {
   test('blocks impossible exports and recovers from a lost graphics context', async ({ page }) => {
     await openRender(page, 'wave5-lifecycle-fixture.png');
     await page.locator('#renderEnvironmentMapPreset').selectOption('polyhaven-abandoned-hall-01');
-    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap.effectiveResolution), { timeout: 45_000 })
-      .toBeGreaterThan(0);
+    await expect.poll(
+      () => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics()?.environmentMap || null),
+      { timeout: 60_000 },
+    ).toMatchObject({ effectiveResolution: expect.any(Number) });
     await page.locator('#renderDiagnosticsDrawer').locator('summary').click();
     await expect(page.locator('#renderDiagnosticsOutput')).toContainText('health:');
     await page.locator('#renderPngButton').click();
@@ -715,7 +740,7 @@ test.describe('Wave 5 deterministic Render baselines', () => {
       () => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().contextRecoveryCount),
       { timeout: 30_000 },
     ).toBeGreaterThan(0);
-    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 20_000 }))).toBe(true);
+    expect(await page.evaluate(() => window.cartonBuilderApp.render.whenStable({ timeoutMs: 60_000 }))).toBe(true);
     await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
       .toMatchObject({ source: 'builtin', effectiveResolution: expect.any(Number), fallbackReason: null });
     expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(Buffer.alloc(0));

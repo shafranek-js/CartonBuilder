@@ -102,7 +102,7 @@ function normalizePanels(source) {
   return panels;
 }
 
-export function buildFoldGraph(source) {
+export function buildFoldGraph(source, { caliperMm = 0 } = {}) {
   const panels = normalizePanels(source);
   const nodes = new Map();
   let rootId = null;
@@ -160,6 +160,7 @@ export function buildFoldGraph(source) {
     rootId,
     nodes,
     order: panels.map(({ id }) => id),
+    caliperMm: Math.max(0, Number(caliperMm) || 0),
   };
 }
 
@@ -173,10 +174,11 @@ function translation(values) {
   return new Matrix4().makeTranslation(...values);
 }
 
-export function computePanelTransforms(graph, progress) {
+export function computePanelTransforms(graph, progress, { thicknessAware = graph.caliperMm > 0 } = {}) {
   const foldProgress = clampProgress(progress);
   const transforms = new Map();
   const identity = new Matrix4();
+  const halfCaliper = thicknessAware ? Math.max(0, Number(graph.caliperMm) || 0) / 2 : 0;
 
   function visit(nodeId, parentFrame) {
     const node = graph.nodes.get(nodeId);
@@ -189,9 +191,17 @@ export function computePanelTransforms(graph, progress) {
         node.targetAngle * foldProgress,
       );
       worldFrame = parentFrame.clone()
-        .multiply(translation(node.parentOffset))
+        .multiply(translation([
+          node.parentOffset[0],
+          node.parentOffset[1],
+          halfCaliper,
+        ]))
         .multiply(rotation)
-        .multiply(translation(node.centerOffset));
+        .multiply(translation([
+          node.centerOffset[0],
+          node.centerOffset[1],
+          -halfCaliper,
+        ]));
     }
     transforms.set(node.id, worldFrame);
     for (const childId of node.children) visit(childId, worldFrame);

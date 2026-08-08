@@ -123,6 +123,19 @@ describe('3D fold graph', () => {
     }
   });
 
+  it('uses equal and opposite surface offsets for thickness-aware hinges', () => {
+    const model = completeNets[0];
+    const graph = buildFoldGraph(model, { caliperMm: 0.35 });
+    const flat = computePanelTransforms(graph, 0);
+    const thin = computePanelTransforms(graph, 1, { thicknessAware: false });
+    const solid = computePanelTransforms(graph, 1);
+    expect(graph.caliperMm).toBeCloseTo(0.35);
+    expect(solid.get('front').elements).toEqual(thin.get('front').elements);
+    const child = graph.nodes.get(model.getPanels().find((panel) => panel.parentId).id);
+    expect(solid.get(child.id).elements[14]).not.toBeCloseTo(thin.get(child.id).elements[14], 6);
+    expect(flat.get(child.id).elements[14]).toBeCloseTo(0, 6);
+  });
+
   it('clamps fold progress without mutating the model', () => {
     const model = completeNets[0];
     const before = model.toJSON();

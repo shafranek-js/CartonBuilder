@@ -7,7 +7,7 @@ structured files.
 
 The current workflow is:
 
-1. **Create Box** — enter width, height and depth, then build a valid six-face net.
+1. **Create Box** — enter width, height, depth and board caliper, then build a valid six-face net.
 2. **Place Artwork** — load PNG, JPEG, or one page of a PDF; move, scale, rotate,
    inspect effective DPI, and control fixed system layers.
 3. **Preview** — inspect the clipped 2D proof and a folded technical 3D carton.
@@ -176,7 +176,8 @@ off in Preview by default.
   default. Mouse drag orbits, the wheel zooms, right-drag pans, and arrow keys
   pan while the 3D canvas is focused.
 - `Technical`, `Studio`, and `Photorealistic` scene presets are available;
-  Studio is the default. Technical uses unlit color for proof comparison.
+  Studio is the default. Technical preserves flat exact geometry; Studio and
+  Photorealistic use thickness-aware solids.
 - Clicking a panel shows its identity and millimetre dimensions. `Escape`
   clears the selection, and `Reset View` restores deterministic isometric
   framing.
@@ -221,7 +222,9 @@ Camera section. Global View Presets can be saved, duplicated, applied, and
 deleted independently of full Render Presets. Artwork quality is intentionally
 excluded from both preset types.
 
-Render also provides Uncoated, Matte, and Gloss board profiles; 1:1, 4:3,
+Render also provides Uncoated, Matte, and Gloss board profiles; a canonical
+board caliper shared with Create Box (0.01–2.00 mm, dynamically limited by the
+smallest panel); 1:1, 4:3,
 16:9, and 3:4 frames; environment/light/shadow controls; embedded image,
 solid or transparent backgrounds; optional floor reflection/shadow controls;
 and PNG/JPG still export at preset, custom pixel, or print sizes (cm/in + PPI).
@@ -319,9 +322,9 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-current schema v10 project snapshot. Schema v10 adds the unified output kind,
-turntable options and GLB options while retaining camera framing, vertical
-correction, global View Preset references and per-artwork preview/render
+current schema v13 project snapshot. Schema v13 adds canonical board
+construction while retaining the unified output kind, turntable options and GLB
+options, camera framing, vertical correction, global View Preset references and per-artwork preview/render
 quality. It also persists per-layer finish roles and finish parameters. Legacy
 cropped artwork is normalized to the same visual-equivalent
 100% transform baseline.
@@ -337,13 +340,14 @@ The existing events are unchanged:
   artwork editors. Render output is an sRGB presentation image, not a CMYK,
   ICC, Pantone, overprint, certified print-proof, or production finish
   separation workflow.
-- There are no flaps, bleed, safe area, material thickness, trapping, crop
+- There are no flaps, bleed, safe area, trapping, crop
   marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
   production validation, collision simulation, or free-angle rotation.
-- Presentation Render now provides Render-only solid board geometry with
-  thickness/bevel, interior and edge materials, settled GTAO/TAA, optional DOF,
-  adaptive quality diagnostics, and named presets. Preview remains flat and
-  technical. WebGPU, WebP, CMYK/ICC print proof, collision simulation, and
+- Presentation Render and Studio/Photorealistic Preview share thickness-aware
+  solid board geometry with surface-aware hinges, bounded bevel, interior and
+  edge materials, settled GTAO/TAA, optional DOF, adaptive quality diagnostics,
+  and named presets. Technical Preview remains flat and exact. WebGPU, WebP,
+  CMYK/ICC print proof, collision simulation, and
   production path tracing remain out of scope; the path-tracing button is a
   disabled-by-default gated experiment.
 - Artwork replacement is not part of undo history; artwork entries can be added,

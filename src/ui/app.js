@@ -1,6 +1,7 @@
 import { createExportSvg, formatNumber, getExportFilename } from '../export/svgExport.js';
 import { getUserErrorMessage, t } from '../i18n.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
+import { DEFAULT_BOARD_CONSTRUCTION } from '../model/BoardConstruction.js';
 import { createPresetPicker } from './PresetPicker.js';
 import { createBoxNetRenderer } from './renderer.js';
 
@@ -11,6 +12,7 @@ export function createBoxNetApp({
   onContinue = () => {},
   onDimensionReset = () => {},
   onLayoutReset = () => {},
+  onBoardConstructionChange = () => {},
   onChange = () => {},
 }) {
   const svg = documentRef.getElementById('workspace');
@@ -27,6 +29,7 @@ export function createBoxNetApp({
     height: documentRef.getElementById('boxHeight'),
     depth: documentRef.getElementById('boxDepth'),
   };
+  const boardCaliperInput = documentRef.getElementById('boardCaliper');
 
   let lastDimensions = { ...model.dimensions };
   let toastTimer = null;
@@ -61,6 +64,10 @@ export function createBoxNetApp({
     }
   }
 
+  function restoreBoardInput() {
+    if (boardCaliperInput) boardCaliperInput.value = formatNumber(model.board?.caliperMm ?? DEFAULT_BOARD_CONSTRUCTION.caliperMm);
+  }
+
   const presetPicker = presetTriggerBtn && presetPopover
     ? createPresetPicker({
         triggerButton: presetTriggerBtn,
@@ -73,6 +80,7 @@ export function createBoxNetApp({
               model.panels = restored.panels;
               model.rootId = restored.rootId;
               model.dimensions = restored.dimensions;
+              model.board = restored.board;
               model.creationSequence = restored.creationSequence;
             } catch {
               model.updateDimensions(preset.dimensions);
@@ -82,6 +90,8 @@ export function createBoxNetApp({
           }
           lastDimensions = { ...model.dimensions };
           restoreDimensionInputs();
+          restoreBoardInput();
+          onBoardConstructionChange(model.board);
           onDimensionReset(preset.dimensions);
           render();
           onChange();
@@ -116,6 +126,24 @@ export function createBoxNetApp({
         showToast(getUserErrorMessage(error, 'invalidDimensions'));
       }
     }
+  }
+
+  function applyBoardCaliperChange({ silent = false } = {}) {
+    if (!boardCaliperInput) return;
+    const next = Number(boardCaliperInput.value);
+    if (!Number.isFinite(next)) {
+      restoreBoardInput();
+      if (!silent) showToast(getUserErrorMessage(new Error('invalidBoardCaliper'), 'invalidDimensions'));
+      return;
+    }
+    const previous = model.board?.caliperMm;
+    model.setBoardCaliper(next);
+    if (model.board.caliperMm !== Number(boardCaliperInput.value)) restoreBoardInput();
+    if (model.board.caliperMm === previous) return;
+    onBoardConstructionChange(model.board);
+    render();
+    onChange();
+    if (!silent) announce(t('boardCaliperUpdated'));
   }
 
   function addPanel(panelId, edge) {
@@ -207,6 +235,26 @@ export function createBoxNetApp({
         input.value = formatNumber(newValue);
         applyDimensionChange({ silent: true });
       }
+    });
+  }
+
+  if (boardCaliperInput) {
+    boardCaliperInput.addEventListener('change', () => applyBoardCaliperChange({ silent: false }));
+    boardCaliperInput.addEventListener('input', () => applyBoardCaliperChange({ silent: true }));
+    boardCaliperInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        boardCaliperInput.blur();
+        return;
+      }
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      const step = event.altKey ? 0.01 : event.ctrlKey || event.metaKey ? 1 : 0.1;
+      const decimals = step === 0.01 ? 2 : step === 1 ? 0 : 1;
+      const direction = event.key === 'ArrowUp' ? 1 : -1;
+      const value = Number(boardCaliperInput.value) || DEFAULT_BOARD_CONSTRUCTION.caliperMm;
+      boardCaliperInput.value = formatNumber(Number((value + direction * step).toFixed(decimals)));
+      applyBoardCaliperChange({ silent: true });
     });
   }
 
@@ -310,13 +358,16 @@ export function createBoxNetApp({
     const isModified = model.panelCount > 1 ||
       model.dimensions.width !== DEFAULT_BOX_DIMENSIONS.width ||
       model.dimensions.height !== DEFAULT_BOX_DIMENSIONS.height ||
-      model.dimensions.depth !== DEFAULT_BOX_DIMENSIONS.depth;
+      model.dimensions.depth !== DEFAULT_BOX_DIMENSIONS.depth ||
+      model.board?.caliperMm !== DEFAULT_BOARD_CONSTRUCTION.caliperMm;
 
     if (isModified && !windowRef.confirm(t('resetBoxConfirm'))) return;
 
-    model.reset(DEFAULT_BOX_DIMENSIONS);
+    model.reset(DEFAULT_BOX_DIMENSIONS, DEFAULT_BOARD_CONSTRUCTION);
     lastDimensions = { ...DEFAULT_BOX_DIMENSIONS };
     restoreDimensionInputs();
+    restoreBoardInput();
+    onBoardConstructionChange(model.board);
     onLayoutReset();
     render();
     onChange();
@@ -341,12 +392,16 @@ export function createBoxNetApp({
       onLayoutReset();
       lastDimensions = { ...model.dimensions };
       restoreDimensionInputs();
+      restoreBoardInput();
+      onBoardConstructionChange(model.board);
       render();
     },
     loadState(state) {
       model.restore(state);
       lastDimensions = { ...model.dimensions };
       restoreDimensionInputs();
+      restoreBoardInput();
+      onBoardConstructionChange(model.board);
       render();
     },
     exportSvg,
@@ -359,6 +414,8 @@ export function createBoxNetApp({
     ? windowRef.requestAnimationFrame.bind(windowRef)
     : (callback) => callback();
   scheduleRender(render);
+  restoreDimensionInputs();
+  restoreBoardInput();
 
   return publicApi;
 }

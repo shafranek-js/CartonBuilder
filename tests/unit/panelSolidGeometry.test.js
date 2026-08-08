@@ -35,4 +35,16 @@ describe('panelSolidGeometry', () => {
     }
     geometry.dispose();
   });
+
+  it('caps bevel at 45 percent of caliper for thickness-safe edges', () => {
+    const model = new BoxNetModel({ width: 20, height: 20, depth: 20 });
+    const geometry = createPanelSolidGeometry(model.getPanel('front'), model.getBounds(), {
+      thicknessMm: 0.4,
+      bevelRadiusMm: 4,
+    });
+    expect(geometry.boundingBox.max.x).toBeCloseTo(10, 5);
+    expect(geometry.boundingBox.min.x).toBeCloseTo(-10, 5);
+    expect(geometry.getAttribute('position').count).toBeGreaterThan(8);
+    geometry.dispose();
+  });
 });

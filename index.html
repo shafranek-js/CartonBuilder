@@ -121,6 +121,13 @@
                 </g>
               </svg>
             </div>
+            <div class="dimension-row board-caliper-row">
+              <label for="boardCaliper" data-i18n="boardCaliper">Board:</label>
+              <span class="measure-input">
+                <input id="boardCaliper" name="boardCaliper" type="number" min="0.01" max="2" step="0.01" value="0.35" inputmode="decimal" title="Board caliper in mm (0.01–2.00)">
+              </span>
+              <span class="dimension-unit">mm</span>
+            </div>
           </div>
 
           <div class="box-controls-right">
@@ -928,7 +935,7 @@
 
             <details open class="tool-section">
               <summary data-i18n="renderBoardAppearance">Board appearance</summary>
-              <div class="light-control"><span data-i18n="renderThickness">Thickness</span><input id="renderBoardThickness" type="range" min="0.05" max="2" step="0.01" value="0.35"><output id="renderBoardThicknessValue">0.35 mm</output></div>
+              <div class="light-control"><span data-i18n="renderThickness">Thickness</span><input id="renderBoardThickness" type="range" min="0.01" max="2" step="0.01" value="0.35"><output id="renderBoardThicknessValue">0.35 mm</output></div>
               <div class="light-control"><span data-i18n="renderBevel">Bevel</span><input id="renderBoardBevel" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="renderBoardBevelValue">0.12 mm</output></div>
               <label class="field"><span data-i18n="renderInteriorColor">Interior</span><input id="renderBoardInteriorColor" type="color" value="#f4f2ec"></label>
               <label class="field"><span data-i18n="renderEdgeColor">Edges</span><input id="renderBoardEdgeColor" type="color" value="#c8c1b5"></label>

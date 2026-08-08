@@ -10,14 +10,16 @@ import {
   rectanglesOverlap,
   vectorKey,
 } from './geometry.js';
+import { cloneBoardConstruction, sanitizeBoardConstruction } from './BoardConstruction.js';
 
 export class BoxNetModel {
-  constructor(dimensions = { width: 150, height: 90, depth: 40 }) {
-    this.reset(dimensions);
+  constructor(dimensions = { width: 150, height: 90, depth: 40 }, board = null) {
+    this.reset(dimensions, board);
   }
 
-  reset(dimensions = this.dimensions) {
+  reset(dimensions = this.dimensions, board = this.board) {
     this.dimensions = normalizeDimensions(dimensions);
+    this.board = sanitizeBoardConstruction(board, this.dimensions);
     this.panels = new Map();
     this.creationSequence = 0;
 
@@ -42,7 +44,9 @@ export class BoxNetModel {
   updateDimensions(dimensions) {
     const normalized = normalizeDimensions(dimensions);
     const oldDimensions = { ...this.dimensions };
+    const oldBoard = cloneBoardConstruction(this.board, oldDimensions);
     this.dimensions = normalized;
+    this.board = sanitizeBoardConstruction(this.board, this.dimensions);
 
     const updatePanelGeometry = (panelId) => {
       const panel = this.getPanel(panelId);
@@ -73,6 +77,7 @@ export class BoxNetModel {
       for (let j = i + 1; j < panels.length; j++) {
         if (rectanglesOverlap(panels[i], panels[j])) {
           this.dimensions = oldDimensions;
+          this.board = oldBoard;
           updatePanelGeometry(this.rootId);
           throw new Error('Dimensions cause net panels to overlap.');
         }
@@ -80,6 +85,15 @@ export class BoxNetModel {
     }
 
     return this;
+  }
+
+  setBoardConstruction(board) {
+    this.board = sanitizeBoardConstruction(board, this.dimensions);
+    return this;
+  }
+
+  setBoardCaliper(caliperMm) {
+    return this.setBoardConstruction({ ...this.board, caliperMm });
   }
 
   _createPanel({ faceKey, faceName, basis, x, y, parentId, parentEdge }) {
@@ -223,6 +237,7 @@ export class BoxNetModel {
   toJSON() {
     return {
       dimensions: { ...this.dimensions },
+      board: cloneBoardConstruction(this.board, this.dimensions),
       complete: this.isComplete,
       panels: this.getPanels().map((panel) => ({
         id: panel.id,
@@ -252,7 +267,7 @@ export class BoxNetModel {
       throw new Error('Invalid box net state.');
     }
 
-    const model = new BoxNetModel(state.dimensions);
+    const model = new BoxNetModel(state.dimensions, state.board);
     model.panels.clear();
     model.creationSequence = 0;
     model.rootId = null;
@@ -385,6 +400,7 @@ export class BoxNetModel {
   restore(state) {
     const restored = BoxNetModel.fromJSON(state);
     this.dimensions = restored.dimensions;
+    this.board = restored.board;
     this.panels = restored.panels;
     this.creationSequence = restored.creationSequence;
     this.rootId = restored.rootId;

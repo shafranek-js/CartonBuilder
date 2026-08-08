@@ -46,6 +46,14 @@ function flatNetUv(point, panel, bounds) {
   ];
 }
 
+function insetPerimeter(perimeter, width, height, inset) {
+  const halfWidth = Math.max(0.001, width / 2);
+  const halfHeight = Math.max(0.001, height / 2);
+  const xScale = Math.max(0.02, (halfWidth - inset) / halfWidth);
+  const yScale = Math.max(0.02, (halfHeight - inset) / halfHeight);
+  return perimeter.map(([x, y]) => [x * xScale, y * yScale]);
+}
+
 /**
  * Creates a render-only thin solid. The exterior cap is the only surface
  * receiving artwork UVs; the interior and side faces intentionally use
@@ -53,8 +61,19 @@ function flatNetUv(point, panel, bounds) {
  */
 export function createPanelSolidGeometry(panel, bounds, boardAppearance = null) {
   const appearance = sanitizeBoardAppearance(boardAppearance, panel);
-  const perimeter = roundedPerimeter(panel.width, panel.height, appearance.bevelRadiusMm);
+  const panelMin = Math.min(Number(panel.width) || 0, Number(panel.height) || 0);
+  const effectiveBevel = Math.min(
+    appearance.bevelRadiusMm,
+    appearance.thicknessMm * 0.45,
+    panelMin > 0 ? panelMin / 8 : appearance.bevelRadiusMm,
+  );
+  const perimeter = roundedPerimeter(panel.width, panel.height, Math.max(0, effectiveBevel));
   const halfThickness = appearance.thicknessMm / 2;
+  const innerInset = Math.min(
+    appearance.thicknessMm,
+    Math.min(panel.width, panel.height) / 4,
+  );
+  const innerPerimeter = insetPerimeter(perimeter, panel.width, panel.height, innerInset);
   const positions = [];
   const normals = [];
   const uvs = [];
@@ -84,7 +103,7 @@ export function createPanelSolidGeometry(panel, bounds, boardAppearance = null) 
   addGroup(frontStart, indices.length - frontStart, 0);
 
   const backCenter = addVertex([0, 0, -halfThickness], [0, 0, -1], [0, 0]);
-  const backRing = perimeter.map((point) => addVertex(
+  const backRing = innerPerimeter.map((point) => addVertex(
     [point[0], point[1], -halfThickness],
     [0, 0, -1],
     [0, 0],
@@ -100,12 +119,20 @@ export function createPanelSolidGeometry(panel, bounds, boardAppearance = null) 
     const next = (index + 1) % perimeter.length;
     const current = perimeter[index];
     const following = perimeter[next];
-    const edge = new Vector3(following[0] - current[0], following[1] - current[1], 0).normalize();
-    const normal = [edge.y, -edge.x, 0];
+    const innerCurrent = innerPerimeter[index];
+    const innerFollowing = innerPerimeter[next];
+    const edge = new Vector3(following[0] - current[0], following[1] - current[1], 0);
+    const depth = new Vector3(
+      innerCurrent[0] - current[0],
+      innerCurrent[1] - current[1],
+      -appearance.thicknessMm,
+    );
+    const normalVector = edge.clone().cross(depth).normalize();
+    const normal = normalVector.toArray();
     const a = addVertex([current[0], current[1], halfThickness], normal, [0, 0]);
     const b = addVertex([following[0], following[1], halfThickness], normal, [0, 0]);
-    const c = addVertex([following[0], following[1], -halfThickness], normal, [0, 0]);
-    const d = addVertex([current[0], current[1], -halfThickness], normal, [0, 0]);
+    const c = addVertex([innerFollowing[0], innerFollowing[1], -halfThickness], normal, [0, 0]);
+    const d = addVertex([innerCurrent[0], innerCurrent[1], -halfThickness], normal, [0, 0]);
     indices.push(a, b, c, a, c, d);
   }
   addGroup(sideStart, indices.length - sideStart, 2);
