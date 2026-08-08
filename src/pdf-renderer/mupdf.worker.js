@@ -343,7 +343,12 @@ async function handleRender(id, payload) {
     }
 
     const tiled = width > RENDER_TILE_EDGE || height > RENDER_TILE_EDGE;
-    const rendered = tiled
+    const overprintWithoutBehaviors = (
+      overprintMode > 0
+      && RENDERER_VERSION === 'mupdf-custom'
+      && (!separationBehaviors || separationBehaviors.length === 0)
+    );
+    const rendered = (overprintWithoutBehaviors || tiled)
       ? renderTiled(page, matrix, bounds, overprintMode)
       : renderSingle(page, matrix, usage, box, overprintMode, separationBehaviors);
     if (activeRenders.get(id)?.cancelled) return;
