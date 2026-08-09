@@ -57,12 +57,22 @@ jobs:
           if-no-files-found: ignore
 
   chromium:
-    name: Chromium E2E shard ${{ matrix.shard }}/3
+    name: Chromium E2E ${{ matrix.suite }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        include:
+          - suite: core
+            files: tests/e2e/app.spec.js tests/e2e/artwork-crop.spec.js
+          - suite: preview
+            files: tests/e2e/construction.spec.js tests/e2e/first-run-example.spec.js tests/e2e/preview3d.spec.js
+          - suite: render
+            files: tests/e2e/render.spec.js
+          - suite: prepress
+            files: tests/e2e/overprint.spec.js tests/e2e/pdf-layers.spec.js tests/e2e/prepress.spec.js
+          - suite: support
+            files: tests/e2e/renderSettingsSnapshot.spec.js tests/e2e/showcase.spec.js
 
     steps:
       - name: Checkout
@@ -83,14 +93,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run full Chromium E2E shard
-        run: npm run test:e2e:ci:fast -- --shard=${{ matrix.shard }}/3 --workers=1
+      - name: Run full Chromium E2E suite group
+        run: npm run test:e2e:ci:fast -- ${{ matrix.files }} --workers=1
 
       - name: Upload Chromium shard artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: cartonbuilder-chromium-shard-${{ matrix.shard }}-results
+          name: cartonbuilder-chromium-${{ matrix.suite }}-results
           path: test-results/
           if-no-files-found: ignore
 
