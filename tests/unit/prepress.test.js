@@ -61,4 +61,19 @@ describe('Wave 9A prepress foundations', () => {
     expect(report.blocking.map((entry) => entry.code)).toContain('artwork-missing');
     expect(report.manualReview.length).toBeGreaterThan(0);
   });
+
+  it('keeps technical proof geometry free of production allowances', () => {
+    const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, null, { templateId: 'ste' });
+    const proof = buildProductionDieline(model, {
+      mode: 'technical-proof',
+      allowances: { cutOffsetMm: 4, creaseOffsetMm: -3, hingeOverrides: { 'ste:fold:body+closure:x': 2 } },
+    });
+    const assist = buildProductionDieline(model, {
+      mode: 'production-assist',
+      allowances: { cutOffsetMm: 4, creaseOffsetMm: -3 },
+    });
+    expect(proof.diagnostics.allowancesApplied).toBe(false);
+    expect(assist.diagnostics.allowancesApplied).toBe(true);
+    expect(assist.cut[0].start).not.toEqual(proof.cut[0].start);
+  });
 });

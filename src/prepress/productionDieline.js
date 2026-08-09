@@ -177,7 +177,12 @@ export function buildProductionDieline(model, settings = null) {
   const safeDistance = -prepress.safeMm;
   const safePolygons = trimPolygons.map((polygon) => offsetPolygon(polygon, safeDistance)).filter(Boolean);
   const rawSegments = getDielineSegments(model);
-  const allowances = prepress.allowances;
+  // Technical proof is a compatibility view: production compensation is
+  // derived only in production-assist mode and never changes the legacy
+  // proof geometry.
+  const allowances = prepress.mode === 'production-assist'
+    ? prepress.allowances
+    : { cutOffsetMm: 0, creaseOffsetMm: 0, hingeOverrides: {} };
   const templateId = model.construction?.templateId || 'legacy-six-panel';
   const productionCut = applySegmentOverrides(
     rawSegments.cut,
