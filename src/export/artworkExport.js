@@ -504,10 +504,11 @@ export async function createPrepressPdfExport({
   pdfDocument.setSubject('Production-assist dieline — not PDF/X certified.');
   pdfDocument.setKeywords(['CartonBuilder', 'prepress', 'production assist', 'not PDF/X certified']);
   const media = production.mediaBounds;
-  const trim = production.bounds;
+  const trim = production.trimBounds || production.bounds;
+  const bleed = production.bleedBounds || trim;
   const page = pdfDocument.addPage([media.width * POINTS_PER_MM, media.height * POINTS_PER_MM]);
   setPageBox(page, 'TrimBox', trim, media);
-  setPageBox(page, 'BleedBox', production.bounds, media);
+  setPageBox(page, 'BleedBox', bleed, media);
   setPageBox(page, 'MediaBox', media, media);
 
   addPolygonClip(page, production.bleedPolygons, media);

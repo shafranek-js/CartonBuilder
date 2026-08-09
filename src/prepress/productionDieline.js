@@ -193,21 +193,22 @@ export function buildProductionDieline(model, settings = null) {
     'fold',
     templateId,
   );
-  const bounds = boundsOf(bleedPolygons.length ? bleedPolygons : trimPolygons);
+  const trimBounds = boundsOf(trimPolygons);
+  const bleedBounds = boundsOf(bleedPolygons.length ? bleedPolygons : trimPolygons);
   const mediaBounds = {
-    minX: bounds.minX - prepress.slugMm,
-    minY: bounds.minY - prepress.slugMm,
-    maxX: bounds.maxX + prepress.slugMm,
-    maxY: bounds.maxY + prepress.slugMm,
-    width: bounds.width + prepress.slugMm * 2,
-    height: bounds.height + prepress.slugMm * 2,
+    minX: bleedBounds.minX - prepress.slugMm,
+    minY: bleedBounds.minY - prepress.slugMm,
+    maxX: bleedBounds.maxX + prepress.slugMm,
+    maxY: bleedBounds.maxY + prepress.slugMm,
+    width: bleedBounds.width + prepress.slugMm * 2,
+    height: bleedBounds.height + prepress.slugMm * 2,
   };
   const diagnostics = {
     mode: prepress.mode,
     profileId: prepress.profileId,
     templateId,
-    trimBounds: boundsOf(trimPolygons),
-    bleedBounds: bounds,
+    trimBounds,
+    bleedBounds,
     mediaBounds,
     elementCount: elements.length,
     cutCount: productionCut.length,
@@ -232,7 +233,11 @@ export function buildProductionDieline(model, settings = null) {
     safePolygons,
     cut: productionCut,
     fold: productionFold,
-    bounds,
+    // `bounds` is the production trim contour for callers that only need the
+    // primary page box. The expanded bleed contour is explicit above.
+    bounds: trimBounds,
+    trimBounds,
+    bleedBounds,
     mediaBounds,
     diagnostics,
   };

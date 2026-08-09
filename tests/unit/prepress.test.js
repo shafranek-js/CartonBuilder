@@ -31,6 +31,8 @@ describe('Wave 9A prepress foundations', () => {
     const production = buildProductionDieline(model, { mode: 'production-assist', bleedMm: 3, safeMm: 3, slugMm: 10 });
     expect(production.diagnostics.valid).toBe(true);
     expect(production.bleedPolygons.length).toBeGreaterThan(0);
+    expect(production.bleedBounds.width).toBeGreaterThan(production.trimBounds.width);
+    expect(production.bounds).toEqual(production.trimBounds);
     expect(production.mediaBounds.width).toBeGreaterThan(production.bounds.width);
     expect(model.toJSON()).toEqual(before);
   });
