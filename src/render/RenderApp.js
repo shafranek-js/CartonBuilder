@@ -552,14 +552,59 @@ export function createRenderApp({
     if (elements.jpg) elements.jpg.disabled = value;
   }
 
+  function setExportAvailability(enabled) {
+    const available = Boolean(enabled);
+    if (elements.png) elements.png.disabled = !available;
+    if (elements.jpg) elements.jpg.disabled = !available;
+    if (elements.exportConfirm && !available) elements.exportConfirm.disabled = true;
+  }
+
   function showRecovery(messageKey = 'renderUnavailable') {
     if (elements.recoveryMessage) elements.recoveryMessage.textContent = t(messageKey);
     if (elements.recovery) elements.recovery.hidden = false;
     setBusy(false);
+    setExportAvailability(false);
   }
 
   function hideRecovery() {
     if (elements.recovery) elements.recovery.hidden = true;
+  }
+
+  function hasVisibleRenderArtwork() {
+    return (getArtworks?.() || []).some((entry) => (
+      entry?.visible !== false && entry?.model?.hasArtwork
+    ));
+  }
+
+  function clearRenderSurface() {
+    const canvas = elements.canvas;
+    if (!canvas) return;
+    // Resizing a WebGL canvas clears its color buffer without attempting to
+    // acquire a second context (which would fail after context loss).
+    const width = canvas.width || 1;
+    const height = canvas.height || 1;
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  function handleMissingArtwork() {
+    syncGeneration += 1;
+    syncController?.abort();
+    syncController = null;
+    exportController?.abort();
+    pathTracingService?.cancel?.();
+    pathTracingService?.dispose?.();
+    pathTracingService = null;
+    renderer?.dispose?.();
+    renderer = null;
+    structureSignature = '';
+    artworkSignature = '';
+    renderContextState = 'initializing';
+    clearRenderSurface();
+    showRecovery('renderArtworkRequired');
+    elements.status.textContent = t('renderArtworkRequired');
+    updateDiagnostics();
+    return false;
   }
 
   function updatePresetButtons() {
@@ -1014,6 +1059,7 @@ export function createRenderApp({
   }
 
   function openExportDialog(format = state.output.format, kind = 'image') {
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     if (!elements.exportDialog?.showModal) return exportImage(format);
     state.output.kind = kind;
     elements.exportFormat.value = format;
@@ -1322,8 +1368,10 @@ export function createRenderApp({
 
   async function syncScene({ force = false, purpose = 'render-screen', targetDpi = null } = {}) {
     if (!active || disposed) return false;
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     await ensureBackgroundAsset();
     await ensureEnvironmentAsset();
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     const signatures = currentSignatures();
     const structureChanged = force || !renderer || signatures.structure !== structureSignature;
     const artworkChanged = force || !renderer || signatures.artwork !== artworkSignature;
@@ -1421,6 +1469,7 @@ export function createRenderApp({
       renderer.updateSettings(state);
       renderContextState = 'ready';
       setBusy(false);
+      setExportAvailability(true);
       updateControls();
       elements.status.textContent = t('renderReady');
       updateDiagnostics();
@@ -1468,7 +1517,17 @@ export function createRenderApp({
 
   async function whenStable({ timeoutMs = 5000 } = {}) {
     const deadline = Date.now() + Math.max(250, Number(timeoutMs) || 5000);
-    while (syncController && Date.now() < deadline) {
+    while (Date.now() < deadline) {
+      // Activation is scheduled from the workflow stepper. On a slow browser
+      // the busy flag can settle in the same frame that a previous renderer is
+      // disposed, leaving a brief renderer-less gap with no active sync. Make
+      // the readiness probe heal that gap instead of returning a false
+      // negative to diagnostics/visual gates.
+      if (!renderer && !syncController && active && renderContextState !== 'lost' && hasVisibleRenderArtwork()) {
+        await syncScene({ force: true });
+        continue;
+      }
+      if (!syncController && renderer) break;
       await new Promise((resolve) => windowRef.setTimeout(resolve, 16));
     }
     if (!renderer || Date.now() >= deadline) return false;
@@ -1744,6 +1803,7 @@ export function createRenderApp({
 
   async function runExperimentalPathTracing() {
     if (!isPathTracingEnabled()) return false;
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     pathTracingService?.cancel();
     pathTracingService = new PathTracingRenderService({ renderer, sceneModel: currentSignatures().sceneModel, windowRef });
     setBusy(true);

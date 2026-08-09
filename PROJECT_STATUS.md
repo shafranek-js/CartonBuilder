@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md — Состояние проекта CartonBuilder
 
-> **Дата обновления:** 2026-08-08  
+> **Дата обновления:** 2026-08-09
 > **Статус этапа:** Реализировано ядро и UI renderer+plates; выпускной Adobe reference matrix ещё не закрыт. Это не заявление о 100% корректности.
 
 ---
@@ -33,7 +33,13 @@
 3. **Единый native single/tiled путь и plates:**
    - Worker использует native MuPDF tile API с `fz_separations`, `usage="Print"`, page box, spot behaviors и process mask; JS `Pixmap + DrawDevice` overprint-путь удалён.
    - `overprintMode` 0/1/2, `processMask` C=1/M=2/Y=4/K=8 и `spotBehaviors` включены в protocol/cache key.
-   - Separations dialog переключает C/M/Y/K и spot-плашки; состояние хранится в schema v12 в форме process/spots и мигрирует из flat object.
+   - Separations dialog переключает C/M/Y/K и spot-плашки; состояние хранится в schema v15 в форме process/spots и мигрирует из flat object.
+
+4. **Codex Review remediation (geometry, prepress and runtime):**
+   - STE/RTE child hinges use the negative local center offset and are checked at open, half-fold and closed states.
+   - Production-assist applies glue/tuck allowances only to derived geometry, joins CutContour into closed contours and uses all structural elements for texture masks.
+   - Prepress PDF uses TrimBox/BleedBox/MediaBox from their respective bounds, embeds artwork inside the Artwork OCG, honors configured spot names and emits the technical overprint ExtGState only when enabled. Prepress SVG is asynchronous and embeds rasterized visible artwork in the bleed-clipped Artwork group.
+   - Preflight exports recompute against a box/artwork/settings signature. Render clears its canvas when no artwork is visible, rebinds post-processing after camera replacement, and preserves artwork transforms/history after dimension changes. Lazy Preview setters are generation-safe and locked artwork cannot be removed through public actions.
 
 ---
 

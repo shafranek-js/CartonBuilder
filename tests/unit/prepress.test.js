@@ -45,6 +45,34 @@ describe('Wave 9A prepress foundations', () => {
     expect(svg).toContain('production-assist');
   });
 
+  it('embeds visible artwork inside the bleed-clipped Artwork group', async () => {
+    const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, null, { templateId: 'ste' });
+    const artwork = {
+      hasArtwork: true,
+      centerXmm: 50,
+      centerYmm: 60,
+      unrotatedWidthMm: 80,
+      unrotatedHeightMm: 60,
+      rotation: 12,
+      opacity: 0.8,
+      flipX: true,
+      flipY: false,
+      crop: { x: 5, y: 4, width: 60, height: 40 },
+    };
+    const rasterize = async () => ({ blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }) });
+    const svg = await createPrepressSvg({
+      boxModel: model,
+      artworks: [{ model: artwork, visible: true, originalBlob: new Blob(['source'], { type: 'image/png' }) }],
+      settings: { mode: 'production-assist' },
+      rasterize,
+    });
+    expect(svg).toContain('<clipPath id="PrepressBleedClip">');
+    expect(svg).toMatch(/<g id="Artwork"[^>]*>\s*<image href="data:image\/png;base64,AQID"/);
+    expect(svg).toContain('clip-path="url(#ArtworkCrop0)"');
+    expect(svg).toContain('opacity="0.8"');
+    expect(svg).toContain('scale(-1 1)');
+  });
+
   it('classifies STE/RTE thickness contacts as bounded allowed contacts', () => {
     for (const templateId of ['ste', 'rte']) {
       const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, { caliperMm: 0.35 }, { templateId });
@@ -75,5 +103,37 @@ describe('Wave 9A prepress foundations', () => {
     expect(proof.diagnostics.allowancesApplied).toBe(false);
     expect(assist.diagnostics.allowancesApplied).toBe(true);
     expect(assist.fold[0].start).not.toEqual(proof.fold[0].start);
+  });
+
+  it.each(['ste', 'rte'])('applies glue and tuck allowances without mutating %s model', (templateId) => {
+    const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, null, { templateId });
+    const before = model.toJSON();
+    const baseline = buildProductionDieline(model, { mode: 'production-assist' });
+    const adjusted = buildProductionDieline(model, {
+      mode: 'production-assist',
+      allowances: { glueTabDeltaMm: 4, tuckClearanceDeltaMm: 4 },
+    });
+    const baseElements = new Map(baseline.elements.map((element) => [element.id, element]));
+    const adjustedElements = new Map(adjusted.elements.map((element) => [element.id, element]));
+    expect(adjustedElements.get('glue-tab').polygon).not.toEqual(baseElements.get('glue-tab').polygon);
+    expect(adjustedElements.get('top-tuck').polygon).not.toEqual(baseElements.get('top-tuck').polygon);
+    expect(model.toJSON()).toEqual(before);
+  });
+
+  it.each(['ste', 'rte'])('keeps production CutContour joins closed for %s', (templateId) => {
+    const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, null, { templateId });
+    const production = buildProductionDieline(model, {
+      mode: 'production-assist',
+      allowances: { cutOffsetMm: 1 },
+    });
+    expect(production.diagnostics.valid).toBe(true);
+    const degree = new Map();
+    for (const segment of production.cut) {
+      for (const point of [segment.start, segment.end]) {
+        const key = `${point.x.toFixed(5)},${point.y.toFixed(5)}`;
+        degree.set(key, (degree.get(key) || 0) + 1);
+      }
+    }
+    expect([...degree.values()].every((value) => value === 2)).toBe(true);
   });
 });

@@ -189,6 +189,8 @@ test('completes the three-step artwork workflow and exports every deliverable', 
   await page.keyboard.press('Control+ArrowRight');
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.centerXmm)).toBe(lockedX);
   await expect(page.locator('#artworkWidth')).toBeDisabled();
+  await (await openEditAction(page, '#menuRemoveArtworkBtn')).click();
+  await expect(page.locator('#artworkFileName')).toHaveText('sample-artwork.png');
   await page.getByLabel('Lock Artwork').uncheck();
 
   await page.getByRole('button', { name: 'Rotate +90°' }).click();
