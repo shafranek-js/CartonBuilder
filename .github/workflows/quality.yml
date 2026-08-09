@@ -48,14 +48,46 @@ jobs:
       - name: Run Chromium smoke workflows
         run: npm run test:e2e:smoke
 
-      - name: Run full Chromium E2E suite (HDRI stress runs in parallel)
-        run: npm run test:e2e:ci:fast
-
-      - name: Upload Chromium browser artifacts
+      - name: Upload Chromium smoke artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: cartonbuilder-chromium-test-results
+          path: test-results/
+          if-no-files-found: ignore
+
+  chromium:
+    name: Chromium E2E shard ${{ matrix.shard }}/3
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full Chromium E2E shard
+        run: npm run test:e2e:ci:fast -- --shard=${{ matrix.shard }}/3 --workers=1
+
+      - name: Upload Chromium shard artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartonbuilder-chromium-shard-${{ matrix.shard }}-results
           path: test-results/
           if-no-files-found: ignore
 
