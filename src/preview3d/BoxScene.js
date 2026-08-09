@@ -463,6 +463,7 @@ export class BoxScene {
     this.renderCallback = null;
     this.disposed = false;
     this.foldProgress = foldProgress;
+    this.collisionDiagnosticsCache = null;
     this.cameraProjection = CAMERA_PROJECTIONS.has(cameraProjection)
       ? cameraProjection
       : 'perspective';
@@ -2060,12 +2061,19 @@ export class BoxScene {
     }
     const elements = this.boxModel.getElements?.() || this.boxModel.getPanels();
     const construction = this.boxModel.construction || { templateId: 'legacy-six-panel', templateVersion: 1, parameters: {} };
+    const collisionKey = `${construction.templateId}:${this.foldProgress.toFixed(4)}:${this.boardAppearance.thicknessMm.toFixed(4)}`;
     const validation = construction.templateId === 'legacy-six-panel'
       ? { valid: true, allowedIntersections: 0, unexpectedIntersections: 0, minimumClearanceMm: 0 }
-      : validateConstructionCollision(this.boxModel, {
-        progress: this.foldProgress,
-        caliperMm: this.boardAppearance.thicknessMm,
-      });
+      : this.collisionDiagnosticsCache?.key === collisionKey
+        ? this.collisionDiagnosticsCache.value
+        : (() => {
+            const value = validateConstructionCollision(this.boxModel, {
+              progress: this.foldProgress,
+              caliperMm: this.boardAppearance.thicknessMm,
+            });
+            this.collisionDiagnosticsCache = { key: collisionKey, value };
+            return value;
+          })();
     const panelsMin = Math.min(...this.boxModel.getPanels().map((panel) => Math.min(panel.width, panel.height)));
     const effectiveCaliperMm = this.geometryMode === 'solid' ? this.boardAppearance.thicknessMm : 0;
     const effectiveBevelMm = this.geometryMode === 'solid'
