@@ -259,6 +259,10 @@ function addPrepressLayer(pdfDocument, page, name, segments, bounds, {
   ];
   if (definition) operators.push(PDFOperator.of('CS', [PDFName.of(definition)]), PDFOperator.of('SCN', [PDFNumber.of(1)]));
   else operators.push(setStrokingRgbColor(...color));
+  // Cut/crease technical lines are intended to overprint in production
+  // workflows. This is an explicit PDF graphics-state flag; it does not
+  // claim ICC/PDF-X certification for the generated file.
+  if (separation) operators.push(PDFOperator.of('OP', ['true']));
   if (dash) operators.push(setDashPattern(dash.map((value) => value * POINTS_PER_MM), 0));
   page.pushOperators(...operators);
   for (const segment of segments || []) {
