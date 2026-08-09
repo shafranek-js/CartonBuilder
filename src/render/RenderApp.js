@@ -1277,12 +1277,26 @@ export function createRenderApp({
     renderer?.updateSettings(state, { render });
     renderer?.setBackgroundAsset?.(backgroundAsset);
     const environmentSelection = state.lighting?.environmentMap || {};
+    const previousEnvironmentSelection = previousState.lighting?.environmentMap || {};
+    const builtinCapOnlyChange = environmentSelection.source === 'builtin'
+      && previousEnvironmentSelection.source === 'builtin'
+      && environmentSelection.presetId === previousEnvironmentSelection.presetId
+      && environmentSelection.resolutionCap !== previousEnvironmentSelection.resolutionCap
+      && Object.entries(environmentSelection)
+        .filter(([key]) => key !== 'resolutionCap')
+        .every(([key, value]) => value === previousEnvironmentSelection[key]);
     const environmentAssetMatchesState = !environmentAsset
       || (environmentSelection.source === 'builtin'
         && environmentAsset.source === 'builtin'
         && environmentAsset.presetId === environmentSelection.presetId)
       || (environmentSelection.source === 'custom' && environmentAsset.assetId === environmentSelection.assetId);
-    if (environmentAssetMatchesState) renderer?.setEnvironmentAsset?.(environmentAsset);
+    // BoxScene.setEnvironmentMap already starts the bounded runtime rebuild
+    // for a built-in cap-only change. Avoid immediately starting a second
+    // generation through setEnvironmentAsset; that duplicate PMREM work can
+    // exceed hosted SwiftShader's readiness budget and race diagnostics.
+    if (environmentAssetMatchesState && !builtinCapOnlyChange) {
+      renderer?.setEnvironmentAsset?.(environmentAsset);
+    }
     if (notify) notifyStateChange();
   }
 
