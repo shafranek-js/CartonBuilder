@@ -495,10 +495,23 @@ const VIEWER_SCRIPT = `
       const sideIndices = [];
       for (let index = 0; index < local.length; index += 1) {
         const next = (index + 1) % local.length;
-        const base = sidePositions.length / 3;
         const { x: ax, y: ay } = local[index]; const { x: bx, y: by } = local[next];
-        sidePositions.push(ax, ay, half, bx, by, half, bx, by, -half, ax, ay, -half);
-        sideIndices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        const outwardBase = sidePositions.length / 3;
+        sidePositions.push(
+          ax, ay, half, bx, by, half, bx, by, -half, ax, ay, -half,
+        );
+        sideIndices.push(
+          outwardBase, outwardBase + 1, outwardBase + 2,
+          outwardBase, outwardBase + 2, outwardBase + 3,
+        );
+        const inwardBase = sidePositions.length / 3;
+        sidePositions.push(
+          ax, ay, -half, bx, by, -half, bx, by, half, ax, ay, half,
+        );
+        sideIndices.push(
+          inwardBase, inwardBase + 1, inwardBase + 2,
+          inwardBase, inwardBase + 2, inwardBase + 3,
+        );
       }
       const sidesGeometry = new THREE.BufferGeometry();
       sidesGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sidePositions, 3));
@@ -542,12 +555,33 @@ const VIEWER_SCRIPT = `
     interiorGeometry.computeBoundingSphere();
     const interior = new THREE.Mesh(interiorGeometry, backMaterial);
     interior.matrixAutoUpdate = false;
+    const sidePositions = [];
+    const sideIndices = [];
+    const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+    for (let index = 0; index < corners.length; index += 1) {
+      const next = (index + 1) % corners.length;
+      const [ax, ay] = corners[index];
+      const [bx, by] = corners[next];
+      const outwardBase = sidePositions.length / 3;
+      sidePositions.push(
+        ax, ay, halfCaliper, bx, by, halfCaliper, bx, by, -halfCaliper, ax, ay, -halfCaliper,
+      );
+      sideIndices.push(
+        outwardBase, outwardBase + 1, outwardBase + 2,
+        outwardBase, outwardBase + 2, outwardBase + 3,
+      );
+      const inwardBase = sidePositions.length / 3;
+      sidePositions.push(
+        ax, ay, -halfCaliper, bx, by, -halfCaliper, bx, by, halfCaliper, ax, ay, halfCaliper,
+      );
+      sideIndices.push(
+        inwardBase, inwardBase + 1, inwardBase + 2,
+        inwardBase, inwardBase + 2, inwardBase + 3,
+      );
+    }
     const sideGeometry = new THREE.BufferGeometry();
-    sideGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-      -hw, -hh, halfCaliper, hw, -hh, halfCaliper, hw, hh, halfCaliper, -hw, hh, halfCaliper,
-      -hw, -hh, -halfCaliper, hw, -hh, -halfCaliper, hw, hh, -halfCaliper, -hw, hh, -halfCaliper,
-    ]), 3));
-    sideGeometry.setIndex([0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7]);
+    sideGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(sidePositions), 3));
+    sideGeometry.setIndex(sideIndices);
     sideGeometry.computeVertexNormals();
     sideGeometry.computeBoundingSphere();
     const sides = new THREE.Mesh(sideGeometry, edgeMaterial);
@@ -1438,25 +1472,62 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl, boardAppearance = n
       }
       const frontIndices = [];
       const backIndices = [];
+      const sidePositions = [];
+      const sideNormals = [];
       const sideIndices = [];
       const count = points.length;
+      const capNormals = [
+        ...Array.from({ length: count }, () => [0, 0, 1]).flat(),
+        ...Array.from({ length: count }, () => [0, 0, -1]).flat(),
+      ];
       for (const [a, b, c] of triangles) {
         frontIndices.push(a, b, c);
         backIndices.push(count + c, count + b, count + a);
       }
       for (let index = 0; index < count; index += 1) {
         const next = (index + 1) % count;
-        sideIndices.push(index, next, count + next, index, count + next, count + index);
+        const a = local[index];
+        const b = local[next];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const outward = [-dy / length, dx / length, 0];
+        const inward = outward.map((value) => -value);
+        const outwardBase = sidePositions.length / 3;
+        sidePositions.push(
+          a.x, a.y, halfCaliper, b.x, b.y, halfCaliper,
+          b.x, b.y, -halfCaliper, a.x, a.y, -halfCaliper,
+        );
+        for (let vertex = 0; vertex < 4; vertex += 1) sideNormals.push(...outward);
+        sideIndices.push(
+          outwardBase, outwardBase + 1, outwardBase + 2,
+          outwardBase, outwardBase + 2, outwardBase + 3,
+        );
+        const inwardBase = sidePositions.length / 3;
+        sidePositions.push(
+          a.x, a.y, -halfCaliper, b.x, b.y, -halfCaliper,
+          b.x, b.y, halfCaliper, a.x, a.y, halfCaliper,
+        );
+        for (let vertex = 0; vertex < 4; vertex += 1) sideNormals.push(...inward);
+        sideIndices.push(
+          inwardBase, inwardBase + 1, inwardBase + 2,
+          inwardBase, inwardBase + 2, inwardBase + 3,
+        );
       }
       const positionView = append(new Float32Array(positions), 34962);
       const uvView = append(new Float32Array(uvs), 34962);
-      const IndexCtor = positions.length / 3 > 65535 ? Uint32Array : Uint16Array;
+      const normalView = append(new Float32Array(capNormals), 34962);
+      const sidePositionView = append(new Float32Array(sidePositions), 34962);
+      const sideNormalView = append(new Float32Array(sideNormals), 34962);
+      const IndexCtor = Math.max(positions.length, sidePositions.length) / 3 > 65535 ? Uint32Array : Uint16Array;
       const indexComponentType = IndexCtor === Uint32Array ? 5125 : 5123;
       const frontIndexView = append(new IndexCtor(frontIndices), 34963);
       const backIndexView = append(new IndexCtor(backIndices), 34963);
       const sideIndexView = append(new IndexCtor(sideIndices), 34963);
       const xs = positions.filter((_, index) => index % 3 === 0);
       const ys = positions.filter((_, index) => index % 3 === 1);
+      const sideXs = sidePositions.filter((_, index) => index % 3 === 0);
+      const sideYs = sidePositions.filter((_, index) => index % 3 === 1);
       const positionAccessor = accessors.push({
         bufferView: positionView,
         componentType: 5126,
@@ -1466,13 +1537,23 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl, boardAppearance = n
         max: [Math.max(...xs), Math.max(...ys), halfCaliper],
       }) - 1;
       const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: uvs.length / 2, type: 'VEC2' }) - 1;
+      const normalAccessor = accessors.push({ bufferView: normalView, componentType: 5126, count: capNormals.length / 3, type: 'VEC3' }) - 1;
+      const sidePositionAccessor = accessors.push({
+        bufferView: sidePositionView,
+        componentType: 5126,
+        count: sidePositions.length / 3,
+        type: 'VEC3',
+        min: [Math.min(...sideXs), Math.min(...sideYs), -halfCaliper],
+        max: [Math.max(...sideXs), Math.max(...sideYs), halfCaliper],
+      }) - 1;
+      const sideNormalAccessor = accessors.push({ bufferView: sideNormalView, componentType: 5126, count: sideNormals.length / 3, type: 'VEC3' }) - 1;
       const frontAccessor = accessors.push({ bufferView: frontIndexView, componentType: indexComponentType, count: frontIndices.length, type: 'SCALAR', min: [0], max: [count - 1] }) - 1;
       const backAccessor = accessors.push({ bufferView: backIndexView, componentType: indexComponentType, count: backIndices.length, type: 'SCALAR', min: [count], max: [positions.length / 3 - 1] }) - 1;
-      const sideAccessor = accessors.push({ bufferView: sideIndexView, componentType: indexComponentType, count: sideIndices.length, type: 'SCALAR', min: [0], max: [positions.length / 3 - 1] }) - 1;
+      const sideAccessor = accessors.push({ bufferView: sideIndexView, componentType: indexComponentType, count: sideIndices.length, type: 'SCALAR', min: [0], max: [sidePositions.length / 3 - 1] }) - 1;
       const meshIndex = meshes.push({ name: node.name, primitives: [
-        { attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: frontAccessor, material: 0 },
-        { attributes: { POSITION: positionAccessor }, indices: backAccessor, material: 1 },
-        { attributes: { POSITION: positionAccessor }, indices: sideAccessor, material: 2 },
+        { attributes: { POSITION: positionAccessor, NORMAL: normalAccessor, TEXCOORD_0: uvAccessor }, indices: frontAccessor, material: 0 },
+        { attributes: { POSITION: positionAccessor, NORMAL: normalAccessor }, indices: backAccessor, material: 1 },
+        { attributes: { POSITION: sidePositionAccessor, NORMAL: sideNormalAccessor }, indices: sideAccessor, material: 2 },
       ] }) - 1;
       const nodeIndex = gltfNodes.push({ name: node.name, mesh: meshIndex, extras: { cartonBuilderPanelId: node.id, role: node.role || 'body' } }) - 1;
       rootChildren.push(nodeIndex + 1);
@@ -1496,22 +1577,62 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl, boardAppearance = n
     ]), 34962);
     const frontIndices = new Uint16Array([0, 1, 2, 0, 2, 3]);
     const backIndices = new Uint16Array([4, 6, 5, 4, 7, 6]);
-    const sideIndices = new Uint16Array([
-      0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2,
-      2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
+    const capNormals = new Float32Array([
+      0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
+      0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
     ]);
+    const sidePositions = [];
+    const sideNormals = [];
+    const sideIndices = [];
+    const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    for (let index = 0; index < corners.length; index += 1) {
+      const next = (index + 1) % corners.length;
+      const [ax, ay] = corners[index];
+      const [bx, by] = corners[next];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const length = Math.hypot(dx, dy) || 1;
+      const outward = [-dy / length, dx / length, 0];
+      const inward = outward.map((value) => -value);
+      const outwardBase = sidePositions.length / 3;
+      sidePositions.push(
+        ax, ay, halfCaliper, bx, by, halfCaliper,
+        bx, by, -halfCaliper, ax, ay, -halfCaliper,
+      );
+      for (let vertex = 0; vertex < 4; vertex += 1) sideNormals.push(...outward);
+      sideIndices.push(
+        outwardBase, outwardBase + 1, outwardBase + 2,
+        outwardBase, outwardBase + 2, outwardBase + 3,
+      );
+      const inwardBase = sidePositions.length / 3;
+      sidePositions.push(
+        ax, ay, -halfCaliper, bx, by, -halfCaliper,
+        bx, by, halfCaliper, ax, ay, halfCaliper,
+      );
+      for (let vertex = 0; vertex < 4; vertex += 1) sideNormals.push(...inward);
+      sideIndices.push(
+        inwardBase, inwardBase + 1, inwardBase + 2,
+        inwardBase, inwardBase + 2, inwardBase + 3,
+      );
+    }
     const frontIndexView = append(frontIndices, 34963);
     const backIndexView = append(backIndices, 34963);
-    const sideIndexView = append(sideIndices, 34963);
+    const capNormalView = append(capNormals, 34962);
+    const sidePositionView = append(new Float32Array(sidePositions), 34962);
+    const sideNormalView = append(new Float32Array(sideNormals), 34962);
+    const sideIndexView = append(new Uint16Array(sideIndices), 34963);
     const positionAccessor = accessors.push({ bufferView: positionView, componentType: 5126, count: 8, type: 'VEC3', min: [x0, Math.min(y0, y1), -halfCaliper], max: [x1, Math.max(y0, y1), halfCaliper] }) - 1;
     const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: 8, type: 'VEC2' }) - 1;
+    const normalAccessor = accessors.push({ bufferView: capNormalView, componentType: 5126, count: 8, type: 'VEC3' }) - 1;
+    const sidePositionAccessor = accessors.push({ bufferView: sidePositionView, componentType: 5126, count: sidePositions.length / 3, type: 'VEC3', min: [x0, Math.min(y0, y1), -halfCaliper], max: [x1, Math.max(y0, y1), halfCaliper] }) - 1;
+    const sideNormalAccessor = accessors.push({ bufferView: sideNormalView, componentType: 5126, count: sideNormals.length / 3, type: 'VEC3' }) - 1;
     const frontAccessor = accessors.push({ bufferView: frontIndexView, componentType: 5123, count: frontIndices.length, type: 'SCALAR', min: [0], max: [3] }) - 1;
     const backAccessor = accessors.push({ bufferView: backIndexView, componentType: 5123, count: backIndices.length, type: 'SCALAR', min: [4], max: [7] }) - 1;
-    const sideAccessor = accessors.push({ bufferView: sideIndexView, componentType: 5123, count: sideIndices.length, type: 'SCALAR', min: [0], max: [7] }) - 1;
+    const sideAccessor = accessors.push({ bufferView: sideIndexView, componentType: 5123, count: sideIndices.length, type: 'SCALAR', min: [0], max: [sidePositions.length / 3 - 1] }) - 1;
     const meshIndex = meshes.push({ name: node.name, primitives: [
-      { attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: frontAccessor, material: 0 },
-      { attributes: { POSITION: positionAccessor }, indices: backAccessor, material: 1 },
-      { attributes: { POSITION: positionAccessor }, indices: sideAccessor, material: 2 },
+      { attributes: { POSITION: positionAccessor, NORMAL: normalAccessor, TEXCOORD_0: uvAccessor }, indices: frontAccessor, material: 0 },
+      { attributes: { POSITION: positionAccessor, NORMAL: normalAccessor }, indices: backAccessor, material: 1 },
+      { attributes: { POSITION: sidePositionAccessor, NORMAL: sideNormalAccessor }, indices: sideAccessor, material: 2 },
     ] }) - 1;
     const nodeIndex = gltfNodes.push({ name: node.name, mesh: meshIndex, extras: { cartonBuilderPanelId: node.id } }) - 1;
     rootChildren.push(nodeIndex + 1);

@@ -90,7 +90,10 @@ function createPolygonSolidGeometry(panel, bounds, thicknessMm) {
     const next = (index + 1) % local.length;
     const { x: ax, y: ay } = local[index]; const { x: bx, y: by } = local[next];
     const edge = new Vector3(bx - ax, by - ay, 0);
-    const normal = new Vector3(edge.y, -edge.x, 0).normalize().toArray();
+    // The local Y axis is flipped from the dieline's screen coordinates. The
+    // outward side normal therefore follows edge x depth (not its inverse).
+    const normal = new Vector3(-edge.y, edge.x, 0).normalize().toArray();
+    const inwardNormal = normal.map((value) => -value);
     indices.push(
       addVertex([ax, ay, halfThickness], normal),
       addVertex([bx, by, halfThickness], normal),
@@ -99,6 +102,11 @@ function createPolygonSolidGeometry(panel, bounds, thicknessMm) {
       addVertex([bx, by, -halfThickness], normal),
       addVertex([ax, ay, -halfThickness], normal),
     );
+    const inwardA = addVertex([ax, ay, -halfThickness], inwardNormal);
+    const inwardB = addVertex([bx, by, -halfThickness], inwardNormal);
+    const inwardC = addVertex([bx, by, halfThickness], inwardNormal);
+    const inwardD = addVertex([ax, ay, halfThickness], inwardNormal);
+    indices.push(inwardA, inwardB, inwardC, inwardA, inwardC, inwardD);
   }
   groups.push({ start: sideStart, count: indices.length - sideStart, materialIndex: 2 });
   const geometry = new BufferGeometry();
@@ -190,11 +198,17 @@ export function createPanelSolidGeometry(panel, bounds, boardAppearance = null) 
     );
     const normalVector = edge.clone().cross(depth).normalize();
     const normal = normalVector.toArray();
+    const inwardNormal = normalVector.clone().negate().toArray();
     const a = addVertex([current[0], current[1], halfThickness], normal, [0, 0]);
     const b = addVertex([following[0], following[1], halfThickness], normal, [0, 0]);
     const c = addVertex([innerFollowing[0], innerFollowing[1], -halfThickness], normal, [0, 0]);
     const d = addVertex([innerCurrent[0], innerCurrent[1], -halfThickness], normal, [0, 0]);
     indices.push(a, b, c, a, c, d);
+    const inwardA = addVertex([innerCurrent[0], innerCurrent[1], -halfThickness], inwardNormal, [0, 0]);
+    const inwardB = addVertex([innerFollowing[0], innerFollowing[1], -halfThickness], inwardNormal, [0, 0]);
+    const inwardC = addVertex([following[0], following[1], halfThickness], inwardNormal, [0, 0]);
+    const inwardD = addVertex([current[0], current[1], halfThickness], inwardNormal, [0, 0]);
+    indices.push(inwardA, inwardB, inwardC, inwardA, inwardC, inwardD);
   }
   addGroup(sideStart, indices.length - sideStart, 2);
 

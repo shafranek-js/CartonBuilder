@@ -102,9 +102,26 @@ describe('createInteractive3dHtml', () => {
     expect(glb.meshes.every((mesh) => (
       mesh.primitives.length === 3
       && mesh.primitives.map((primitive) => primitive.material).join(',') === '0,1,2'
+      && mesh.primitives.every((primitive) => primitive.attributes.NORMAL !== undefined)
     ))).toBe(true);
     const validation = await validateBytes(new Uint8Array(readGlbBytes(data.models.glb)));
     expect(validation.issues.numErrors, JSON.stringify(validation.issues.messages)).toBe(0);
+  });
+
+  it('includes normals on every primitive of the parametric fallback GLB', async () => {
+    const blob = await createInteractive3dHtml({
+      boxModel: buildParametricBox('ste'),
+      artworks: fakeEntries(),
+      composeTexture: stubTextureComposer(),
+    });
+    const data = readEmbeddedData(await blob.text());
+    const glb = readGlbJson(data.models.glb);
+
+    expect(glb.meshes.length).toBe(13);
+    expect(glb.meshes.every((mesh) => mesh.primitives.every((primitive) => (
+      primitive.attributes.NORMAL !== undefined
+    )))).toBe(true);
+    expect(glb.accessors.some((accessor) => accessor.type === 'VEC3')).toBe(true);
   });
 
   it('embeds all parametric polygon elements and assembly phases', async () => {
