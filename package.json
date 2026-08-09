@@ -11,12 +11,13 @@
     "test:unit": "vitest run",
     "test:e2e": "npm run test:e2e:full",
     "test:e2e:ci": "playwright test --workers=1",
+    "test:e2e:ci:fast": "playwright test --workers=1 --grep-invert \"HDRI runtime resources bounded across 20 map/cap switches\"",
     "test:e2e:smoke": "npm run build && playwright test tests/e2e/app.spec.js tests/e2e/render.spec.js -g \"opening one top menu|completes the three-step|keeps Render disabled|applies floor reflection\" --workers=1",
     "test:e2e:full": "npm run build && playwright test --workers=1",
     "test:e2e:stress": "npm run build && playwright test tests/e2e/render.spec.js tests/e2e/preview3d.spec.js -g \"20 floor-effect|repeated artwork replacement|context|DPR 2|HDRI\" --workers=1",
     "test:e2e:edge": "npm run build && node scripts/run-playwright-edge.mjs",
     "capture:visual-proof": "node scripts/capture-visual-proof.mjs",
-    "test:visual": "playwright test tests/e2e/render.spec.js -g \"Wave 5 deterministic Render baselines\"",
+    "test:visual": "playwright test tests/e2e/render.spec.js -g \"Wave 5 deterministic Render baselines\" --grep-invert \"HDRI runtime resources bounded across 20 map/cap switches\"",
     "test:all": "npm run test:unit && npm run test:e2e"
   },
   "devDependencies": {

@@ -42,14 +42,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run Render reliability browser gate
+      - name: Run Render reliability browser gate (visual baselines)
         run: npm run test:visual -- --workers=1
 
       - name: Run Chromium smoke workflows
         run: npm run test:e2e:smoke
 
-      - name: Run full Chromium E2E suite
-        run: npm run test:e2e:ci
+      - name: Run full Chromium E2E suite (HDRI stress runs in parallel)
+        run: npm run test:e2e:ci:fast
 
       - name: Upload Chromium browser artifacts
         if: failure()
