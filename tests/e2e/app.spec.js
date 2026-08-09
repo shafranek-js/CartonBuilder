@@ -310,7 +310,8 @@ test('validates dimensions, preserves the current net and emits compatibility ev
   await loadGeneratedPng(page);
   await page.locator('#artworkWorkspace').focus();
   await page.keyboard.press('Shift+ArrowRight');
-  await page.getByRole('button', { name: 'Back' }).click();
+  await page.locator('.step[data-step-target="box"]').click();
+  await expect(page.locator('#boxStep')).toBeVisible();
 
   await page.locator('#boxHeight').fill('100');
   await page.locator('#boxHeight').press('Enter');
@@ -531,7 +532,10 @@ test('cancels worker processing and revokes superseded preview URLs', async ({ p
     buffer: Buffer.from(sourceBytes),
   });
   await expect(page.locator('#processingOverlay')).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel' }).click();
+  // PDF input opens the page picker before the worker can finish. Cancelling
+  // that modal is the user-visible cancellation path and aborts processing.
+  await page.getByRole('dialog', { name: 'Choose PDF page' })
+    .getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('#processingOverlay')).toBeHidden();
   await expect(page.locator('#artworkCanvasWrap')).toHaveAttribute('aria-busy', 'false');
   expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.hasArtwork)).toBe(false);
@@ -644,7 +648,8 @@ test('persists box net after removing artwork and reloading without showing an e
   await (await openEditAction(page, '#menuRemoveArtworkBtn')).click();
   await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
 
-  await page.getByRole('button', { name: 'Back' }).click();
+  await page.locator('.step[data-step-target="box"]').click();
+  await expect(page.locator('#boxStep')).toBeVisible();
   await expect(page.locator('#boxStep')).toBeVisible();
 
   await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
