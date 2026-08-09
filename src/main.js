@@ -18,6 +18,7 @@ import { createEditMenu } from './ui/EditMenu.js';
 import { createViewMenu } from './ui/ViewMenu.js';
 import { createContactsMenu } from './ui/ContactsMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
+import { createOperationProgress } from './ui/OperationProgress.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 import { initSectionStatePersistence } from './ui/SectionStateManager.js';
 import { initSliderSteppers } from './ui/SliderStepper.js';
@@ -45,14 +46,16 @@ const fileMenuPopover = document.getElementById('fileMenuPopover');
 const projectFileInput = document.getElementById('projectFileInput');
 
 const handleOpenProject = () => {
+  if (operationProgress?.isBusy?.()) return;
   const input = document.getElementById('projectFileInput');
   if (input) input.click();
 };
 
 const handleSaveProject = () => {
   if (artworkApp?.saveProjectArchive) {
-    artworkApp.saveProjectArchive();
+    return artworkApp.saveProjectArchive();
   }
+  return Promise.resolve({ status: 'failed' });
 };
 
 const handleNewProject = async () => {
@@ -91,10 +94,8 @@ const handleNewProject = async () => {
   const onSave = async () => {
     cleanup();
     try {
-      if (artworkApp?.saveProjectArchive) {
-        await artworkApp.saveProjectArchive();
-      }
-      await resetAndReload();
+      const result = await handleSaveProject();
+      if (result?.status === 'succeeded') await resetAndReload();
     } catch (err) {
       console.error('Save failed:', err);
     }
@@ -232,19 +233,19 @@ if (contactsMenuTriggerBtn && contactsMenuPopover) {
 window.addEventListener('keydown', async (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    handleSaveProject();
+    if (!operationProgress?.isBusy?.()) handleSaveProject();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
     e.preventDefault();
-    handleOpenProject();
+    if (!operationProgress?.isBusy?.()) handleOpenProject();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
     e.preventDefault();
-    handleNewProject();
+    if (!operationProgress?.isBusy?.()) handleNewProject();
   }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
     e.preventDefault();
-    handlePlaceArtwork();
+    if (!operationProgress?.isBusy?.()) handlePlaceArtwork();
   }
 });
 
@@ -258,6 +259,24 @@ function showSettingsToast(message) {
   toast.classList.add('visible');
   window.setTimeout(() => toast.classList.remove('visible'), 1800);
 }
+
+const operationProgress = createOperationProgress({
+  root: document.getElementById('operationProgress'),
+  label: document.getElementById('operationProgressLabel'),
+  detail: document.getElementById('operationProgressDetail'),
+  progress: document.getElementById('operationProgressBar'),
+  cancelButton: document.getElementById('operationProgressCancel'),
+  announcer: document.getElementById('announcer'),
+  showToast: showSettingsToast,
+  onBusyChange: (busy, { lockMode } = {}) => {
+    fileMenu?.setBusy?.(busy);
+    const appContent = document.querySelector('.app-content');
+    if (appContent) {
+      appContent.toggleAttribute('aria-busy', busy);
+      appContent.inert = Boolean(busy && lockMode === 'workspace');
+    }
+  },
+});
 
 if (settingsTriggerBtn && settingsPopover) {
   createSettingsModal({
@@ -441,6 +460,7 @@ artworkApp = createArtworkApp({
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
   getPreview3dState: () => preview3dFacade?.getState?.() || null,
+  operationProgress,
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
   onArtworkQualityChanged: async ({ kind } = {}) => {
     const refreshes = [];
@@ -483,6 +503,7 @@ renderApp = createRenderApp({
   },
   setArtworkQuality: (...args) => artworkApp?.setArtworkQuality?.(...args),
   updateArtworkFinish: (...args) => artworkApp?.updateArtworkFinish?.(...args),
+  operationProgress,
   onBackToPreview: () => showStep('preview'),
 });
 

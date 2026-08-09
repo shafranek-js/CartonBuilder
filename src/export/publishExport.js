@@ -7,6 +7,7 @@ export async function publishInteractiveHtml({
   repo,
   branch = 'master',
   publishDir = 'public/exports',
+  signal,
   fetchRef = globalThis.fetch,
   apiBaseUrl = 'https://api.github.com',
   siteBaseUrl = null,
@@ -18,6 +19,7 @@ export async function publishInteractiveHtml({
   const path = `${publishDir}/${filename}`;
   const response = await fetchRef(`${apiBaseUrl}/repos/${owner}/${repo}/contents/${path}`, {
     method: 'PUT',
+    signal,
     headers: {
       Authorization: `token ${token}`,
       Accept: 'application/vnd.github+json',

@@ -16,6 +16,7 @@ export function createFileMenu({
   documentRef = document,
 }) {
   let isOpen = false;
+  let isBusy = false;
 
   function togglePopover(open) {
     isOpen = open !== undefined ? open : !isOpen;
@@ -28,6 +29,7 @@ export function createFileMenu({
 
   function bindExportButton(selector, type) {
     popoverContainer.querySelector(selector)?.addEventListener('click', () => {
+      if (isBusy) return;
       togglePopover(false);
       if (type === 'render-glb') onRenderExport('glb');
       else if (type === 'render-sequence') onRenderExport('sequence');
@@ -37,20 +39,20 @@ export function createFileMenu({
 
   function renderContent() {
     popoverContainer.innerHTML = `
-      <button type="button" class="file-menu-item" id="menuNewProjectBtn">
+      <button type="button" class="file-menu-item" id="menuNewProjectBtn"${isBusy ? ' disabled' : ''}>
         <span class="file-menu-item-title">${t('newProjectMenu') || 'New...'}</span>
         <span class="file-menu-shortcut">Ctrl+N</span>
       </button>
-      <button type="button" class="file-menu-item" id="menuOpenProjectBtn">
+      <button type="button" class="file-menu-item" id="menuOpenProjectBtn"${isBusy ? ' disabled' : ''}>
         <span class="file-menu-item-title">${t('openProjectMenu') || 'Open...'}</span>
         <span class="file-menu-shortcut">Ctrl+O</span>
       </button>
-      <button type="button" class="file-menu-item" id="menuSaveProjectBtn">
+      <button type="button" class="file-menu-item" id="menuSaveProjectBtn"${isBusy ? ' disabled' : ''}>
         <span class="file-menu-item-title">${t('saveProjectMenu') || 'Save...'}</span>
         <span class="file-menu-shortcut">Ctrl+S</span>
       </button>
       <div class="file-menu-divider"></div>
-      <button type="button" class="file-menu-item" id="menuPlaceArtworkBtn">
+      <button type="button" class="file-menu-item" id="menuPlaceArtworkBtn"${isBusy ? ' disabled' : ''}>
         <span class="file-menu-item-title">${t('placeArtworkMenu') || 'Place Artwork...'}</span>
         <span class="file-menu-shortcut">Shift+Ctrl+P</span>
       </button>
@@ -63,22 +65,22 @@ export function createFileMenu({
             <span class="file-menu-item-title">${t('export2d') || 'Export 2D'}</span>
             <span class="file-menu-submenu-caret">▸</span>
             <div class="file-menu-submenu">
-              <button type="button" class="file-menu-item" id="menuExportPngBtn">
+              <button type="button" class="file-menu-item" id="menuExportPngBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('exportPng') || 'Export PNG'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportJpgBtn">
+              <button type="button" class="file-menu-item" id="menuExportJpgBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('exportJpg') || 'Export JPG'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportSvgBtn">
+              <button type="button" class="file-menu-item" id="menuExportSvgBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('dielineSvg') || 'Dieline SVG'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportPdfBtn">
+              <button type="button" class="file-menu-item" id="menuExportPdfBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('exportPdf') || 'Export PDF'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportPrepressPdfBtn">
+              <button type="button" class="file-menu-item" id="menuExportPrepressPdfBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('exportPrepressPdf') || 'Prepress PDF (not PDF/X)'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportPrepressSvgBtn">
+              <button type="button" class="file-menu-item" id="menuExportPrepressSvgBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('exportPrepressSvg') || 'Prepress SVG'}</span>
               </button>
             </div>
@@ -87,13 +89,13 @@ export function createFileMenu({
             <span class="file-menu-item-title">${t('export3d') || 'Export 3D'}</span>
             <span class="file-menu-submenu-caret">▸</span>
             <div class="file-menu-submenu">
-              <button type="button" class="file-menu-item" id="menuExport3dHtmlBtn">
+              <button type="button" class="file-menu-item" id="menuExport3dHtmlBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('export3dHtml') || 'Export HTML'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportGlbBtn">
+              <button type="button" class="file-menu-item" id="menuExportGlbBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('export3dGlb') || 'Binary glTF (.glb)'}</span>
               </button>
-              <button type="button" class="file-menu-item" id="menuExportTurntableBtn">
+              <button type="button" class="file-menu-item" id="menuExportTurntableBtn"${isBusy ? ' disabled' : ''}>
                 <span class="file-menu-item-title">${t('exportTurntable') || 'Turntable ZIP'}</span>
               </button>
             </div>
@@ -103,21 +105,25 @@ export function createFileMenu({
     `;
 
     popoverContainer.querySelector('#menuNewProjectBtn')?.addEventListener('click', () => {
+      if (isBusy) return;
       togglePopover(false);
       onNewProject();
     });
 
     popoverContainer.querySelector('#menuOpenProjectBtn')?.addEventListener('click', () => {
+      if (isBusy) return;
       togglePopover(false);
       onOpenProject();
     });
 
     popoverContainer.querySelector('#menuSaveProjectBtn')?.addEventListener('click', () => {
+      if (isBusy) return;
       togglePopover(false);
       onSaveProject();
     });
 
     popoverContainer.querySelector('#menuPlaceArtworkBtn')?.addEventListener('click', () => {
+      if (isBusy) return;
       togglePopover(false);
       onPlaceArtwork();
     });
@@ -153,5 +159,10 @@ export function createFileMenu({
 
   return {
     togglePopover,
+    setBusy(value) {
+      isBusy = Boolean(value);
+      triggerButton.setAttribute('aria-busy', String(isBusy));
+      if (isOpen) renderContent();
+    },
   };
 }

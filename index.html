@@ -1220,6 +1220,14 @@
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
       <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
     </section>
+    <section class="operation-progress" id="operationProgress" role="status" aria-live="polite" aria-atomic="false" hidden>
+      <div class="operation-progress-heading">
+        <strong id="operationProgressLabel"></strong>
+        <button type="button" id="operationProgressCancel" data-i18n="cancel">Cancel</button>
+      </div>
+      <p id="operationProgressDetail"></p>
+      <progress id="operationProgressBar" role="progressbar" max="100" value="0" aria-valuemin="0" aria-valuemax="100" aria-label="Operation progress" data-i18n-aria-label="operationProgressLabel"></progress>
+    </section>
   </main>
 
   <script type="module" src="/src/main.js"></script>

@@ -20,7 +20,11 @@ import {
   buildSnapTargets,
   getResizeSnapFactor,
 } from './snap.js';
-import { saveOrDownloadFile } from '../utils/fileSaver.js';
+import {
+  requestSaveDestination,
+  saveOrDownloadFile,
+  writeSaveDestination,
+} from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import {
@@ -187,6 +191,7 @@ export function createArtworkApp({
   onRenderStateChanged = () => {},
   onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
+  operationProgress = null,
 }) {
   let artwork = new ArtworkModel();
   const viewport = new ViewportModel();
@@ -223,6 +228,26 @@ export function createArtworkApp({
   const errorMessage = documentRef.getElementById('errorMessage');
   const errorRetryButton = documentRef.getElementById('errorRetryButton');
   const errorDismissButton = documentRef.getElementById('errorDismissButton');
+
+  async function runForegroundOperation(options) {
+    if (operationProgress?.run) return operationProgress.run(options);
+    const controller = new AbortController();
+    try {
+      const value = await options.work({
+        id: options.id,
+        signal: controller.signal,
+        report: () => {},
+        cancel: () => controller.abort(),
+      });
+      return controller.signal.aborted
+        ? { status: 'cancelled' }
+        : { status: 'succeeded', value };
+    } catch (error) {
+      return controller.signal.aborted || error?.name === 'AbortError'
+        ? { status: 'cancelled', error }
+        : { status: 'failed', error };
+    }
+  }
   const pageDialog = documentRef.getElementById('pageDialog');
   const pageNumber = documentRef.getElementById('pdfPageNumber');
   const pageCount = documentRef.getElementById('pdfPageCount');
@@ -3367,45 +3392,100 @@ export function createArtworkApp({
   });
 
   async function saveProjectArchive() {
+    if (operationProgress?.isBusy?.()) {
+      showToast(t('operationInProgress'));
+      return { status: 'busy' };
+    }
     if (artworks.length === 0) {
       showToast(t('loadBeforeSave'));
+      return { status: 'failed' };
+    }
+    clearError();
+    const destinationPromise = requestSaveDestination({
+      suggestedName: 'carton-project.carton',
+      types: [
+        {
+          description: 'CartonBuilder Project (*.carton)',
+          accept: { 'application/x-carton-project': ['.carton', '.json'] },
+        },
+      ],
+      windowRef,
+    });
+    const outcome = await runForegroundOperation({
+      id: 'project-save',
+      labelKey: 'projectSaving',
+      cancellable: true,
+      lockMode: 'actions',
+      work: async ({ signal, report, cancel }) => {
+        const destination = await destinationPromise;
+        if (!destination) {
+          cancel();
+          return null;
+        }
+        const blob = await createProjectArchive({
+          snapshot: createSnapshot(),
+          artworkBlobs: artworks.map((entry) => ({
+            originalBlob: entry.originalBlob,
+            previewBlob: entry.previewBlob,
+          })),
+          renderAssets: getRenderAssets() || [],
+          signal,
+          onProgress: ({ fraction, stageKey, stageParams }) => report({ fraction, stageKey, stageParams }),
+        });
+        await writeSaveDestination({
+          destination,
+          blob,
+          suggestedName: 'carton-project.carton',
+          windowRef,
+          documentRef,
+          signal,
+          onProgress: (written, total) => report({
+            fraction: 0.98 + (total ? (written / total) * 0.02 : 0),
+            stageKey: 'exportWritingFile',
+          }),
+        });
+        return true;
+      },
+    });
+
+    if (outcome.status === 'succeeded') showToast(t('projectSaved'));
+    else if (outcome.status === 'cancelled') showToast(t('operationCancelled'));
+    else {
+      console.error(outcome.error);
+      showError(outcome.error, 'projectSaveFailed');
+    }
+    return outcome;
+  }
+
+  projectInput.addEventListener('change', async () => {
+    if (operationProgress?.isBusy?.()) {
+      projectInput.value = '';
+      showToast(t('operationInProgress'));
       return;
     }
     try {
       clearError();
-      const blob = await createProjectArchive({
-        snapshot: createSnapshot(),
-        artworkBlobs: artworks.map((entry) => ({
-          originalBlob: entry.originalBlob,
-          previewBlob: entry.previewBlob,
-        })),
-        renderAssets: getRenderAssets() || [],
+      const outcome = await runForegroundOperation({
+        id: 'project-open',
+        labelKey: 'projectOpening',
+        cancellable: true,
+        lockMode: 'workspace',
+        work: async ({ signal, report }) => {
+          const project = await readProjectArchive(projectInput.files?.[0], {
+            signal,
+            onProgress: ({ fraction, stageKey, stageParams }) => report({ fraction, stageKey, stageParams }),
+          });
+          restoreProject(project);
+          onProjectLoaded(project.snapshot, project);
+          return project;
+        },
       });
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: 'carton-project.carton',
-        types: [
-          {
-            description: 'CartonBuilder Project (*.carton)',
-            accept: { 'application/x-carton-project': ['.carton', '.json'] },
-          },
-        ],
-        windowRef,
-        documentRef,
-      });
-    } catch (error) {
-      console.error(error);
-      showError(error, 'projectSaveFailed');
-    }
-  }
-
-  projectInput.addEventListener('change', async () => {
-    try {
-      clearError();
-      const project = await readProjectArchive(projectInput.files?.[0]);
-      restoreProject(project);
-      onProjectLoaded(project.snapshot, project);
-      showToast(t('projectOpened'));
+      if (outcome.status === 'succeeded') showToast(t('projectOpened'));
+      else if (outcome.status === 'cancelled') showToast(t('operationCancelled'));
+      else {
+        console.error(outcome.error);
+        showError(outcome.error, 'projectOpenFailed');
+      }
     } catch (error) {
       console.error(error);
       showError(error, 'projectOpenFailed');
@@ -3488,101 +3568,166 @@ export function createArtworkApp({
   }
 
   async function exportDeliverable(type) {
-    try {
-      clearError();
-      let blob;
-      let suggestedName;
-      let types;
-      let fallback = 'unexpectedError';
-      const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
-
-      if (type === 'svg') {
-        blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
-        suggestedName = getExportFilename(boxModel.dimensions);
-        types = [{
-          description: 'Scalable Vector Graphics (*.svg)',
-          accept: { 'image/svg+xml': ['.svg'] },
-        }];
-      } else if (type === 'prepress-svg') {
-        blob = new Blob([await createPrepressSvg({
-          boxModel,
-          artworks: exportArtworks,
-          settings: prepress,
-        })], { type: 'image/svg+xml;charset=utf-8' });
-        suggestedName = getPrepressExportFilename(boxModel.dimensions);
-        types = [{ description: 'Prepress SVG (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }];
-      } else if (type === 'png' || type === 'jpg') {
-        const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
-        const { createPreviewBlob } = await import('../export/artworkExport.js');
-        const selectedDpi = exportArtworks
-          .map((entry) => Number(entry.model.quality?.render))
-          .filter((value) => Number.isFinite(value) && value > 0);
-        const hasAutoQuality = exportArtworks.some(
-          (entry) => !Number.isFinite(Number(entry.model.quality?.render)),
-        );
-        const exportDpi = Math.max(
-          selectedDpi.length ? Math.max(...selectedDpi) : 150,
-          hasAutoQuality ? 300 : 0,
-        );
-        blob = await createPreviewBlob({
-          boxModel,
-          artworks: exportArtworks,
-          type: mimeType,
-          dpi: exportDpi,
-        });
-        suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
-        types = type === 'png'
-          ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
-          : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
-        fallback = type === 'png' ? 'exportPngFailed' : 'exportJpgFailed';
-      } else if (type === 'pdf') {
-        const { createPdfExport } = await import('../export/artworkExport.js');
-        blob = await createPdfExport({ boxModel, artworks: exportArtworks });
-        suggestedName = 'carton-artwork.pdf';
-        types = [{
-          description: 'PDF Document (*.pdf)',
-          accept: { 'application/pdf': ['.pdf'] },
-        }];
-        fallback = 'exportPdfFailed';
-      } else if (type === 'prepress-pdf') {
-        const report = getCurrentPreflight({ fresh: true });
-        if (!report.valid) throw new AppError('prepressBlocked');
-        const { createPrepressPdfExport } = await import('../export/artworkExport.js');
-        blob = await createPrepressPdfExport({ boxModel, artworks: exportArtworks, settings: prepress, preflight: report });
-        suggestedName = 'carton-prepress-production-assist.pdf';
-        types = [{ description: 'Prepress PDF (not PDF/X) (*.pdf)', accept: { 'application/pdf': ['.pdf'] } }];
-        fallback = 'exportPdfFailed';
-      } else if (type === 'html') {
-        const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
-        const renderState = sanitizeRenderSettings(getRenderState());
-        const previewState = getPreview3dState?.() || null;
-        blob = await createInteractive3dHtml({
-          boxModel,
-          artworks: exportArtworks,
-          htmlQuality: renderState.quality.html,
-          renderState,
-          boardAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
-          previewState,
-          locale: documentRef.documentElement.lang || 'en',
-          documentRef,
-        });
-        suggestedName = 'carton-3d.html';
-        types = [{
-          description: 'Interactive 3D HTML (*.html)',
-          accept: { 'text/html': ['.html'] },
-        }];
-        fallback = 'exportPdfFailed';
-      } else {
-        return false;
-      }
-
-      await saveOrDownloadFile({ blob, suggestedName, types, windowRef, documentRef });
-      return true;
-    } catch (error) {
-      console.error(error);
-      showError(error, fallback);
+    if (operationProgress?.isBusy?.()) {
+      showToast(t('operationInProgress'));
       return false;
     }
+    const initialSuggestedName = type === 'svg'
+      ? getExportFilename(boxModel.dimensions)
+      : type === 'prepress-svg'
+        ? getPrepressExportFilename(boxModel.dimensions)
+        : type === 'png'
+          ? 'carton-artwork-preview.png'
+          : type === 'jpg'
+            ? 'carton-artwork-preview.jpg'
+            : type === 'pdf'
+              ? 'carton-artwork.pdf'
+              : type === 'prepress-pdf'
+                ? 'carton-prepress-production-assist.pdf'
+                : type === 'html'
+                  ? 'carton-3d.html'
+                  : null;
+    if (!initialSuggestedName) return false;
+    const initialTypes = type === 'svg' || type === 'prepress-svg'
+      ? [{ description: 'Scalable Vector Graphics (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }]
+      : type === 'png'
+        ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
+        : type === 'jpg'
+          ? [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }]
+          : type === 'html'
+            ? [{ description: 'Interactive 3D HTML (*.html)', accept: { 'text/html': ['.html'] } }]
+            : [{ description: 'PDF Document (*.pdf)', accept: { 'application/pdf': ['.pdf'] } }];
+    const destinationPromise = requestSaveDestination({
+      suggestedName: initialSuggestedName,
+      types: initialTypes,
+      windowRef,
+    });
+    const outcome = await runForegroundOperation({
+      id: `artwork-export-${type}`,
+      labelKey: 'projectExporting',
+      cancellable: true,
+      lockMode: 'actions',
+      work: async ({ signal, report, cancel }) => {
+        try {
+          clearError();
+          report({ stageKey: 'operationPreparing' });
+          let blob;
+          let suggestedName;
+          let types;
+          let fallback = 'unexpectedError';
+          const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
+
+          if (type === 'svg') {
+            blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
+            suggestedName = getExportFilename(boxModel.dimensions);
+            types = [{
+              description: 'Scalable Vector Graphics (*.svg)',
+              accept: { 'image/svg+xml': ['.svg'] },
+            }];
+          } else if (type === 'prepress-svg') {
+            blob = new Blob([await createPrepressSvg({
+              boxModel,
+              artworks: exportArtworks,
+              settings: prepress,
+            })], { type: 'image/svg+xml;charset=utf-8' });
+            suggestedName = getPrepressExportFilename(boxModel.dimensions);
+            types = [{ description: 'Prepress SVG (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }];
+          } else if (type === 'png' || type === 'jpg') {
+            const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
+            const { createPreviewBlob } = await import('../export/artworkExport.js');
+            const selectedDpi = exportArtworks
+              .map((entry) => Number(entry.model.quality?.render))
+              .filter((value) => Number.isFinite(value) && value > 0);
+            const hasAutoQuality = exportArtworks.some(
+              (entry) => !Number.isFinite(Number(entry.model.quality?.render)),
+            );
+            const exportDpi = Math.max(
+              selectedDpi.length ? Math.max(...selectedDpi) : 150,
+              hasAutoQuality ? 300 : 0,
+            );
+            blob = await createPreviewBlob({
+              boxModel,
+              artworks: exportArtworks,
+              type: mimeType,
+              dpi: exportDpi,
+            });
+            suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
+            types = type === 'png'
+              ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
+              : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
+            fallback = type === 'png' ? 'exportPngFailed' : 'exportJpgFailed';
+          } else if (type === 'pdf') {
+            const { createPdfExport } = await import('../export/artworkExport.js');
+            blob = await createPdfExport({ boxModel, artworks: exportArtworks });
+            suggestedName = 'carton-artwork.pdf';
+            types = [{
+              description: 'PDF Document (*.pdf)',
+              accept: { 'application/pdf': ['.pdf'] },
+            }];
+            fallback = 'exportPdfFailed';
+          } else if (type === 'prepress-pdf') {
+            const report = getCurrentPreflight({ fresh: true });
+            if (!report.valid) throw new AppError('prepressBlocked');
+            const { createPrepressPdfExport } = await import('../export/artworkExport.js');
+            blob = await createPrepressPdfExport({ boxModel, artworks: exportArtworks, settings: prepress, preflight: report });
+            suggestedName = 'carton-prepress-production-assist.pdf';
+            types = [{ description: 'Prepress PDF (not PDF/X) (*.pdf)', accept: { 'application/pdf': ['.pdf'] } }];
+            fallback = 'exportPdfFailed';
+          } else if (type === 'html') {
+            const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
+            const renderState = sanitizeRenderSettings(getRenderState());
+            const previewState = getPreview3dState?.() || null;
+            blob = await createInteractive3dHtml({
+              boxModel,
+              artworks: exportArtworks,
+              htmlQuality: renderState.quality.html,
+              renderState,
+              boardAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
+              previewState,
+              locale: documentRef.documentElement.lang || 'en',
+              documentRef,
+            });
+            suggestedName = 'carton-3d.html';
+            types = [{
+              description: 'Interactive 3D HTML (*.html)',
+              accept: { 'text/html': ['.html'] },
+            }];
+            fallback = 'exportPdfFailed';
+          } else {
+            return false;
+          }
+
+          const destination = await destinationPromise;
+          if (!destination) {
+            cancel();
+            return false;
+          }
+          await writeSaveDestination({
+            destination,
+            blob,
+            suggestedName,
+            windowRef,
+            documentRef,
+            signal,
+            onProgress: (written, total) => report({
+              fraction: 0.98 + (total ? (written / total) * 0.02 : 0),
+              stageKey: 'exportWritingFile',
+            }),
+          });
+          return true;
+        } catch (error) {
+          throw Object.assign(error, { fallbackKey: fallback });
+        }
+      },
+    });
+    if (outcome.status === 'succeeded') return true;
+    if (outcome.status === 'cancelled') {
+      showToast(t('operationCancelled'));
+      return false;
+    }
+    console.error(outcome.error);
+    showError(outcome.error, outcome.error?.fallbackKey || 'unexpectedError');
+    return false;
   }
 
   function readPublishSettings() {
@@ -3617,54 +3762,82 @@ export function createArtworkApp({
   }
 
   async function publishHtmlExport() {
-    try {
-      clearError();
-      const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
-      const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
-      const renderState = sanitizeRenderSettings(getRenderState());
-      const previewState = getPreview3dState?.() || null;
-      const blob = await createInteractive3dHtml({
-        boxModel,
-        artworks: exportArtworks,
-        htmlQuality: renderState.quality.html,
-        renderState,
-        boardAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
-        previewState,
-        locale: documentRef.documentElement.lang || 'en',
-        documentRef,
-      });
-
-      let settings = readPublishSettings();
-      if (!settings.token) {
-        const token = windowRef.prompt?.(t('publishTokenPrompt'));
-        if (!token) return;
-        settings = { ...settings, token };
-        savePublishSettings(settings);
-      }
-      if (!settings.owner || !settings.repo) {
-        const owner = windowRef.prompt?.(t('publishOwnerPrompt'), settings.owner || '');
-        const repo = windowRef.prompt?.(t('publishRepoPrompt'), settings.repo || '');
-        if (!owner || !repo) return;
-        settings = { ...settings, owner, repo };
-        savePublishSettings(settings);
-      }
-
-      const { publishInteractiveHtml } = await import('../export/publishExport.js');
-      const filename = `carton-${Date.now()}.html`;
-      const { pageUrl } = await publishInteractiveHtml({
-        blob,
-        filename,
-        token: settings.token,
-        owner: settings.owner,
-        repo: settings.repo,
-      });
-
-      await copyToClipboard(pageUrl);
-      showToast(`${t('publishSuccess')}: ${pageUrl}`);
-    } catch (error) {
-      console.error(error);
-      showToast(t('publishFailed'));
+    if (operationProgress?.isBusy?.()) {
+      showToast(t('operationInProgress'));
+      return false;
     }
+    const outcome = await runForegroundOperation({
+      id: 'publish-html',
+      labelKey: 'exportPublishing',
+      cancellable: true,
+      lockMode: 'actions',
+      work: async ({ signal, report, cancel }) => {
+        clearError();
+        const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
+        const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
+        report({ stageKey: 'operationProcessing', fraction: 0.1 });
+        const renderState = sanitizeRenderSettings(getRenderState());
+        const previewState = getPreview3dState?.() || null;
+        const blob = await createInteractive3dHtml({
+          boxModel,
+          artworks: exportArtworks,
+          htmlQuality: renderState.quality.html,
+          renderState,
+          boardAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
+          previewState,
+          locale: documentRef.documentElement.lang || 'en',
+          documentRef,
+        });
+
+        let settings = readPublishSettings();
+        if (!settings.token) {
+          const token = windowRef.prompt?.(t('publishTokenPrompt'));
+          if (!token) {
+            cancel();
+            return false;
+          }
+          settings = { ...settings, token };
+          savePublishSettings(settings);
+        }
+        if (!settings.owner || !settings.repo) {
+          const owner = windowRef.prompt?.(t('publishOwnerPrompt'), settings.owner || '');
+          const repo = windowRef.prompt?.(t('publishRepoPrompt'), settings.repo || '');
+          if (!owner || !repo) {
+            cancel();
+            return false;
+          }
+          settings = { ...settings, owner, repo };
+          savePublishSettings(settings);
+        }
+
+        const { publishInteractiveHtml } = await import('../export/publishExport.js');
+        const filename = `carton-${Date.now()}.html`;
+        report({ stageKey: 'exportPublishing', fraction: 0.65 });
+        const { pageUrl } = await publishInteractiveHtml({
+          blob,
+          filename,
+          token: settings.token,
+          owner: settings.owner,
+          repo: settings.repo,
+          signal,
+        });
+
+        await copyToClipboard(pageUrl);
+        showToast(`${t('publishSuccess')}: ${pageUrl}`);
+        report({ stageKey: 'projectReady', fraction: 1 });
+        return true;
+      },
+    });
+    if (outcome.status === 'cancelled') {
+      showToast(t('operationCancelled'));
+      return false;
+    }
+    if (outcome.status !== 'succeeded' || outcome.value === false) {
+      console.error(outcome.error);
+      showToast(t('publishFailed'));
+      return false;
+    }
+    return true;
   }
 
   function restoreProject({ snapshot, artworkBlobs = [] }) {

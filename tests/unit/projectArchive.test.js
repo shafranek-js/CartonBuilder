@@ -192,4 +192,22 @@ describe('.carton project archive', () => {
       code: 'projectArchiveInvalid',
     });
   });
+
+  it('reports byte progress and stops before creating an archive when aborted', async () => {
+    const fixture = await createFixture();
+    const progress = [];
+    const archive = await createProjectArchive({
+      ...fixture,
+      onProgress: ({ fraction }) => progress.push(fraction),
+    });
+    expect(progress.length).toBeGreaterThan(2);
+    expect(progress.at(-1)).toBe(1);
+    expect(progress.every((value, index) => index === 0 || value >= progress[index - 1])).toBe(true);
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(createProjectArchive({ ...fixture, signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
 });
