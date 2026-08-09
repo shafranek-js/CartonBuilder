@@ -793,7 +793,11 @@ test.describe('Wave 5 deterministic Render baselines', () => {
         .toMatchObject({ presetId, effectiveResolution: expect.any(Number) });
       await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 60_000 });
       await page.locator('#renderEnvironmentResolution').selectOption(caps[index % caps.length]);
-      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
+      // A cap change can rebuild PMREM on hosted SwiftShader. Keep the
+      // assertion strict, but allow the GPU-bound preparation its CI budget.
+      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), {
+        timeout: process.env.CI ? 180_000 : 45_000,
+      })
         .toMatchObject({ effectiveResolution: expect.any(Number) });
     }
     const after = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());
