@@ -195,6 +195,28 @@ test('keeps Render disabled until a complete box and artwork exist', async ({ pa
   await expect(page.locator('[data-step-target="render"]')).toBeEnabled();
 });
 
+test('clears the Render surface and recovers when every artwork layer is hidden', async ({ page }) => {
+  await openRender(page, 'all-hidden-render-fixture.png');
+  const baseline = await page.locator('#renderCanvas').screenshot();
+  await page.locator('.step[data-step-target="artwork"]').click();
+  const visibility = page.locator('.artwork-sublayer input[type="checkbox"]').first();
+  await expect(visibility).toBeChecked();
+  await page.locator('.artwork-sublayer label.eye-cell').first().click();
+  await expect(visibility).not.toBeChecked();
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderRecovery')).toBeVisible();
+  await expect(page.locator('#renderRecoveryMessage')).toContainText('visible artwork');
+  await expect(page.locator('#renderPngButton')).toBeDisabled();
+  expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(baseline);
+
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await page.locator('.artwork-sublayer label.eye-cell').first().click();
+  await expect(visibility).toBeChecked();
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderRecovery')).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('#renderStatus')).toContainText('Render ready', { timeout: 30_000 });
+});
+
 test('shows native raster quality in the editor and per-artwork Render quality controls', async ({ page }) => {
   await openRender(page, 'Carton Calmdownol 1000 mg 110x70x30 outlined.ai');
   await expect(page.locator('#renderArtworkQualityList select')).toHaveCount(1);
@@ -793,7 +815,11 @@ test.describe('Wave 5 deterministic Render baselines', () => {
         .toMatchObject({ presetId, effectiveResolution: expect.any(Number) });
       await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 60_000 });
       await page.locator('#renderEnvironmentResolution').selectOption(caps[index % caps.length]);
-      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 45_000 })
+      // A cap change can rebuild PMREM on hosted SwiftShader. Keep the
+      // assertion strict, but allow the GPU-bound preparation its CI budget.
+      await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), {
+        timeout: process.env.CI ? 180_000 : 45_000,
+      })
         .toMatchObject({ effectiveResolution: expect.any(Number) });
     }
     const after = await page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics());

@@ -131,32 +131,43 @@ export function createBoxNetRenderer({
   const documentRef = svg.ownerDocument;
 
   function renderPanel(panel, metrics) {
+    const isPolygonElement = model.construction?.templateId !== 'legacy-six-panel'
+      && Array.isArray(panel.polygon) && panel.polygon.length >= 3;
     const group = createSvgElement(documentRef, 'g', {
-      class: `panel-group panel-${panel.faceKey}`,
+      class: `panel-group panel-${panel.faceKey}${isPolygonElement ? ' polygon-element' : ''}`,
       'data-panel-id': panel.id,
     });
 
-    group.appendChild(createSvgElement(documentRef, 'rect', {
-      class: 'panel-hitbox',
-      x: panel.x - metrics.hitPadding,
-      y: panel.y - metrics.hitPadding,
-      width: panel.width + metrics.hitPadding * 2,
-      height: panel.height + metrics.hitPadding * 2,
-    }));
+    if (isPolygonElement) {
+      const hitboxPoints = panel.polygon.map(({ x, y }) => `${x},${y}`).join(' ');
+      group.appendChild(createSvgElement(documentRef, 'polygon', {
+        class: 'panel-hitbox', points: hitboxPoints,
+      }));
+    } else {
+      group.appendChild(createSvgElement(documentRef, 'rect', {
+        class: 'panel-hitbox',
+        x: panel.x - metrics.hitPadding,
+        y: panel.y - metrics.hitPadding,
+        width: panel.width + metrics.hitPadding * 2,
+        height: panel.height + metrics.hitPadding * 2,
+      }));
+    }
 
     const panelTitle = createSvgElement(documentRef, 'title');
     panelTitle.textContent = `${panel.faceName}: ${formatNumber(panel.width)} × ${formatNumber(panel.height)} mm`;
     group.appendChild(panelTitle);
 
-    group.appendChild(createSvgElement(documentRef, 'rect', {
-      class: 'panel-shape',
-      x: panel.x,
-      y: panel.y,
-      width: panel.width,
-      height: panel.height,
-    }));
+    if (isPolygonElement) {
+      group.appendChild(createSvgElement(documentRef, 'polygon', {
+        class: 'panel-shape', points: panel.polygon.map(({ x, y }) => `${x},${y}`).join(' '),
+      }));
+    } else {
+      group.appendChild(createSvgElement(documentRef, 'rect', {
+        class: 'panel-shape', x: panel.x, y: panel.y, width: panel.width, height: panel.height,
+      }));
+    }
 
-    if (panel.faceKey === 'front' || panel.faceKey === 'bottom') {
+    if (!isPolygonElement && (panel.faceKey === 'front' || panel.faceKey === 'bottom')) {
       const labelY = panel.faceKey === 'bottom'
         ? panel.y + panel.height * 0.66
         : panel.y + panel.height / 2;
@@ -170,7 +181,7 @@ export function createBoxNetRenderer({
       group.appendChild(label);
     }
 
-    if (model.canDelete(panel.id)) {
+    if (!isPolygonElement && model.canDelete(panel.id)) {
       const removeY = panel.faceKey === 'bottom'
         ? panel.y + panel.height * 0.31
         : panel.y + panel.height / 2;
@@ -187,7 +198,7 @@ export function createBoxNetRenderer({
       });
     }
 
-    for (const edge of model.getEligibleEdges(panel.id)) {
+    for (const edge of isPolygonElement ? [] : model.getEligibleEdges(panel.id)) {
       const point = getEdgeCenter(panel, edge, metrics.buttonOffset);
       const potential = model.getPotential(panel.id, edge);
       appendActionButton({
@@ -214,11 +225,13 @@ export function createBoxNetRenderer({
       `${metrics.view.x} ${metrics.view.y} ${metrics.view.width} ${metrics.view.height}`,
     );
 
-    for (const panel of model.getPanels()) {
-      renderPanel(panel, metrics);
+    for (const element of model.getElements()) {
+      renderPanel(element, metrics);
     }
 
-    panelCount.textContent = `${model.panelCount}/6`;
+    panelCount.textContent = model.construction?.templateId === 'legacy-six-panel'
+      ? `${model.panelCount}/6`
+      : `${model.panelCount}/6 · ${model.getElements().length}`;
     if (continueButton) continueButton.disabled = !model.isComplete;
 
     if (cancelButton) {
@@ -230,7 +243,9 @@ export function createBoxNetRenderer({
     }
     svg.setAttribute(
       'aria-label',
-      `Interactive box net with ${model.panelCount} of 6 panels placed`,
+      model.construction?.templateId === 'legacy-six-panel'
+        ? `Interactive box net with ${model.panelCount} of 6 panels placed`
+        : `${model.construction.templateId.toUpperCase()} construction with ${model.getElements().length} elements`,
     );
   };
 }

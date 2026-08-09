@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { saveOrDownloadFile } from '../../src/utils/fileSaver.js';
+import {
+  requestSaveDestination,
+  saveOrDownloadFile,
+  writeSaveDestination,
+} from '../../src/utils/fileSaver.js';
 
 describe('fileSaver module', () => {
   let mockBlob;
@@ -83,5 +87,51 @@ describe('fileSaver module', () => {
     expect(mockDocument.createElement).toHaveBeenCalledWith('a');
     expect(mockAnchor.download).toBe('test.carton');
     expect(mockAnchor.click).toHaveBeenCalled();
+  });
+
+  it('reserves a native destination separately and reports chunked write progress', async () => {
+    const writes = [];
+    const progress = [];
+    const mockWritable = {
+      write: vi.fn(async (chunk) => writes.push(chunk)),
+      close: vi.fn().mockResolvedValue(),
+      abort: vi.fn().mockResolvedValue(),
+    };
+    const mockHandle = { createWritable: vi.fn().mockResolvedValue(mockWritable) };
+    mockWindow.showSaveFilePicker = vi.fn().mockResolvedValue(mockHandle);
+    const destination = await requestSaveDestination({ suggestedName: 'large.carton', windowRef: mockWindow });
+    expect(destination.kind).toBe('native');
+    await writeSaveDestination({
+      destination,
+      blob: new Blob(['a'.repeat(32)]),
+      windowRef: mockWindow,
+      documentRef: mockDocument,
+      onProgress: (written, total) => progress.push([written, total]),
+    });
+    expect(writes.length).toBeGreaterThan(0);
+    expect(progress.at(-1)).toEqual([32, 32]);
+    expect(mockWritable.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts native writes without closing a partial destination', async () => {
+    const mockWritable = {
+      write: vi.fn().mockResolvedValue(),
+      close: vi.fn().mockResolvedValue(),
+      abort: vi.fn().mockResolvedValue(),
+    };
+    const destination = {
+      kind: 'native',
+      handle: { createWritable: vi.fn().mockResolvedValue(mockWritable) },
+    };
+    const signal = AbortSignal.abort();
+    await expect(writeSaveDestination({
+      destination,
+      blob: mockBlob,
+      signal,
+      windowRef: mockWindow,
+      documentRef: mockDocument,
+    })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockWritable.abort).toHaveBeenCalledTimes(1);
+    expect(mockWritable.close).not.toHaveBeenCalled();
   });
 });

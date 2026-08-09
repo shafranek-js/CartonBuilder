@@ -2,7 +2,7 @@ import { getUserErrorMessage, t } from '../i18n.js';
 import { enhanceSlider } from '../ui/SliderStepper.js';
 import { ARTWORK_RENDER_QUALITY_OPTIONS } from '../artwork/ArtworkModel.js';
 import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
-import { saveOrDownloadFile } from '../utils/fileSaver.js';
+import { requestSaveDestination, writeSaveDestination } from '../utils/fileSaver.js';
 import { composeArtworkTexture } from '../preview3d/textureComposer.js';
 import { buildRenderSceneModel, getRenderArtworkSignature } from './RenderSceneModel.js';
 import {
@@ -112,6 +112,7 @@ function renderPreflightIssueText(entry) {
     case 'jpeg-background': return t('renderPreflightJpegBackground');
     case 'basic-glb-finishes': return t('renderPreflightBasicGlbFinishes');
     case 'hdri-glb': return t('renderPreflightHdriGlb');
+    case 'invalid-geometry': return t('renderPreflightInvalidGeometry', { templateId: details.templateId, element: details.invalidElement || 'unknown' });
     case 'memory-budget': return t('renderPreflightMemory', { estimated: formatMegabytes(details.estimatedBytes), budget: formatMegabytes(details.memoryBudgetBytes) });
     default: return entry.code;
   }
@@ -154,6 +155,7 @@ export function createRenderApp({
   onStateChange = () => {},
   setArtworkQuality = () => false,
   updateArtworkFinish = () => false,
+  operationProgress = null,
   onBackToPreview = () => {},
 }) {
   const elements = {
@@ -551,14 +553,75 @@ export function createRenderApp({
     if (elements.jpg) elements.jpg.disabled = value;
   }
 
+  async function runForegroundExport({ id, labelKey, work }) {
+    if (!operationProgress) {
+      const controller = new AbortController();
+      return work({ signal: controller.signal, report: () => {}, cancel: () => controller.abort() });
+    }
+    const outcome = await operationProgress.run({
+      id,
+      labelKey,
+      cancellable: true,
+      lockMode: 'actions',
+      work,
+    });
+    if (outcome.status === 'cancelled') elements.status.textContent = t('operationCancelled');
+    return outcome.status === 'succeeded' && outcome.value !== false;
+  }
+
+  function setExportAvailability(enabled) {
+    const available = Boolean(enabled);
+    if (elements.png) elements.png.disabled = !available;
+    if (elements.jpg) elements.jpg.disabled = !available;
+    if (elements.exportConfirm && !available) elements.exportConfirm.disabled = true;
+  }
+
   function showRecovery(messageKey = 'renderUnavailable') {
     if (elements.recoveryMessage) elements.recoveryMessage.textContent = t(messageKey);
     if (elements.recovery) elements.recovery.hidden = false;
     setBusy(false);
+    setExportAvailability(false);
   }
 
   function hideRecovery() {
     if (elements.recovery) elements.recovery.hidden = true;
+  }
+
+  function hasVisibleRenderArtwork() {
+    return (getArtworks?.() || []).some((entry) => (
+      entry?.visible !== false && entry?.model?.hasArtwork
+    ));
+  }
+
+  function clearRenderSurface() {
+    const canvas = elements.canvas;
+    if (!canvas) return;
+    // Resizing a WebGL canvas clears its color buffer without attempting to
+    // acquire a second context (which would fail after context loss).
+    const width = canvas.width || 1;
+    const height = canvas.height || 1;
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  function handleMissingArtwork() {
+    syncGeneration += 1;
+    syncController?.abort();
+    syncController = null;
+    exportController?.abort();
+    pathTracingService?.cancel?.();
+    pathTracingService?.dispose?.();
+    pathTracingService = null;
+    renderer?.dispose?.();
+    renderer = null;
+    structureSignature = '';
+    artworkSignature = '';
+    renderContextState = 'initializing';
+    clearRenderSurface();
+    showRecovery('renderArtworkRequired');
+    elements.status.textContent = t('renderArtworkRequired');
+    updateDiagnostics();
+    return false;
   }
 
   function updatePresetButtons() {
@@ -1013,6 +1076,7 @@ export function createRenderApp({
   }
 
   function openExportDialog(format = state.output.format, kind = 'image') {
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     if (!elements.exportDialog?.showModal) return exportImage(format);
     state.output.kind = kind;
     elements.exportFormat.value = format;
@@ -1276,12 +1340,26 @@ export function createRenderApp({
     renderer?.updateSettings(state, { render });
     renderer?.setBackgroundAsset?.(backgroundAsset);
     const environmentSelection = state.lighting?.environmentMap || {};
+    const previousEnvironmentSelection = previousState.lighting?.environmentMap || {};
+    const builtinCapOnlyChange = environmentSelection.source === 'builtin'
+      && previousEnvironmentSelection.source === 'builtin'
+      && environmentSelection.presetId === previousEnvironmentSelection.presetId
+      && environmentSelection.resolutionCap !== previousEnvironmentSelection.resolutionCap
+      && Object.entries(environmentSelection)
+        .filter(([key]) => key !== 'resolutionCap')
+        .every(([key, value]) => value === previousEnvironmentSelection[key]);
     const environmentAssetMatchesState = !environmentAsset
       || (environmentSelection.source === 'builtin'
         && environmentAsset.source === 'builtin'
         && environmentAsset.presetId === environmentSelection.presetId)
       || (environmentSelection.source === 'custom' && environmentAsset.assetId === environmentSelection.assetId);
-    if (environmentAssetMatchesState) renderer?.setEnvironmentAsset?.(environmentAsset);
+    // BoxScene.setEnvironmentMap already starts the bounded runtime rebuild
+    // for a built-in cap-only change. Avoid immediately starting a second
+    // generation through setEnvironmentAsset; that duplicate PMREM work can
+    // exceed hosted SwiftShader's readiness budget and race diagnostics.
+    if (environmentAssetMatchesState && !builtinCapOnlyChange) {
+      renderer?.setEnvironmentAsset?.(environmentAsset);
+    }
     if (notify) notifyStateChange();
   }
 
@@ -1307,8 +1385,10 @@ export function createRenderApp({
 
   async function syncScene({ force = false, purpose = 'render-screen', targetDpi = null } = {}) {
     if (!active || disposed) return false;
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     await ensureBackgroundAsset();
     await ensureEnvironmentAsset();
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     const signatures = currentSignatures();
     const structureChanged = force || !renderer || signatures.structure !== structureSignature;
     const artworkChanged = force || !renderer || signatures.artwork !== artworkSignature;
@@ -1406,6 +1486,7 @@ export function createRenderApp({
       renderer.updateSettings(state);
       renderContextState = 'ready';
       setBusy(false);
+      setExportAvailability(true);
       updateControls();
       elements.status.textContent = t('renderReady');
       updateDiagnostics();
@@ -1453,7 +1534,17 @@ export function createRenderApp({
 
   async function whenStable({ timeoutMs = 5000 } = {}) {
     const deadline = Date.now() + Math.max(250, Number(timeoutMs) || 5000);
-    while (syncController && Date.now() < deadline) {
+    while (Date.now() < deadline) {
+      // Activation is scheduled from the workflow stepper. On a slow browser
+      // the busy flag can settle in the same frame that a previous renderer is
+      // disposed, leaving a brief renderer-less gap with no active sync. Make
+      // the readiness probe heal that gap instead of returning a false
+      // negative to diagnostics/visual gates.
+      if (!renderer && !syncController && active && renderContextState !== 'lost' && hasVisibleRenderArtwork()) {
+        await syncScene({ force: true });
+        continue;
+      }
+      if (!syncController && renderer) break;
       await new Promise((resolve) => windowRef.setTimeout(resolve, 16));
     }
     if (!renderer || Date.now() >= deadline) return false;
@@ -1676,59 +1767,85 @@ export function createRenderApp({
   }
 
   async function exportImage(format) {
-    if (!renderer && !(await activate())) return false;
-    exportController?.abort();
-    const controller = new AbortController();
-    exportController = controller;
+    if (operationProgress?.isBusy?.()) return false;
     const exportState = getState();
     const preflight = runExportPreflight({ kind: 'image', format });
     if (preflight.status === 'blocked') {
       elements.status.textContent = t('renderPreflightBlocked');
-      exportController = null;
       return false;
     }
-    setBusy(true);
-    elements.status.textContent = t('renderExporting');
-    try {
-      const outputDimensions = getRenderOutputDimensions(exportState);
-      const synced = await syncScene({
-        force: true,
-        purpose: 'render-export',
-        targetDpi: getRenderTextureDpi(boxModel, outputDimensions),
-      });
-      if (!synced || !renderer) throw new Error('Render texture could not be prepared.');
-      const blob = await renderStill({
-        renderer,
-        settings: exportState,
-        format,
-        documentRef,
-        signal: controller.signal,
-      });
-      const dimensions = boxModel.dimensions;
-      const extension = format === 'png' ? 'png' : 'jpg';
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: formatOutputName(dimensions, exportState.presetId, exportState.longEdge, extension),
-        types: createSaveTypes(format),
-        windowRef,
-        documentRef,
-      });
-      elements.status.textContent = t('renderExported', outputDimensions);
-      return true;
-    } catch (error) {
-      if (error?.name !== 'AbortError') {
-        console.error('Could not export Render image', error);
-        elements.status.textContent = t('renderExportFailed');
-      }
-      return false;
-    } finally {
-      if (!disposed && exportController === controller) setBusy(false);
-      if (exportController === controller) exportController = null;
-    }
+    const dimensions = boxModel.dimensions;
+    const extension = format === 'png' ? 'png' : 'jpg';
+    const suggestedName = formatOutputName(dimensions, exportState.presetId, exportState.longEdge, extension);
+    const destinationPromise = requestSaveDestination({
+      suggestedName,
+      types: createSaveTypes(format),
+      windowRef,
+    });
+    return runForegroundExport({
+      id: `render-image-${format}`,
+      labelKey: 'projectExporting',
+      work: async ({ signal, report, cancel }) => {
+        if (!renderer && !(await activate())) return false;
+        exportController?.abort();
+        const controller = signal ? { signal, abort: cancel } : new AbortController();
+        exportController = controller;
+        setBusy(true);
+        elements.status.textContent = t('renderExporting');
+        try {
+          const outputDimensions = getRenderOutputDimensions(exportState);
+          const synced = await syncScene({
+            force: true,
+            purpose: 'render-export',
+            targetDpi: getRenderTextureDpi(boxModel, outputDimensions),
+          });
+          if (!synced || !renderer) throw new Error('Render texture could not be prepared.');
+          report({ stageKey: 'operationProcessing', fraction: 0.25 });
+          const blob = await renderStill({
+            renderer,
+            settings: exportState,
+            format,
+            documentRef,
+            signal: controller.signal,
+          });
+          const destination = await destinationPromise;
+          if (!destination) {
+            cancel();
+            return false;
+          }
+          report({ stageKey: 'exportWritingFile', fraction: 0.9 });
+          await writeSaveDestination({
+            destination,
+            blob,
+            suggestedName,
+            types: createSaveTypes(format),
+            windowRef,
+            documentRef,
+            signal: controller.signal,
+            onProgress: (written, total) => report({
+              stageKey: 'exportWritingFile',
+              fraction: 0.9 + (total ? (written / total) * 0.1 : 0.1),
+            }),
+          });
+          elements.status.textContent = t('renderExported', outputDimensions);
+          return true;
+        } catch (error) {
+          if (error?.name !== 'AbortError') {
+            console.error('Could not export Render image', error);
+            elements.status.textContent = t('renderExportFailed');
+          }
+          return false;
+        } finally {
+          if (!disposed && exportController === controller) setBusy(false);
+          if (exportController === controller) exportController = null;
+        }
+      },
+    });
   }
 
   async function runExperimentalPathTracing() {
     if (!isPathTracingEnabled()) return false;
+    if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     pathTracingService?.cancel();
     pathTracingService = new PathTracingRenderService({ renderer, sceneModel: currentSignatures().sceneModel, windowRef });
     setBusy(true);
@@ -1760,116 +1877,164 @@ export function createRenderApp({
   }
 
   async function exportGlbAsset() {
-    if (!renderer && !(await activate())) return false;
-    exportController?.abort();
-    const controller = new AbortController();
-    exportController = controller;
+    if (operationProgress?.isBusy?.()) return false;
     const exportState = getState();
     const preflight = runExportPreflight({ kind: 'glb', format: 'glb' });
     if (preflight.status === 'blocked') {
       elements.status.textContent = t('renderPreflightBlocked');
-      exportController = null;
       return false;
     }
-    setBusy(true);
-    elements.status.textContent = t('renderGlbExporting');
-    try {
-      const { exportGlb } = await import('./GlbExportService.js');
-      const textureSize = exportState.output.glb.textureSize === 'auto'
-        ? 2048
-        : Number(exportState.output.glb.textureSize);
-      const synced = await syncScene({
-        force: true,
-        purpose: 'render-export',
-        targetDpi: getRenderTextureDpi(boxModel, { width: textureSize, height: textureSize }),
-      });
-      if (!synced || !renderer) throw new Error('Render scene could not be prepared for GLB export.');
-      const blob = await exportGlb({
-        renderer,
-        options: exportState.output.glb,
-        signal: controller.signal,
-        onProgress: (progress) => {
-          elements.status.textContent = `${t('renderGlbExporting')} ${Math.round(progress * 100)}%`;
-        },
-      });
-      const dimensions = boxModel.dimensions;
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: `carton-${Number(dimensions.width).toFixed(2)}x${Number(dimensions.height).toFixed(2)}x${Number(dimensions.depth).toFixed(2)}mm-${exportState.material.profile}.glb`,
-        types: createSaveTypes('glb'),
-        windowRef,
-        documentRef,
-      });
-      elements.status.textContent = t('renderGlbExported');
-      return true;
-    } catch (error) {
-      if (error?.name !== 'AbortError') {
-        console.error('Could not export GLB', error);
-        elements.status.textContent = t('renderGlbExportFailed');
-      }
-      return false;
-    } finally {
-      if (!disposed && exportController === controller) setBusy(false);
-      if (exportController === controller) exportController = null;
-    }
+    const dimensions = boxModel.dimensions;
+    const suggestedName = `carton-${Number(dimensions.width).toFixed(2)}x${Number(dimensions.height).toFixed(2)}x${Number(dimensions.depth).toFixed(2)}mm-${exportState.material.profile}.glb`;
+    const destinationPromise = requestSaveDestination({
+      suggestedName,
+      types: createSaveTypes('glb'),
+      windowRef,
+    });
+    return runForegroundExport({
+      id: 'render-glb',
+      labelKey: 'projectExporting',
+      work: async ({ signal, report, cancel }) => {
+        if (!renderer && !(await activate())) return false;
+        exportController?.abort();
+        const controller = signal ? { signal, abort: cancel } : new AbortController();
+        exportController = controller;
+        setBusy(true);
+        elements.status.textContent = t('renderGlbExporting');
+        try {
+          const { exportGlb } = await import('./GlbExportService.js');
+          const textureSize = exportState.output.glb.textureSize === 'auto'
+            ? 2048
+            : Number(exportState.output.glb.textureSize);
+          const synced = await syncScene({
+            force: true,
+            purpose: 'render-export',
+            targetDpi: getRenderTextureDpi(boxModel, { width: textureSize, height: textureSize }),
+          });
+          if (!synced || !renderer) throw new Error('Render scene could not be prepared for GLB export.');
+          const blob = await exportGlb({
+            renderer,
+            options: exportState.output.glb,
+            signal: controller.signal,
+            onProgress: (progress) => {
+              report({ stageKey: 'operationProcessing', fraction: 0.05 + progress * 0.85 });
+              elements.status.textContent = `${t('renderGlbExporting')} ${Math.round(progress * 100)}%`;
+            },
+          });
+          const destination = await destinationPromise;
+          if (!destination) {
+            cancel();
+            return false;
+          }
+          await writeSaveDestination({
+            destination,
+            blob,
+            suggestedName,
+            types: createSaveTypes('glb'),
+            windowRef,
+            documentRef,
+            signal: controller.signal,
+            onProgress: (written, total) => report({
+              stageKey: 'exportWritingFile',
+              fraction: 0.9 + (total ? (written / total) * 0.1 : 0.1),
+            }),
+          });
+          elements.status.textContent = t('renderGlbExported');
+          return true;
+        } catch (error) {
+          if (error?.name !== 'AbortError') {
+            console.error('Could not export GLB', error);
+            elements.status.textContent = t('renderGlbExportFailed');
+          }
+          return false;
+        } finally {
+          if (!disposed && exportController === controller) setBusy(false);
+          if (exportController === controller) exportController = null;
+        }
+      },
+    });
   }
 
   async function exportTurntableAsset() {
-    if (!renderer && !(await activate())) return false;
-    exportController?.abort();
-    const controller = new AbortController();
-    exportController = controller;
+    if (operationProgress?.isBusy?.()) return false;
     const exportState = getState();
     const preflight = runExportPreflight({ kind: 'sequence', format: exportState.output.sequence.format });
     if (preflight.status === 'blocked') {
       elements.status.textContent = t('renderPreflightBlocked');
-      exportController = null;
       return false;
     }
-    setBusy(true);
-    elements.status.textContent = t('renderTurntableExporting');
-    try {
-      const { exportTurntable } = await import('./TurntableExportService.js');
-      const sequenceOptions = sanitizeTurntableOptions(exportState.output.sequence);
-      const dimensions = getTurntableDimensions(exportState, sequenceOptions.longEdge);
-      if (!isTurntableWithinPixelBudget({ ...sequenceOptions, ...dimensions })) {
-        throw new Error(t('renderTurntableTooLarge'));
-      }
-      const synced = await syncScene({
-        force: true,
-        purpose: 'render-export',
-        targetDpi: getRenderTextureDpi(boxModel, dimensions),
-      });
-      if (!synced || !renderer) throw new Error('Render scene could not be prepared for turntable export.');
-      const blob = await exportTurntable({
-        renderer,
-        settings: exportState,
-        options: sequenceOptions,
-        documentRef,
-        signal: controller.signal,
-        onProgress: (progress) => {
-          elements.status.textContent = `${t('renderTurntableExporting')} ${Math.round(progress * 100)}%`;
-        },
-      });
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: `carton-turntable-${sequenceOptions.frames}f-${sequenceOptions.longEdge}px.zip`,
-        types: createSaveTypes('zip'),
-        windowRef,
-        documentRef,
-      });
-      elements.status.textContent = t('renderTurntableExported');
-      return true;
-    } catch (error) {
-      if (error?.name !== 'AbortError') {
-        console.error('Could not export turntable', error);
-        elements.status.textContent = error?.message || t('renderTurntableExportFailed');
-      }
-      return false;
-    } finally {
-      if (!disposed && exportController === controller) setBusy(false);
-      if (exportController === controller) exportController = null;
-    }
+    const sequenceOptions = sanitizeTurntableOptions(exportState.output.sequence);
+    const suggestedName = `carton-turntable-${sequenceOptions.frames}f-${sequenceOptions.longEdge}px.zip`;
+    const destinationPromise = requestSaveDestination({
+      suggestedName,
+      types: createSaveTypes('zip'),
+      windowRef,
+    });
+    return runForegroundExport({
+      id: 'render-turntable',
+      labelKey: 'projectExporting',
+      work: async ({ signal, report, cancel }) => {
+        if (!renderer && !(await activate())) return false;
+        exportController?.abort();
+        const controller = signal ? { signal, abort: cancel } : new AbortController();
+        exportController = controller;
+        setBusy(true);
+        elements.status.textContent = t('renderTurntableExporting');
+        try {
+          const { exportTurntable } = await import('./TurntableExportService.js');
+          const dimensions = getTurntableDimensions(exportState, sequenceOptions.longEdge);
+          if (!isTurntableWithinPixelBudget({ ...sequenceOptions, ...dimensions })) {
+            throw new Error(t('renderTurntableTooLarge'));
+          }
+          const synced = await syncScene({
+            force: true,
+            purpose: 'render-export',
+            targetDpi: getRenderTextureDpi(boxModel, dimensions),
+          });
+          if (!synced || !renderer) throw new Error('Render scene could not be prepared for turntable export.');
+          const blob = await exportTurntable({
+            renderer,
+            settings: exportState,
+            options: sequenceOptions,
+            documentRef,
+            signal: controller.signal,
+            onProgress: (progress) => {
+              report({ stageKey: 'operationProcessing', fraction: 0.05 + progress * 0.85 });
+              elements.status.textContent = `${t('renderTurntableExporting')} ${Math.round(progress * 100)}%`;
+            },
+          });
+          const destination = await destinationPromise;
+          if (!destination) {
+            cancel();
+            return false;
+          }
+          await writeSaveDestination({
+            destination,
+            blob,
+            suggestedName,
+            types: createSaveTypes('zip'),
+            windowRef,
+            documentRef,
+            signal: controller.signal,
+            onProgress: (written, total) => report({
+              stageKey: 'exportWritingFile',
+              fraction: 0.9 + (total ? (written / total) * 0.1 : 0.1),
+            }),
+          });
+          elements.status.textContent = t('renderTurntableExported');
+          return true;
+        } catch (error) {
+          if (error?.name !== 'AbortError') {
+            console.error('Could not export turntable', error);
+            elements.status.textContent = error?.message || t('renderTurntableExportFailed');
+          }
+          return false;
+        } finally {
+          if (!disposed && exportController === controller) setBusy(false);
+          if (exportController === controller) exportController = null;
+        }
+      },
+    });
   }
   elements.cameraPreset.addEventListener('change', (event) => change((next) => { next.camera.preset = event.target.value; }));
   elements.projection.addEventListener('change', (event) => change((next) => { next.camera.projection = event.target.value; }));

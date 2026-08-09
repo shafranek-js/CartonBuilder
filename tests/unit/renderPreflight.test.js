@@ -77,4 +77,22 @@ describe('runRenderExportPreflight', () => {
     expect(result.status).toBe('warning');
     expect(result.issues).toContainEqual(expect.objectContaining({ code: 'hdri-glb', severity: 'warning' }));
   });
+
+  it('blocks every closed export when geometry diagnostics report an intersection', () => {
+    const diagnostics = {
+      maxTextureSize: 4096,
+      maxRenderbufferSize: 4096,
+      geometry: { unexpectedIntersections: 1, templateId: 'ste', invalidElement: 'top-tuck' },
+    };
+    for (const kind of ['image', 'sequence', 'glb']) {
+      const result = runRenderExportPreflight({
+        kind,
+        format: kind === 'image' ? 'png' : kind === 'glb' ? 'glb' : 'png',
+        diagnostics,
+        rendererAvailable: true,
+      });
+      expect(result.status).toBe('blocked');
+      expect(result.issues).toContainEqual(expect.objectContaining({ code: 'invalid-geometry', severity: 'error' }));
+    }
+  });
 });

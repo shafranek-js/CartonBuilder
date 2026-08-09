@@ -1,6 +1,8 @@
 import {
   BufferGeometry,
   Float32BufferAttribute,
+  ShapeUtils,
+  Vector2,
   Vector3,
 } from 'three';
 import { sanitizeBoardAppearance } from './BoardAppearance.js';
@@ -54,6 +56,70 @@ function insetPerimeter(perimeter, width, height, inset) {
   return perimeter.map(([x, y]) => [x * xScale, y * yScale]);
 }
 
+function createPolygonSolidGeometry(panel, bounds, thicknessMm) {
+  const points = panel.polygon;
+  const centerX = panel.x + panel.width / 2;
+  const centerY = panel.y + panel.height / 2;
+  const local = points.map(({ x, y }) => new Vector2(x - centerX, centerY - y));
+  const triangles = ShapeUtils.triangulateShape(local, []);
+  const halfThickness = Math.max(0.005, thicknessMm / 2);
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  const groups = [];
+  const addVertex = (position, normal, uv = [0, 0]) => {
+    const index = positions.length / 3;
+    positions.push(...position); normals.push(...normal); uvs.push(...uv); return index;
+  };
+  const front = local.map(({ x, y }, index) => addVertex(
+    [x, y, halfThickness], [0, 0, 1], [
+      (points[index].x - bounds.minX) / bounds.width,
+      1 - (points[index].y - bounds.minY) / bounds.height,
+    ],
+  ));
+  const frontStart = indices.length;
+  for (const [a, b, c] of triangles) indices.push(front[a], front[b], front[c]);
+  groups.push({ start: frontStart, count: indices.length - frontStart, materialIndex: 0 });
+  const back = local.map(({ x, y }) => addVertex([x, y, -halfThickness], [0, 0, -1]));
+  const backStart = indices.length;
+  for (const [a, b, c] of triangles) indices.push(back[c], back[b], back[a]);
+  groups.push({ start: backStart, count: indices.length - backStart, materialIndex: 1 });
+  const sideStart = indices.length;
+  for (let index = 0; index < local.length; index += 1) {
+    const next = (index + 1) % local.length;
+    const { x: ax, y: ay } = local[index]; const { x: bx, y: by } = local[next];
+    const edge = new Vector3(bx - ax, by - ay, 0);
+    // The local Y axis is flipped from the dieline's screen coordinates. The
+    // outward side normal therefore follows edge x depth (not its inverse).
+    const normal = new Vector3(-edge.y, edge.x, 0).normalize().toArray();
+    const inwardNormal = normal.map((value) => -value);
+    indices.push(
+      addVertex([ax, ay, halfThickness], normal),
+      addVertex([bx, by, halfThickness], normal),
+      addVertex([bx, by, -halfThickness], normal),
+      addVertex([ax, ay, halfThickness], normal),
+      addVertex([bx, by, -halfThickness], normal),
+      addVertex([ax, ay, -halfThickness], normal),
+    );
+    const inwardA = addVertex([ax, ay, -halfThickness], inwardNormal);
+    const inwardB = addVertex([bx, by, -halfThickness], inwardNormal);
+    const inwardC = addVertex([bx, by, halfThickness], inwardNormal);
+    const inwardD = addVertex([ax, ay, halfThickness], inwardNormal);
+    indices.push(inwardA, inwardB, inwardC, inwardA, inwardC, inwardD);
+  }
+  groups.push({ start: sideStart, count: indices.length - sideStart, materialIndex: 2 });
+  const geometry = new BufferGeometry();
+  geometry.setIndex(indices);
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  for (const group of groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+  geometry.computeBoundingSphere();
+  geometry.computeBoundingBox();
+  return geometry;
+}
+
 /**
  * Creates a render-only thin solid. The exterior cap is the only surface
  * receiving artwork UVs; the interior and side faces intentionally use
@@ -61,6 +127,9 @@ function insetPerimeter(perimeter, width, height, inset) {
  */
 export function createPanelSolidGeometry(panel, bounds, boardAppearance = null) {
   const appearance = sanitizeBoardAppearance(boardAppearance, panel);
+  if (Array.isArray(panel.polygon) && panel.polygon.length >= 3) {
+    return createPolygonSolidGeometry(panel, bounds, appearance.thicknessMm);
+  }
   const panelMin = Math.min(Number(panel.width) || 0, Number(panel.height) || 0);
   const effectiveBevel = Math.min(
     appearance.bevelRadiusMm,
@@ -129,11 +198,17 @@ export function createPanelSolidGeometry(panel, bounds, boardAppearance = null) 
     );
     const normalVector = edge.clone().cross(depth).normalize();
     const normal = normalVector.toArray();
+    const inwardNormal = normalVector.clone().negate().toArray();
     const a = addVertex([current[0], current[1], halfThickness], normal, [0, 0]);
     const b = addVertex([following[0], following[1], halfThickness], normal, [0, 0]);
     const c = addVertex([innerFollowing[0], innerFollowing[1], -halfThickness], normal, [0, 0]);
     const d = addVertex([innerCurrent[0], innerCurrent[1], -halfThickness], normal, [0, 0]);
     indices.push(a, b, c, a, c, d);
+    const inwardA = addVertex([innerCurrent[0], innerCurrent[1], -halfThickness], inwardNormal, [0, 0]);
+    const inwardB = addVertex([innerFollowing[0], innerFollowing[1], -halfThickness], inwardNormal, [0, 0]);
+    const inwardC = addVertex([following[0], following[1], halfThickness], inwardNormal, [0, 0]);
+    const inwardD = addVertex([current[0], current[1], halfThickness], inwardNormal, [0, 0]);
+    indices.push(inwardA, inwardB, inwardC, inwardA, inwardC, inwardD);
   }
   addGroup(sideStart, indices.length - sideStart, 2);
 

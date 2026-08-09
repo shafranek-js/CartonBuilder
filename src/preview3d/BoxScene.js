@@ -55,6 +55,7 @@ import {
 } from './panelGeometry.js';
 import { disposeObject3D } from './disposeScene.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
+import { validateConstructionCollision } from './geometryCollision.js';
 import { createPanelSolidGeometry } from '../render/panelSolidGeometry.js';
 import {
   cameraHeadingElevation,
@@ -372,11 +373,16 @@ function makeExteriorMaterial(preset, texture, materialMaps = null) {
   });
 }
 
-function makeInteriorMaterial(preset, color = '#f4f2ec') {
+export function getInteriorMaterialSide(geometryMode = 'flat') {
+  return geometryMode === 'solid' ? FrontSide : BackSide;
+}
+
+function makeInteriorMaterial(preset, color = '#f4f2ec', geometryMode = 'flat') {
+  const side = getInteriorMaterialSide(geometryMode);
   if (preset === 'technical') {
     return new MeshBasicMaterial({
-      color: 0xffffff,
-      side: BackSide,
+      color,
+      side,
       toneMapped: false,
     });
   }
@@ -385,7 +391,7 @@ function makeInteriorMaterial(preset, color = '#f4f2ec') {
     : MeshStandardMaterial;
   return new Material({
     color,
-    side: BackSide,
+    side,
     roughness: preset === 'gloss' ? 0.72 : 0.95,
     metalness: 0,
   });
@@ -457,6 +463,7 @@ export class BoxScene {
     this.renderCallback = null;
     this.disposed = false;
     this.foldProgress = foldProgress;
+    this.collisionDiagnosticsCache = null;
     this.cameraProjection = CAMERA_PROJECTIONS.has(cameraProjection)
       ? cameraProjection
       : 'perspective';
@@ -789,6 +796,7 @@ export class BoxScene {
       pivot: null,
       axis: null,
       targetAngle: 0,
+      phase: Array.isArray(node.panel.phase) ? [...node.panel.phase] : [0, 1],
     });
     return frame;
   }
@@ -799,7 +807,11 @@ export class BoxScene {
     const previousEdge = this.edgeMaterial;
     this.materialProfile = preset;
     this.exteriorMaterial = makeExteriorMaterial(preset, this.texture, this.materialMaps);
-    this.interiorMaterial = makeInteriorMaterial(preset, this.boardAppearance.interiorColor);
+    this.interiorMaterial = makeInteriorMaterial(
+      preset,
+      this.boardAppearance.interiorColor,
+      this.geometryMode,
+    );
     this.edgeMaterial = new MeshStandardMaterial({
       color: this.boardAppearance.edgeColor,
       roughness: preset === 'gloss' ? 0.72 : 0.92,
@@ -835,11 +847,16 @@ export class BoxScene {
 
   applyFold(progress, { render = true } = {}) {
     this.foldProgress = Math.min(1, Math.max(0, Number(progress) || 0));
-    for (const entry of this.panelObjects.values()) {
+    for (const [id, entry] of this.panelObjects) {
       if (!entry.pivot) continue;
+      const node = this.foldGraph?.nodes?.get(id);
+      const phase = node?.panel?.phase || entry.phase || [0, 1];
+      const start = Math.min(1, Math.max(0, Number(phase[0]) || 0));
+      const end = Math.max(start + 1e-6, Math.min(1, Number(phase[1]) || 1));
+      const stagedProgress = Math.min(1, Math.max(0, (this.foldProgress - start) / (end - start)));
       entry.pivot.quaternion.setFromAxisAngle(
         entry.axis,
-        entry.targetAngle * this.foldProgress,
+        entry.targetAngle * stagedProgress,
       );
     }
     this.boxRoot.updateMatrixWorld(true);
@@ -2010,6 +2027,15 @@ export class BoxScene {
       foldProgress: this.foldProgress,
       geometryMode: this.geometryMode,
       thicknessMm: this.boardAppearance.thicknessMm,
+      materials: {
+        interiorSide: this.interiorMaterial?.side ?? null,
+        interiorColor: this.interiorMaterial?.color
+          ? `#${this.interiorMaterial.color.getHexString()}`
+          : null,
+        edgeColor: this.edgeMaterial?.color
+          ? `#${this.edgeMaterial.color.getHexString()}`
+          : null,
+      },
       geometry: this.getGeometryDiagnostics(),
       environmentMap: {
         ...this.environmentDiagnostics,
@@ -2033,12 +2059,21 @@ export class BoxScene {
       this.boxRoot.updateMatrixWorld(true);
       bounds.setFromObject(this.boxRoot);
     }
-    // The fold solver shares crease surfaces by construction. AABB overlap is
-    // intentionally not used here because it reports false positives for
-    // rotated panels; exact SAT/mesh collision remains a separate Wave 8B
-    // feature. The runtime diagnostic therefore reports solver-confirmed
-    // intersections only.
-    const intersections = 0;
+    const elements = this.boxModel.getElements?.() || this.boxModel.getPanels();
+    const construction = this.boxModel.construction || { templateId: 'legacy-six-panel', templateVersion: 1, parameters: {} };
+    const collisionKey = `${construction.templateId}:${this.foldProgress.toFixed(4)}:${this.boardAppearance.thicknessMm.toFixed(4)}`;
+    const validation = construction.templateId === 'legacy-six-panel'
+      ? { valid: true, allowedIntersections: 0, unexpectedIntersections: 0, minimumClearanceMm: 0 }
+      : this.collisionDiagnosticsCache?.key === collisionKey
+        ? this.collisionDiagnosticsCache.value
+        : (() => {
+            const value = validateConstructionCollision(this.boxModel, {
+              progress: this.foldProgress,
+              caliperMm: this.boardAppearance.thicknessMm,
+            });
+            this.collisionDiagnosticsCache = { key: collisionKey, value };
+            return value;
+          })();
     const panelsMin = Math.min(...this.boxModel.getPanels().map((panel) => Math.min(panel.width, panel.height)));
     const effectiveCaliperMm = this.geometryMode === 'solid' ? this.boardAppearance.thicknessMm : 0;
     const effectiveBevelMm = this.geometryMode === 'solid'
@@ -2053,8 +2088,20 @@ export class BoxScene {
       effectiveCaliperMm,
       requestedBevelMm: this.boardAppearance.bevelRadiusMm,
       effectiveBevelMm,
-      maxHingeGapMm: 0,
-      intersections,
+      maxHingeGapMm: validation.valid ? 0 : Math.max(0.05, Number(validation.minimumClearanceMm) || 0),
+      intersections: validation.unexpectedIntersections || 0,
+      templateId: construction.templateId,
+      templateVersion: construction.templateVersion || 1,
+      elementCount: elements.length,
+      assemblyStage: construction.templateId === 'legacy-six-panel'
+        ? null
+        : this.foldProgress >= 1 ? 'closed' : this.foldProgress >= 0.5 ? 'half' : 'open',
+      minimumClearanceMm: Number(validation.minimumClearanceMm) || Number(construction.parameters?.clearanceMm ?? (this.boardAppearance.thicknessMm * 2)) || 0,
+      allowedIntersections: validation.allowedIntersections || 0,
+      unexpectedIntersections: validation.unexpectedIntersections || 0,
+      invalidElement: validation.invalidElement || null,
+      invalidHinge: validation.invalidHinge || null,
+      collisionPairs: validation.pairs || [],
       bounds: {
         min: bounds.isEmpty() ? null : bounds.min.toArray(),
         max: bounds.isEmpty() ? null : bounds.max.toArray(),

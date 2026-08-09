@@ -18,6 +18,7 @@ import { createEditMenu } from './ui/EditMenu.js';
 import { createViewMenu } from './ui/ViewMenu.js';
 import { createContactsMenu } from './ui/ContactsMenu.js';
 import { createPanelDock } from './ui/PanelDock.js';
+import { createOperationProgress } from './ui/OperationProgress.js';
 import { applyTheme, getSavedTheme } from './ui/ThemeManager.js';
 import { initSectionStatePersistence } from './ui/SectionStateManager.js';
 import { initSliderSteppers } from './ui/SliderStepper.js';
@@ -45,14 +46,16 @@ const fileMenuPopover = document.getElementById('fileMenuPopover');
 const projectFileInput = document.getElementById('projectFileInput');
 
 const handleOpenProject = () => {
+  if (operationProgress?.isBusy?.()) return;
   const input = document.getElementById('projectFileInput');
   if (input) input.click();
 };
 
 const handleSaveProject = () => {
   if (artworkApp?.saveProjectArchive) {
-    artworkApp.saveProjectArchive();
+    return artworkApp.saveProjectArchive();
   }
+  return Promise.resolve({ status: 'failed' });
 };
 
 const handleNewProject = async () => {
@@ -91,10 +94,8 @@ const handleNewProject = async () => {
   const onSave = async () => {
     cleanup();
     try {
-      if (artworkApp?.saveProjectArchive) {
-        await artworkApp.saveProjectArchive();
-      }
-      await resetAndReload();
+      const result = await handleSaveProject();
+      if (result?.status === 'succeeded') await resetAndReload();
     } catch (err) {
       console.error('Save failed:', err);
     }
@@ -204,6 +205,8 @@ if (viewMenuTriggerBtn && viewMenuPopover) {
     onOverprintToggle: async (next) => artworkApp?.setOverprintEnabled?.(next),
     isOverprintAvailable: () => artworkApp?.isOverprintAvailable?.() ?? false,
     onSeparations: () => artworkApp?.openSeparations?.(),
+    onPrepressOverlayToggle: (name, visible) => artworkApp?.setPrepressOverlay?.(name, visible),
+    getPrepressOverlayState: () => artworkApp?.getPrepressOverlayState?.() || {},
     onOpen: () => {
       fileMenu?.togglePopover(false);
       editMenu?.togglePopover(false);
@@ -230,19 +233,19 @@ if (contactsMenuTriggerBtn && contactsMenuPopover) {
 window.addEventListener('keydown', async (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    handleSaveProject();
+    if (!operationProgress?.isBusy?.()) handleSaveProject();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
     e.preventDefault();
-    handleOpenProject();
+    if (!operationProgress?.isBusy?.()) handleOpenProject();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
     e.preventDefault();
-    handleNewProject();
+    if (!operationProgress?.isBusy?.()) handleNewProject();
   }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
     e.preventDefault();
-    handlePlaceArtwork();
+    if (!operationProgress?.isBusy?.()) handlePlaceArtwork();
   }
 });
 
@@ -256,6 +259,24 @@ function showSettingsToast(message) {
   toast.classList.add('visible');
   window.setTimeout(() => toast.classList.remove('visible'), 1800);
 }
+
+const operationProgress = createOperationProgress({
+  root: document.getElementById('operationProgress'),
+  label: document.getElementById('operationProgressLabel'),
+  detail: document.getElementById('operationProgressDetail'),
+  progress: document.getElementById('operationProgressBar'),
+  cancelButton: document.getElementById('operationProgressCancel'),
+  announcer: document.getElementById('announcer'),
+  showToast: showSettingsToast,
+  onBusyChange: (busy, { lockMode } = {}) => {
+    fileMenu?.setBusy?.(busy);
+    const appContent = document.querySelector('.app-content');
+    if (appContent) {
+      appContent.toggleAttribute('aria-busy', busy);
+      appContent.inert = Boolean(busy && lockMode === 'workspace');
+    }
+  },
+});
 
 if (settingsTriggerBtn && settingsPopover) {
   createSettingsModal({
@@ -288,7 +309,6 @@ let currentStep = 'box';
 let artworkApp;
 let preview3dFacade;
 let renderApp;
-let resetArtworkAfterBoxCompletion = false;
 
 function updateStepNavigationStates() {
   const isBoxComplete = model.isComplete;
@@ -344,12 +364,9 @@ function showStep(step) {
 
   if (step === 'artwork') {
     panelDock.openPanels();
-    if (resetArtworkAfterBoxCompletion) {
-      artworkApp?.resetPlacementForNewDimensions();
-      resetArtworkAfterBoxCompletion = false;
-    } else {
-      artworkApp?.fitToScreen();
-    }
+    // Dimension changes preserve artwork transforms and history. Fit only the
+    // editor viewport; never refit or clear the user's artwork placement.
+    artworkApp?.fitToScreen();
     preview3dFacade?.suspend();
     renderApp?.deactivate();
     requestAnimationFrame(() => artworkApp?.render());
@@ -380,7 +397,6 @@ const boxApp = createBoxNetApp({
     showStep('artwork');
   },
   onDimensionReset: () => {
-    resetArtworkAfterBoxCompletion = true;
     preview3dFacade?.resetForProject();
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
@@ -395,6 +411,14 @@ const boxApp = createBoxNetApp({
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
   },
+  onConstructionChange: () => {
+    // Construction changes invalidate all derived polygon/UV/hinge resources.
+    // The active facade/render app will lazily rebuild on its next frame.
+    preview3dFacade?.resetForProject?.();
+    renderApp?.resetForProject?.();
+    updateStepNavigationStates();
+  },
+  hasArtwork: () => Boolean(artworkApp?.artwork?.hasArtwork),
   onChange: () => {
     updateStepNavigationStates();
     artworkApp?.scheduleSave();
@@ -436,6 +460,7 @@ artworkApp = createArtworkApp({
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
   getPreview3dState: () => preview3dFacade?.getState?.() || null,
+  operationProgress,
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
   onArtworkQualityChanged: async ({ kind } = {}) => {
     const refreshes = [];
@@ -457,6 +482,7 @@ preview3dFacade = createLazyPreview3DFacade({
     getArtworks: () => artworkApp.getArtworks(),
     getArtworksJson: () => artworkApp.getArtworksJson(),
     getRenderState: () => renderApp?.getState?.(),
+    getBoardAppearance: () => renderApp?.getBoardAppearance?.(),
     setHtmlExportQuality: (value) => renderApp?.setHtmlExportQuality?.(value),
   }),
 });
@@ -468,7 +494,7 @@ renderApp = createRenderApp({
   initialState: storedRenderSettings?.renderSettings || DEFAULT_RENDER_SETTINGS,
   initialBoardAppearance: storedRenderSettings?.boardAppearance,
   onStateChange: () => {
-    preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
+    preview3dFacade?.setBoardAppearance?.(renderApp?.getBoardAppearance?.());
     writeRenderSettings({
       renderSettings: renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
       boardAppearance: renderApp?.getBoardAppearance?.(),
@@ -477,6 +503,7 @@ renderApp = createRenderApp({
   },
   setArtworkQuality: (...args) => artworkApp?.setArtworkQuality?.(...args),
   updateArtworkFinish: (...args) => artworkApp?.updateArtworkFinish?.(...args),
+  operationProgress,
   onBackToPreview: () => showStep('preview'),
 });
 

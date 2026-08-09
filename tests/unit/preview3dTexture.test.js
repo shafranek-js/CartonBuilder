@@ -177,6 +177,23 @@ describe('3D texture composition', () => {
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
+  it('uses every structural element, including glue and dust/tuck flaps, for the mask', async () => {
+    vi.stubGlobal('OffscreenCanvas', CanvasMock);
+    const bitmap = { close: vi.fn() };
+    const structuralFixture = fixture();
+    const elements = Array.from({ length: 13 }, (_, index) => ({
+      ...structuralFixture.boxModel.getPanels()[0],
+      id: `element-${index}`,
+    }));
+    structuralFixture.boxModel.getElements = vi.fn(() => elements);
+    await composeArtworkTexture({
+      ...structuralFixture,
+      createImageBitmapFn: vi.fn().mockResolvedValue(bitmap),
+    });
+    expect(structuralFixture.boxModel.getElements).toHaveBeenCalled();
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
   it('redraws the baked static layer without touching the closed bitmap', async () => {
     vi.stubGlobal('OffscreenCanvas', CanvasMock);
     const bitmap = { close: vi.fn() };

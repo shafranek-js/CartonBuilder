@@ -107,7 +107,7 @@ test('shows a correctly positioned crop frame and commits it with the active but
     'dimension-icon dim-scrubber height-icon',
     'dimension-icon dim-scrubber depth-icon',
   ]);
-  await expect(page.locator('#boxDimensionsSection .box-dim-title #boxConstrainProportionsBtn')).toHaveCount(1);
+  await expect(page.locator('#boxDimensionsSection #boxConstrainProportionsBtn')).toHaveCount(1);
   const before = await page.evaluate(() => {
     const model = window.cartonBuilderApp.artwork.artwork;
     return {

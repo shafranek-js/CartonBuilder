@@ -15,6 +15,11 @@ The current workflow is:
    packaging finishes, review export preflight/health diagnostics, and export
    PNG/JPG stills, turntables or a self-contained GLB.
 
+Artwork also includes a Prepress panel for production-assist trim/bleed/safe
+overlays, manual allowance review, marks, transient preflight and separate
+Prepress PDF/SVG output. These files are explicitly not PDF/X certified or
+contract colour proofs; 3D geometry and normal Render exports are unchanged.
+
 All artwork processing happens in the browser. The application does not upload
 assets or project data to a server.
 
@@ -88,6 +93,8 @@ after code changes.
 - `src/project/` — IndexedDB autosave and versioned `.carton` ZIP import/export.
 - `src/export/` — SVG, raster preview, preflight checks, and physical-size PDF
   adapters. Heavy PDF code is loaded only when required.
+- `src/prepress/` — schema-safe production dieline derivation, prepress settings,
+  presets and Blocking/Warning/Manual review preflight.
 - `src/preview3d/` — lazy-loaded Three.js fold graph, procedural panel geometry,
   shared artwork texture, cameras, scene presets, picking, and GPU lifecycle.
 - `src/render/` — persisted presentation settings, Render scene descriptor,
@@ -322,8 +329,8 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-current schema v13 project snapshot. Schema v13 adds canonical board
-construction while retaining the unified output kind, turntable options and GLB
+current schema v14 project snapshot. Schema v14 adds canonical board
+construction plus STE/RTE polygon construction elements while retaining the unified output kind, turntable options and GLB
 options, camera framing, vertical correction, global View Preset references and per-artwork preview/render
 quality. It also persists per-layer finish roles and finish parameters. Legacy
 cropped artwork is normalized to the same visual-equivalent
@@ -340,9 +347,9 @@ The existing events are unchanged:
   artwork editors. Render output is an sRGB presentation image, not a CMYK,
   ICC, Pantone, overprint, certified print-proof, or production finish
   separation workflow.
-- There are no flaps, bleed, safe area, trapping, crop
-  marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
-  production validation, collision simulation, or free-angle rotation.
+- STE/RTE flaps and staged structural assembly are supported, but production
+  bleed, safe area, trapping, crop marks, ICC/CMYK conversion, PDF/X output,
+  ECMA/FEFCO certification and manufacturing allowances remain Wave 9.
 - Presentation Render and Studio/Photorealistic Preview share thickness-aware
   solid board geometry with surface-aware hinges, bounded bevel, interior and
   edge materials, settled GTAO/TAA, optional DOF, adaptive quality diagnostics,

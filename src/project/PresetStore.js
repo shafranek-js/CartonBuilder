@@ -92,6 +92,7 @@ export async function savePreset(presetData) {
       depth: Number(depth) || 40,
     },
     netState: presetData.netState || null,
+    construction: presetData.construction || presetData.netState?.construction || null,
     isBuiltIn: false,
     createdAt: presetData.createdAt || new Date().toISOString(),
   };
@@ -131,13 +132,14 @@ export function formatPresetDimensions(dimensions) {
 
 export function exportPresetsJson(presets) {
   const data = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     presets: presets.map((p) => ({
       id: p.id,
       name: p.name,
       dimensions: p.dimensions,
       netState: p.netState || null,
+      construction: p.construction || p.netState?.construction || null,
       createdAt: p.createdAt || new Date().toISOString(),
     })),
   };
@@ -164,6 +166,7 @@ export async function importPresetsFromJson(jsonString) {
         name: item.name,
         dimensions: item.dimensions,
         netState: item.netState || null,
+        construction: item.construction || item.netState?.construction || null,
       });
       count++;
     }

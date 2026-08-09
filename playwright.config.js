@@ -5,12 +5,17 @@ const previewDir = process.env.PLAYWRIGHT_OUT_DIR || 'dist';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // The visual-proof capture is a developer-only workflow that requires an
+  // explicitly supplied video fixture and output directory. It must never
+  // make the release browser matrix depend on a local absolute path.
+  testIgnore: ['**/saveArtifactScreenshots.spec.js'],
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   fullyParallel: false,
   reporter: 'line',
   // Hosted SwiftShader renders are slower than local GPU-backed runs. Keep
   // CI assertions patient without changing the local feedback loop.
   expect: { timeout: process.env.CI ? 30_000 : 5_000 },
+  timeout: process.env.CI ? 180_000 : 30_000,
   use: {
     baseURL: `http://127.0.0.1:${previewPort}`,
     browserName: 'chromium',

@@ -4,11 +4,15 @@ export default defineConfig({
   base: './',
   server: {
     host: '127.0.0.1',
+    watch: {
+      ignored: ['**/dist-*/**', '**/graphify-out/**'],
+    },
   },
   build: {
     target: 'es2022',
   },
   optimizeDeps: {
+    entries: ['index.html'],
     esbuildOptions: {
       target: 'es2022',
     },

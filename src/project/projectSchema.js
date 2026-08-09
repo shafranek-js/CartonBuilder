@@ -9,12 +9,14 @@ import { detectArtworkType, sha256 } from '../artwork/fileValidation.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { sanitizeBoardConstruction } from '../model/BoardConstruction.js';
+import { sanitizeConstruction } from '../model/ConstructionTemplates.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
+import { sanitizePrepressSettings } from '../prepress/prepressState.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 13;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 15;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -301,6 +303,32 @@ MIGRATIONS.set(12, (snapshot) => ({
   },
 }));
 
+// Wave 8B keeps legacy six-panel projects byte-for-byte compatible while
+// making construction explicit. Generated STE/RTE elements are always
+// derived from the canonical dimensions/board/parameters on restore.
+MIGRATIONS.set(13, (snapshot) => {
+  const migrated = { ...snapshot };
+  const dimensions = snapshot.box?.dimensions;
+  const board = sanitizeBoardConstruction(snapshot.box?.board, dimensions);
+  const construction = sanitizeConstruction(snapshot.box?.construction, dimensions, board);
+  migrated.schemaVersion = 14;
+  migrated.box = {
+    ...snapshot.box,
+    board,
+    construction,
+  };
+  return migrated;
+});
+
+MIGRATIONS.set(14, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 15,
+  prepress: sanitizePrepressSettings({
+    mode: 'technical-proof',
+    ...(snapshot.prepress || {}),
+  }),
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -341,9 +369,15 @@ export function migrateProjectSnapshot(input) {
     ...snapshot.box,
     board: sanitizeBoardConstruction(snapshot.box.board, snapshot.box.dimensions),
   };
+  snapshot.box.construction = sanitizeConstruction(
+    snapshot.box.construction,
+    snapshot.box.dimensions,
+    snapshot.box.board,
+  );
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
   snapshot.render = sanitizeRenderSettings(snapshot.render);
+  snapshot.prepress = sanitizePrepressSettings(snapshot.prepress);
   if (Object.hasOwn(snapshot, 'renderAppearance')) {
     snapshot.renderAppearance = sanitizeBoardAppearance(snapshot.renderAppearance);
   }

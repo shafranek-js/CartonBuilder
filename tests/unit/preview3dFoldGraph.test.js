@@ -151,4 +151,24 @@ describe('3D fold graph', () => {
     }
     expect(model.toJSON()).toEqual(before);
   });
+
+  it.each(['ste', 'rte'])('keeps polygon hinges coincident at all fold progress values for %s', (templateId) => {
+    const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, null, { templateId });
+    const graph = buildFoldGraph(model);
+    const localPoint = (panel, point) => [
+      point.x - (panel.x + panel.width / 2),
+      (panel.y + panel.height / 2) - point.y,
+      0,
+    ];
+    for (const progress of [0, 0.5, 1]) {
+      const transforms = computePanelTransforms(graph, progress);
+      for (const node of graph.nodes.values()) {
+        if (!node.parentId || !node.panel.hinge) continue;
+        const parent = model.getElement?.(node.parentId) || model.getPanel(node.parentId);
+        const parentPoint = transformPoint(transforms.get(parent.id), localPoint(parent, node.panel.hinge.parentPoint));
+        const childPoint = transformPoint(transforms.get(node.id), localPoint(node.panel, node.panel.hinge.childPoint));
+        expectSameSegment([parentPoint, childPoint], [parentPoint, parentPoint]);
+      }
+    }
+  });
 });

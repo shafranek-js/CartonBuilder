@@ -57,6 +57,8 @@ README не заменяет runtime specification. Research и roadmap не я�
 | Implemented | [`11. mupdf-overprint-runtime-specification.md`](11.%20mupdf-overprint-runtime-specification.md) | Нормативный контракт custom MuPDF PDF/AI overprint, process/spot plates и single/tiled renderer; Adobe matrix остаётся release gate | maintainer `src/pdf-renderer`, `src/artwork` |
 | Implemented | [`12. hdri-environment-runtime-specification.md`](12.%20hdri-environment-runtime-specification.md) | Нормативный контракт HDR/EXR environment maps, IBL, PMREM и archive v4 | maintainer `src/render`, `src/preview3d`, `src/project` |
 | Implemented | [`13. geometry-fidelity-runtime-specification.md`](13.%20geometry-fidelity-runtime-specification.md) | Нормативный контракт толщины картона, surface-aware hinge и общей solid-геометрии Preview/Render/export | maintainer `src/model`, `src/preview3d`, `src/render`, `src/export` |
+| Implemented | [`14. carton-construction-runtime-specification.md`](14.%20carton-construction-runtime-specification.md) | Нормативный контракт конструкций STE/RTE, клапанов, параметров, staged assembly и polygon export | maintainer `src/model`, `src/ui`, `src/preview3d`, `src/render`, `src/export` |
+| Implemented | [`15. prepress-foundation-runtime-specification.md`](15.%20prepress-foundation-runtime-specification.md) | Производственный assist-dieline, bleed/safe/marks, preflight и отдельные PDF/SVG слои; не PDF/X | maintainer `src/prepress`, `src/artwork`, `src/export` |
 | Historical/Research | [`Техническое задание по внедрению MuPDF.js для PDF-AI Overprint Preview.htm`](Техническое%20задание%20по%20внедрению%20MuPDF.js%20для%20PDF-AI%20Overprint%20Preview.htm) | Входное ТЗ: внедрение MuPDF.js для PDF/AI Overprint Preview | maintainer `src/pdf-renderer` |
 | Implemented | [`../handoff.md`](../handoff.md) | Точка передачи текущего состояния и backlog документации | текущий maintainer; обновлять при handoff |
 
@@ -134,10 +136,16 @@ Canonical for: <scope, or "not canonical">
 - Render preflight, Floor Reflection strength/softness/fade и PNG/JPG export UI;
 - DPR 1/2, Chrome/Edge matrix и stress-test evidence.
 
-Wave 8A geometry fidelity is the current release gate: canonical board caliper,
-surface-aware solid hinges, Preview/Render/export parity, schema v13 migration,
-unit and Chromium/Edge geometry checks, production build and `graphify update .`.
-Flaps, lock tabs and production crease allowance remain Wave 8B/9 scope.
+Wave 8B construction fidelity is the current release gate: canonical board
+caliper, STE/RTE polygon elements, staged flap assembly, Preview/Render/export
+parity, schema v14 migration, unit and Chromium/Edge construction checks,
+production build and `graphify update .`. Production crease allowance remains
+Wave 9 scope.
+
+Wave 9A prepress foundations are implemented: schema v15 settings, derived
+production trim/bleed/safe geometry, marks/overlays, transient preflight and
+separate non-PDF/X Prepress PDF/SVG. Wave 9B remains the gate for ICC, PDF/X,
+trapping and certification.
 
 Этот список является release-проверкой фактов, а не основанием считать
 непроверенную функцию Implemented.

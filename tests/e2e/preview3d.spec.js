@@ -251,6 +251,71 @@ test('shows the Render frame and format-specific export summaries in Preview', a
   expect(frame.viewportHeight).toBeLessThanOrEqual(frame.overlayHeight);
 });
 
+test('keeps opaque interior and edge appearance synchronized with Preview', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openPreview(page);
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+
+  await page.evaluate(() => {
+    for (const [id, value] of [
+      ['renderBoardInteriorColor', '#ff00ff'],
+      ['renderBoardEdgeColor', '#00ffff'],
+    ]) {
+      const input = document.getElementById(id);
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo()),
+  ).toMatchObject({
+    geometryMode: 'solid',
+    thicknessMm: 0.35,
+    materials: {
+      interiorSide: 0,
+      interiorColor: '#ff00ff',
+      edgeColor: '#00ffff',
+    },
+  });
+
+  await page.evaluate(() => window.cartonBuilderApp.render.setBoardCaliper(0.8));
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo()),
+  ).toMatchObject({
+    thicknessMm: 0.8,
+    materials: { interiorColor: '#ff00ff', edgeColor: '#00ffff' },
+  });
+
+  await page.locator('#scenePreset').selectOption('technical');
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo()),
+  ).toMatchObject({
+    geometryMode: 'flat',
+    materials: { interiorSide: 1, interiorColor: '#ff00ff', edgeColor: '#00ffff' },
+  });
+  await page.locator('#scenePreset').selectOption('studio');
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo()),
+  ).toMatchObject({
+    geometryMode: 'solid',
+    materials: { interiorSide: 0, interiorColor: '#ff00ff', edgeColor: '#00ffff' },
+  });
+
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.preview3d.getResourceInfo()),
+  ).toMatchObject({
+    geometryMode: 'solid',
+    thicknessMm: 0.8,
+    materials: { interiorSide: 0, interiorColor: '#ff00ff', edgeColor: '#00ffff' },
+  });
+});
+
 test('updates the texture after repeated artwork replacement without resource growth', async ({ page }) => {
   await page.goto('/');
   await openPreview(page);
@@ -327,15 +392,31 @@ test.describe('high-DPI 3D rendering', () => {
     expect(sizes.bufferWidth).toBe(sizes.cssWidth * 2);
     expect(sizes.bufferHeight).toBe(sizes.cssHeight * 2);
     await expect(page.getByRole('button', { name: 'Reset View' })).toBeVisible();
-    await expect(page.locator('#foldProgress')).toBeVisible();
+    // The range is wrapped by the responsive stepper; assert the public control
+    // wrapper rather than the native input, which can have zero layout width
+    // at the narrow 3D sidebar breakpoint.
+    await expect(page.locator('#foldProgress').locator('..')).toBeVisible();
   });
 });
 
 test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.goto('/');
   await page.setViewportSize({ width: 1440, height: 900 });
   await openPreview(page);
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+  await page.locator('#foldProgress').fill('0.5');
+  await page.evaluate(() => {
+    for (const [id, value] of [
+      ['renderBoardInteriorColor', '#ff00ff'],
+      ['renderBoardEdgeColor', '#00ffff'],
+      ['backgroundColor', '#101010'],
+    ]) {
+      const input = document.getElementById(id);
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
 
   await page.evaluate(() => {
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
@@ -359,6 +440,9 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
   expect(content).toContain('id="modelsPanel"');
   expect(content).toContain('id="settingsPanel"');
   expect(content).toContain('id="exportStandalone"');
+  expect(content).toContain('"interiorColor":"#ff00ff"');
+  expect(content).toContain('"edgeColor":"#00ffff"');
+  expect(content).toContain('side: THREE.FrontSide');
   expect(content).not.toContain('cdn.jsdelivr.net');
 
   const viewerPage = await page.context().newPage();
@@ -385,13 +469,27 @@ test('exports a self-contained interactive 3D HTML file', async ({ page }) => {
     }
     return colored > 400;
   })).toBe(true);
+  await expect.poll(() => viewerPage.evaluate(() => {
+    const canvas = document.getElementById('viewer');
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    const context = probe.getContext('2d');
+    context.drawImage(canvas, 0, 0);
+    const pixels = context.getImageData(0, 0, probe.width, probe.height).data;
+    let magenta = 0;
+    for (let index = 0; index < pixels.length; index += 16) {
+      if (pixels[index] > 150 && pixels[index + 1] < 130 && pixels[index + 2] > 150) magenta += 1;
+    }
+    return magenta;
+  })).toBeGreaterThan(40);
   expect(errors).toEqual([]);
   const viewerState = await viewerPage.evaluate(() => ({
     bgValue: document.getElementById('bgColor').value,
     bgPicker: Boolean(document.getElementById('bgColor')),
   }));
   expect(viewerState.bgPicker).toBe(true);
-  expect(viewerState.bgValue).toBe('#e8e8e8');
+  expect(viewerState.bgValue).toBe('#101010');
   await viewerPage.getByRole('button', { name: 'Models', exact: true }).click();
   await expect(viewerPage.locator('#modelsPanel')).toBeVisible();
   await viewerPage.locator('[data-model-id="carton-glb"]').click();

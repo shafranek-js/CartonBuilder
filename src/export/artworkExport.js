@@ -21,11 +21,30 @@ import {
 import { AppError } from '../errors.js';
 import { getDielineSegments } from '../model/dieline.js';
 import { rasterizeArtwork, resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
+import { buildProductionDieline } from '../prepress/productionDieline.js';
 
 const POINTS_PER_MM = 72 / 25.4;
 const EXPORT_DPI = 300;
 const MAX_RASTER_EDGE = 32767;
 const MAX_RASTER_PIXELS = 64_000_000;
+
+function panelPoints(panel) {
+  return Array.isArray(panel.polygon) && panel.polygon.length >= 3
+    ? panel.polygon
+    : [
+        { x: panel.x, y: panel.y },
+        { x: panel.x + panel.width, y: panel.y },
+        { x: panel.x + panel.width, y: panel.y + panel.height },
+        { x: panel.x, y: panel.y + panel.height },
+      ];
+}
+
+function tracePanelPath(context, panel) {
+  const points = panelPoints(panel);
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+}
 
 function createCanvas(width, height) {
   if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height);
@@ -78,9 +97,7 @@ export async function createPreviewBlob({
   context.scale(pixelsPerMm, pixelsPerMm);
   context.translate(-bounds.minX, -bounds.minY);
   context.beginPath();
-  for (const panel of boxModel.getPanels()) {
-    context.rect(panel.x, panel.y, panel.width, panel.height);
-  }
+  for (const panel of boxModel.getElements?.() || boxModel.getPanels()) tracePanelPath(context, panel);
   context.clip();
 
   const bitmaps = [];
@@ -157,15 +174,132 @@ export async function createPreviewBlob({
 
 function addPanelClip(page, boxModel, bounds) {
   page.pushOperators(pushGraphicsState());
-  for (const panel of boxModel.getPanels()) {
-    page.pushOperators(rectangle(
-      (panel.x - bounds.minX) * POINTS_PER_MM,
-      (bounds.maxY - panel.y - panel.height) * POINTS_PER_MM,
-      panel.width * POINTS_PER_MM,
-      panel.height * POINTS_PER_MM,
+  for (const panel of boxModel.getElements?.() || boxModel.getPanels()) {
+    const points = panelPoints(panel);
+    page.pushOperators(moveTo(
+      (points[0].x - bounds.minX) * POINTS_PER_MM,
+      (bounds.maxY - points[0].y) * POINTS_PER_MM,
+    ));
+    for (const point of points.slice(1)) {
+      page.pushOperators(lineTo(
+        (point.x - bounds.minX) * POINTS_PER_MM,
+        (bounds.maxY - point.y) * POINTS_PER_MM,
+      ));
+    }
+    page.pushOperators(lineTo(
+      (points[0].x - bounds.minX) * POINTS_PER_MM,
+      (bounds.maxY - points[0].y) * POINTS_PER_MM,
     ));
   }
   page.pushOperators(clip(), endPath());
+}
+
+function addPolygonClip(page, polygons, bounds) {
+  page.pushOperators(pushGraphicsState());
+  for (const polygon of polygons || []) {
+    if (!Array.isArray(polygon) || polygon.length < 3) continue;
+    page.pushOperators(moveTo(
+      (polygon[0].x - bounds.minX) * POINTS_PER_MM,
+      (bounds.maxY - polygon[0].y) * POINTS_PER_MM,
+    ));
+    for (const point of polygon.slice(1)) {
+      page.pushOperators(lineTo(
+        (point.x - bounds.minX) * POINTS_PER_MM,
+        (bounds.maxY - point.y) * POINTS_PER_MM,
+      ));
+    }
+    page.pushOperators(lineTo(
+      (polygon[0].x - bounds.minX) * POINTS_PER_MM,
+      (bounds.maxY - polygon[0].y) * POINTS_PER_MM,
+    ));
+  }
+  page.pushOperators(clip(), endPath());
+}
+
+function setPageBox(page, name, box, origin) {
+  const context = page.doc.context;
+  page.node.set(PDFName.of(name), context.obj([
+    (box.minX - origin.minX) * POINTS_PER_MM,
+    (box.minY - origin.minY) * POINTS_PER_MM,
+    (box.maxX - origin.minX) * POINTS_PER_MM,
+    (box.maxY - origin.minY) * POINTS_PER_MM,
+  ]));
+}
+
+function addPrepressLayer(pdfDocument, page, name, segments, bounds, {
+  color = [0, 0, 0], dash = null, separation = null, separationKind = null,
+  strokePt = 0.25, overprint = false,
+} = {}) {
+  const context = pdfDocument.context;
+  const ocgRef = registerOptionalContentGroup(pdfDocument, page, name, { on: !['Bleed', 'Safe'].includes(name) });
+  const definition = separation
+    ? (() => {
+        const tintFunctionRef = context.register(context.obj({
+          FunctionType: 2,
+          Domain: [0, 1],
+          C0: [0, 0, 0, 0],
+          C1: (separationKind || separation) === 'crease' ? [1, 0, 0, 0] : [0, 1, 0, 0],
+          N: 1,
+        }));
+        const cs = context.obj([PDFName.of('Separation'), PDFName.of(separation), PDFName.of('DeviceCMYK'), tintFunctionRef]);
+        const resourceName = `${name}CS`;
+        ensureResourceDictionary(page, 'ColorSpace').set(PDFName.of(resourceName), cs);
+        return resourceName;
+      })()
+    : null;
+  const operators = [
+    pushGraphicsState(),
+    PDFOperator.of('BDC', [PDFName.of('OC'), PDFName.of(name)]),
+    setLineWidth(strokePt * POINTS_PER_MM),
+  ];
+  if (definition) operators.push(PDFOperator.of('CS', [PDFName.of(definition)]), PDFOperator.of('SCN', [PDFNumber.of(1)]));
+  else operators.push(setStrokingRgbColor(...color));
+  if (separation && overprint) {
+    operators.push(PDFOperator.of('gs', [PDFName.of(ensureOverprintExtGState(page))]));
+  }
+  if (dash) operators.push(setDashPattern(dash.map((value) => value * POINTS_PER_MM), 0));
+  page.pushOperators(...operators);
+  for (const segment of segments || []) {
+    page.pushOperators(
+      moveTo((segment.start.x - bounds.minX) * POINTS_PER_MM, (bounds.maxY - segment.start.y) * POINTS_PER_MM),
+      lineTo((segment.end.x - bounds.minX) * POINTS_PER_MM, (bounds.maxY - segment.end.y) * POINTS_PER_MM),
+      stroke(),
+    );
+  }
+  page.pushOperators(PDFOperator.of('EMC'), popGraphicsState());
+}
+
+function registerOptionalContentGroup(pdfDocument, page, name, { on = true } = {}) {
+  const context = pdfDocument.context;
+  const properties = ensureResourceDictionary(page, 'Properties');
+  if (properties.has(PDFName.of(name))) return properties.get(PDFName.of(name));
+  const ocgRef = context.register(context.obj({ Type: 'OCG', Name: name }));
+  properties.set(PDFName.of(name), ocgRef);
+  const existing = pdfDocument.catalog.lookupMaybe(PDFName.of('OCProperties'), PDFDict);
+  const ocProperties = existing || context.obj({ OCGs: [], D: { Order: [], ON: [] } });
+  if (!existing) pdfDocument.catalog.set(PDFName.of('OCProperties'), ocProperties);
+  const ocgs = ocProperties.lookup(PDFName.of('OCGs'));
+  const defaultConfig = ocProperties.lookup(PDFName.of('D'), PDFDict);
+  const order = defaultConfig.lookup(PDFName.of('Order'));
+  const onEntries = defaultConfig.lookup(PDFName.of('ON'));
+  ocgs.push(ocgRef);
+  order.push(ocgRef);
+  if (on) onEntries.push(ocgRef);
+  return ocgRef;
+}
+
+function ensureOverprintExtGState(page) {
+  const resources = ensureResourceDictionary(page, 'ExtGState');
+  const name = 'GSOverprint';
+  if (!resources.has(PDFName.of(name))) {
+    resources.set(PDFName.of(name), page.doc.context.register(page.doc.context.obj({
+      Type: 'ExtGState',
+      OP: true,
+      op: true,
+      OPM: 1,
+    })));
+  }
+  return name;
 }
 
 function rotatedOrigin(centerX, centerY, width, height, angleDegrees) {
@@ -303,6 +437,10 @@ export async function createPdfExport({
     .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && entry.originalBlob);
   if (!entries.length) throw new AppError('artworkRequired');
   const pdfDocument = await PDFDocument.create();
+  if (boxModel.construction?.templateId && boxModel.construction.templateId !== 'legacy-six-panel') {
+    pdfDocument.setSubject('Structural mockup — production allowances not applied.');
+    pdfDocument.setKeywords(['CartonBuilder', 'structural mockup', 'production allowances not applied']);
+  }
   const bounds = boxModel.getBounds();
   const pageWidth = bounds.width * POINTS_PER_MM;
   const pageHeight = bounds.height * POINTS_PER_MM;
@@ -351,6 +489,115 @@ export async function createPdfExport({
   page.pushOperators(popGraphicsState());
   addDielineLayer(pdfDocument, page, boxModel, bounds);
 
+  const bytes = await pdfDocument.save();
+  return new Blob([bytes], { type: 'application/pdf' });
+}
+
+function polygonSegments(polygons) {
+  return (polygons || []).flatMap((polygon) => {
+    if (!Array.isArray(polygon) || polygon.length < 3) return [];
+    return polygon.map((start, index) => ({ start, end: polygon[(index + 1) % polygon.length] }));
+  });
+}
+
+function cropMarkSegments(bounds, slugMm) {
+  const size = Math.max(2, slugMm * 0.45);
+  const gap = Math.max(1, slugMm * 0.12);
+  return [
+    [{ x: bounds.minX - gap - size, y: bounds.minY }, { x: bounds.minX - gap, y: bounds.minY }],
+    [{ x: bounds.minX, y: bounds.minY - gap - size }, { x: bounds.minX, y: bounds.minY - gap }],
+    [{ x: bounds.maxX + gap, y: bounds.minY }, { x: bounds.maxX + gap + size, y: bounds.minY }],
+    [{ x: bounds.maxX, y: bounds.minY - gap - size }, { x: bounds.maxX, y: bounds.minY - gap }],
+    [{ x: bounds.minX - gap - size, y: bounds.maxY }, { x: bounds.minX - gap, y: bounds.maxY }],
+    [{ x: bounds.minX, y: bounds.maxY + gap }, { x: bounds.minX, y: bounds.maxY + gap + size }],
+    [{ x: bounds.maxX + gap, y: bounds.maxY }, { x: bounds.maxX + gap + size, y: bounds.maxY }],
+    [{ x: bounds.maxX, y: bounds.maxY + gap }, { x: bounds.maxX, y: bounds.maxY + gap + size }],
+  ].map(([start, end]) => ({ start, end }));
+}
+
+/**
+ * Production-assist PDF. It is deliberately separate from createPdfExport so
+ * Technical Proof remains byte/appearance compatible with existing projects.
+ */
+export async function createPrepressPdfExport({
+  boxModel,
+  artworks,
+  settings,
+  preflight = null,
+}) {
+  const entries = (artworks || [])
+    .filter((entry) => entry?.model?.hasArtwork && entry.visible !== false && entry.originalBlob);
+  if (!entries.length) throw new AppError('artworkRequired');
+  const production = buildProductionDieline(boxModel, settings);
+  if (!production.diagnostics.valid) throw new AppError('prepressInvalidGeometry');
+  if (preflight?.blocking?.length) throw new AppError('prepressBlocked');
+  const pdfDocument = await PDFDocument.create();
+  pdfDocument.setSubject('Production-assist dieline — not PDF/X certified.');
+  pdfDocument.setKeywords(['CartonBuilder', 'prepress', 'production assist', 'not PDF/X certified']);
+  const media = production.mediaBounds;
+  const trim = production.trimBounds || production.bounds;
+  const bleed = production.bleedBounds || trim;
+  const page = pdfDocument.addPage([media.width * POINTS_PER_MM, media.height * POINTS_PER_MM]);
+  setPageBox(page, 'TrimBox', trim, media);
+  setPageBox(page, 'BleedBox', bleed, media);
+  setPageBox(page, 'MediaBox', media, media);
+
+  addPolygonClip(page, production.bleedPolygons, media);
+  registerOptionalContentGroup(pdfDocument, page, 'Artwork');
+  page.pushOperators(PDFOperator.of('BDC', [PDFName.of('OC'), PDFName.of('Artwork')]));
+  for (const entry of entries) {
+    const artwork = entry.model;
+    const centerX = (artwork.centerXmm - media.minX) * POINTS_PER_MM;
+    const centerY = (media.maxY - artwork.centerYmm) * POINTS_PER_MM;
+    const width = artwork.unrotatedWidthMm * POINTS_PER_MM;
+    const height = artwork.unrotatedHeightMm * POINTS_PER_MM;
+    const pdfRotation = -artwork.rotation;
+    const origin = rotatedOrigin(centerX, centerY, width, height, pdfRotation);
+    page.pushOperators(pushGraphicsState());
+    addArtworkCropClip(page, artwork, media);
+    if (artwork.source.mimeType === 'application/pdf') {
+      const [embeddedPage] = await pdfDocument.embedPdf(await entry.originalBlob.arrayBuffer(), [artwork.source.pageIndex || 0]);
+      page.drawPage(embeddedPage, { x: origin.x, y: origin.y, width, height, rotate: degrees(pdfRotation), opacity: artwork.opacity });
+    } else {
+      const embeddedImage = artwork.source.mimeType === 'image/png'
+        ? await pdfDocument.embedPng(await entry.originalBlob.arrayBuffer())
+        : await pdfDocument.embedJpg(await entry.originalBlob.arrayBuffer());
+      page.drawImage(embeddedImage, { x: origin.x, y: origin.y, width, height, rotate: degrees(pdfRotation), opacity: artwork.opacity });
+    }
+    page.pushOperators(popGraphicsState());
+  }
+  page.pushOperators(PDFOperator.of('EMC'));
+  page.pushOperators(popGraphicsState());
+
+  const cutSegments = production.cut;
+  const creaseSegments = production.fold;
+  addPrepressLayer(pdfDocument, page, 'Bleed', polygonSegments(production.bleedPolygons), media, { color: [0.95, 0.65, 0.05], strokePt: 0.2 });
+  addPrepressLayer(pdfDocument, page, 'Safe', polygonSegments(production.safePolygons), media, { color: [0, 0.55, 0.35], dash: [2, 1], strokePt: 0.2 });
+  addPrepressLayer(pdfDocument, page, production.settings.technicalLines.cutSpotName, cutSegments, media, {
+    separation: production.settings.technicalLines.cutSpotName,
+    separationKind: 'cut',
+    strokePt: production.settings.technicalLines.strokePt,
+    overprint: production.settings.technicalLines.overprint,
+  });
+  addPrepressLayer(pdfDocument, page, production.settings.technicalLines.creaseSpotName, creaseSegments, media, {
+    separation: production.settings.technicalLines.creaseSpotName,
+    separationKind: 'crease',
+    dash: [2, 1],
+    strokePt: production.settings.technicalLines.strokePt,
+    overprint: production.settings.technicalLines.overprint,
+  });
+  if (production.settings.marks.crop || production.settings.marks.registration) {
+    addPrepressLayer(pdfDocument, page, 'Marks', cropMarkSegments(trim, production.settings.slugMm), media, { color: [0, 0, 0], strokePt: 0.2 });
+  } else {
+    addPrepressLayer(pdfDocument, page, 'Marks', [], media);
+  }
+  addPrepressLayer(pdfDocument, page, 'Slug', [], media, { color: [0, 0, 0], strokePt: 0.2 });
+  if (production.settings.marks.slug) {
+    page.drawText(
+      `CartonBuilder | ${production.diagnostics.templateId} v${boxModel.construction?.templateVersion || 1} | caliper ${boxModel.board?.caliperMm ?? 'n/a'} mm | bleed ${production.settings.bleedMm} mm | safe ${production.settings.safeMm} mm | preflight ${preflight?.blocking?.length ? 'blocked' : 'review'}`,
+      { x: (media.minX - media.minX + production.settings.slugMm / 2) * POINTS_PER_MM, y: production.settings.slugMm * POINTS_PER_MM / 3, size: 6, color: undefined },
+    );
+  }
   const bytes = await pdfDocument.save();
   return new Blob([bytes], { type: 'application/pdf' });
 }

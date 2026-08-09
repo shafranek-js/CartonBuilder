@@ -3,14 +3,16 @@ import {
   PDFDict,
   PDFDocument,
   PDFName,
+  PDFNumber,
   rgb,
 } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 
 import { ArtworkModel } from '../../src/artwork/ArtworkModel.js';
-import { createPdfExport } from '../../src/export/artworkExport.js';
+import { createPdfExport, createPrepressPdfExport } from '../../src/export/artworkExport.js';
 import { getExportWarnings } from '../../src/export/exportChecks.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
+import { runPrepressPreflight } from '../../src/prepress/prepressPreflight.js';
 
 function completeBox() {
   const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
@@ -94,5 +96,76 @@ describe('artwork export', () => {
     const separation = colorSpaces.lookup(PDFName.of('CutContourCS'), PDFArray);
     expect(separation.lookup(0, PDFName).asString()).toBe('/Separation');
     expect(separation.lookup(1, PDFName).asString()).toBe('/CutContour');
+  });
+
+  it('creates a production-assist PDF with distinct trim/bleed/media boxes and OCGs', async () => {
+    const box = completeBox();
+    const sourceBytes = await createSourcePdf();
+    const sourceBlob = new Blob([sourceBytes], { type: 'application/pdf' });
+    const artwork = new ArtworkModel().load({
+      id: 'prepress-pdf',
+      fileName: 'vector.pdf',
+      mimeType: 'application/pdf',
+      byteLength: sourceBlob.size,
+      widthPx: 600,
+      heightPx: 400,
+      vector: true,
+      pageIndex: 0,
+      pageCount: 1,
+    }, box.getBounds());
+    const settings = {
+      mode: 'production-assist',
+      bleedMm: 3,
+      safeMm: 3,
+      slugMm: 10,
+      technicalLines: {
+        cutSpotName: 'Knife',
+        creaseSpotName: 'FoldLine',
+        overprint: true,
+      },
+    };
+    const preflight = runPrepressPreflight({ boxModel: box, artworks: [{ model: artwork, visible: true }], settings });
+    const exported = await createPrepressPdfExport({
+      boxModel: box,
+      artworks: [{ model: artwork, visible: true, originalBlob: sourceBlob }],
+      settings,
+      preflight,
+    });
+    const document = await PDFDocument.load(new Uint8Array(await exported.arrayBuffer()));
+    const page = document.getPage(0);
+    const trim = page.node.get(PDFName.of('TrimBox'));
+    const bleed = page.node.get(PDFName.of('BleedBox'));
+    const media = page.node.get(PDFName.of('MediaBox'));
+    expect(trim).toBeInstanceOf(PDFArray);
+    expect(bleed).toBeInstanceOf(PDFArray);
+    expect(media).toBeInstanceOf(PDFArray);
+    expect(bleed.lookup(2, PDFNumber).asNumber()).toBeGreaterThan(trim.lookup(2, PDFNumber).asNumber());
+    expect(media.lookup(2, PDFNumber).asNumber()).toBeGreaterThan(bleed.lookup(2, PDFNumber).asNumber());
+    const ocProperties = document.catalog.lookup(PDFName.of('OCProperties'), PDFDict);
+    const ocgs = ocProperties.lookup(PDFName.of('OCGs'), PDFArray);
+    expect(ocgs.size()).toBe(7);
+    const properties = page.node.Resources().lookup(PDFName.of('Properties'), PDFDict);
+    expect(properties.has(PDFName.of('Artwork'))).toBe(true);
+    expect(properties.has(PDFName.of('Knife'))).toBe(true);
+    expect(properties.has(PDFName.of('FoldLine'))).toBe(true);
+    const colorSpaces = page.node.Resources().lookup(PDFName.of('ColorSpace'), PDFDict);
+    expect(colorSpaces.has(PDFName.of('KnifeCS'))).toBe(true);
+    expect(colorSpaces.has(PDFName.of('FoldLineCS'))).toBe(true);
+    const extGState = page.node.Resources().lookup(PDFName.of('ExtGState'), PDFDict)
+      .lookup(PDFName.of('GSOverprint'), PDFDict);
+    expect(extGState.get(PDFName.of('OP')).toString()).toBe('true');
+    expect(extGState.get(PDFName.of('op')).toString()).toBe('true');
+    expect(extGState.lookup(PDFName.of('OPM'), PDFNumber).asNumber()).toBe(1);
+    expect(document.getSubject()).toContain('not PDF/X certified');
+
+    const noOverprint = await createPrepressPdfExport({
+      boxModel: box,
+      artworks: [{ model: artwork, visible: true, originalBlob: sourceBlob }],
+      settings: { ...settings, technicalLines: { ...settings.technicalLines, overprint: false } },
+      preflight,
+    });
+    const noOverprintDocument = await PDFDocument.load(new Uint8Array(await noOverprint.arrayBuffer()));
+    const noOverprintResources = noOverprintDocument.getPage(0).node.Resources();
+    expect(noOverprintResources.lookup(PDFName.of('ExtGState'), PDFDict).has(PDFName.of('GSOverprint'))).toBe(false);
   });
 });

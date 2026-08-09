@@ -1,4 +1,4 @@
-import { createExportSvg, getExportFilename } from '../export/svgExport.js';
+import { createExportSvg, createPrepressSvg, getExportFilename, getPrepressExportFilename } from '../export/svgExport.js';
 import { createDiagnosticsBlob, recordDiagnostic } from '../diagnostics.js';
 import { AppError } from '../errors.js';
 import { getExportWarnings } from '../export/exportChecks.js';
@@ -20,7 +20,11 @@ import {
   buildSnapTargets,
   getResizeSnapFactor,
 } from './snap.js';
-import { saveOrDownloadFile } from '../utils/fileSaver.js';
+import {
+  requestSaveDestination,
+  saveOrDownloadFile,
+  writeSaveDestination,
+} from '../utils/fileSaver.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import {
@@ -34,6 +38,10 @@ import { DEFAULT_PAGE_BOX, PAGE_BOXES } from './pdfArtworkLoader.js';
 import { getOverprintMode, isOverprintEnabled, setOverprintEnabled as setOverprintSetting } from './overprintSettings.js';
 import { getMuPdfClient } from '../pdf-renderer/mupdfClient.js';
 import { getPdfSeparations } from './pdfArtworkLoader.js';
+import { clonePrepressSettings, DEFAULT_PREPRESS_SETTINGS, sanitizePrepressSettings } from '../prepress/prepressState.js';
+import { runPrepressPreflight, createPreflightReportBlob } from '../prepress/prepressPreflight.js';
+import { buildProductionDieline } from '../prepress/productionDieline.js';
+import { getPrepressPresets, savePrepressPreset } from '../prepress/PrepressPresetStore.js';
 
 const SNAP_SCREEN_PX = 6;
 const SNAP_RELEASE_SCREEN_PX = 9;
@@ -183,6 +191,7 @@ export function createArtworkApp({
   onRenderStateChanged = () => {},
   onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
+  operationProgress = null,
 }) {
   let artwork = new ArtworkModel();
   const viewport = new ViewportModel();
@@ -200,6 +209,10 @@ export function createArtworkApp({
   };
   const artworks = [];
   let activeArtworkIndex = -1;
+  let prepress = clonePrepressSettings(DEFAULT_PREPRESS_SETTINGS);
+  const prepressOverlays = { trim: false, bleed: false, safe: false, dieline: false, marks: false };
+  let lastPreflight = null;
+  let prepressPresets = [];
   let originalBlob = null;
   let previewBlob = null;
   const svg = documentRef.getElementById('artworkWorkspace');
@@ -215,6 +228,26 @@ export function createArtworkApp({
   const errorMessage = documentRef.getElementById('errorMessage');
   const errorRetryButton = documentRef.getElementById('errorRetryButton');
   const errorDismissButton = documentRef.getElementById('errorDismissButton');
+
+  async function runForegroundOperation(options) {
+    if (operationProgress?.run) return operationProgress.run(options);
+    const controller = new AbortController();
+    try {
+      const value = await options.work({
+        id: options.id,
+        signal: controller.signal,
+        report: () => {},
+        cancel: () => controller.abort(),
+      });
+      return controller.signal.aborted
+        ? { status: 'cancelled' }
+        : { status: 'succeeded', value };
+    } catch (error) {
+      return controller.signal.aborted || error?.name === 'AbortError'
+        ? { status: 'cancelled', error }
+        : { status: 'failed', error };
+    }
+  }
   const pageDialog = documentRef.getElementById('pageDialog');
   const pageNumber = documentRef.getElementById('pdfPageNumber');
   const pageCount = documentRef.getElementById('pdfPageCount');
@@ -283,6 +316,26 @@ export function createArtworkApp({
     boxDepth: documentRef.getElementById('artworkBoxDepth'),
     boxConstrainBtn: documentRef.getElementById('boxConstrainProportionsBtn'),
     boxDimensionsSection: documentRef.getElementById('boxDimensionsSection'),
+    prepressMode: documentRef.getElementById('prepressMode'),
+    prepressPreset: documentRef.getElementById('prepressPreset'),
+    prepressProfile: documentRef.getElementById('prepressProfile'),
+    prepressBleed: documentRef.getElementById('prepressBleed'),
+    prepressSafe: documentRef.getElementById('prepressSafe'),
+    prepressSlug: documentRef.getElementById('prepressSlug'),
+    prepressDpi: documentRef.getElementById('prepressDpi'),
+    prepressCutOffset: documentRef.getElementById('prepressCutOffset'),
+    prepressCreaseOffset: documentRef.getElementById('prepressCreaseOffset'),
+    prepressGlueDelta: documentRef.getElementById('prepressGlueDelta'),
+    prepressTuckDelta: documentRef.getElementById('prepressTuckDelta'),
+    prepressCropMarks: documentRef.getElementById('prepressCropMarks'),
+    prepressRegistrationMarks: documentRef.getElementById('prepressRegistrationMarks'),
+    prepressSlugMark: documentRef.getElementById('prepressSlugMark'),
+    prepressReset: documentRef.getElementById('prepressReset'),
+    prepressSavePreset: documentRef.getElementById('prepressSavePreset'),
+    prepressRun: documentRef.getElementById('prepressRun'),
+    prepressExport: documentRef.getElementById('prepressExport'),
+    prepressReport: documentRef.getElementById('prepressReport'),
+    prepressStatus: documentRef.getElementById('prepressStatus'),
   };
 
   const layerControls = {
@@ -657,6 +710,7 @@ export function createArtworkApp({
       activeArtworkIndex,
       render: sanitizeRenderSettings(getRenderState()),
       renderAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
+      prepress: clonePrepressSettings(prepress),
       view: {
         ...viewport.toJSON(),
         layers: { ...layers },
@@ -833,6 +887,40 @@ export function createArtworkApp({
     documentRef.querySelectorAll('.adobe-layer-row[data-layer-id="artwork"]').forEach((row) => {
       row.classList.toggle('active', isArtworkSelected);
     });
+  }
+
+  function renderPrepressControls() {
+    const map = [
+      ['prepressMode', prepress.mode], ['prepressProfile', prepress.profileId],
+      ['prepressBleed', prepress.bleedMm], ['prepressSafe', prepress.safeMm],
+      ['prepressSlug', prepress.slugMm], ['prepressDpi', prepress.requiredDpi],
+      ['prepressCutOffset', prepress.allowances.cutOffsetMm],
+      ['prepressCreaseOffset', prepress.allowances.creaseOffsetMm],
+      ['prepressGlueDelta', prepress.allowances.glueTabDeltaMm],
+      ['prepressTuckDelta', prepress.allowances.tuckClearanceDeltaMm],
+      ['prepressCropMarks', prepress.marks.crop], ['prepressRegistrationMarks', prepress.marks.registration],
+      ['prepressSlugMark', prepress.marks.slug],
+    ];
+    for (const [id, value] of map) {
+      const control = controls[id];
+      if (!control) continue;
+      if (control.type === 'checkbox') control.checked = Boolean(value);
+      else control.value = String(value);
+    }
+    if (controls.prepressPreset) {
+      const selected = controls.prepressPreset.value;
+      const option = (label, value) => { const next = documentRef.createElement('option'); next.textContent = label; next.value = value; return next; };
+      controls.prepressPreset.replaceChildren(option('—', ''));
+      for (const preset of prepressPresets) controls.prepressPreset.appendChild(option(preset.name, preset.id));
+      controls.prepressPreset.value = prepressPresets.some((preset) => preset.id === selected) ? selected : '';
+    }
+    if (controls.prepressStatus) {
+      const production = buildProductionDieline(boxModel, prepress);
+      controls.prepressStatus.textContent = production.diagnostics.valid
+        ? `${prepress.mode === 'production-assist' ? 'Production assist' : 'Technical proof'} · ${production.diagnostics.elementCount} elements · ${production.diagnostics.bleedBounds.width.toFixed(1)} × ${production.diagnostics.bleedBounds.height.toFixed(1)} mm`
+        : 'Prepress contour needs review';
+      controls.prepressStatus.classList.toggle('is-error', !production.diagnostics.valid);
+    }
   }
 
   function renderSublayers() {
@@ -1248,6 +1336,7 @@ export function createArtworkApp({
 
   function render() {
     renderControls();
+    renderPrepressControls();
     renderSublayers();
     syncArtworkVisibility();
     // Keep the crop controls synchronized after history restores a snapshot.
@@ -1258,6 +1347,7 @@ export function createArtworkApp({
     updateCropStatus();
     controls.clearCrop.disabled = !artwork.crop && !cropMode;
     renderer.render();
+    renderPrepressOverlay();
   }
 
   function createSvgElement(name, attributes, innerHtml) {
@@ -1267,6 +1357,47 @@ export function createArtworkApp({
     }
     if (innerHtml) element.innerHTML = innerHtml;
     return element;
+  }
+
+  function renderPrepressOverlay() {
+    if (!svg) return;
+    svg.querySelector('#prepressOverlay')?.remove();
+    if (!Object.values(prepressOverlays).some(Boolean)) return;
+    let production;
+    try { production = buildProductionDieline(boxModel, prepress); } catch { return; }
+    const group = createSvgElement('g', { id: 'prepressOverlay', 'pointer-events': 'none' });
+    const addPaths = (id, polygons, attributes) => {
+      if (!prepressOverlays[id] || !polygons?.length) return;
+      const layer = createSvgElement('g', attributes);
+      for (const polygon of polygons) {
+        if (!polygon || polygon.length < 3) continue;
+        const d = polygon.map(({ x, y }, index) => `${index ? 'L' : 'M'}${x} ${y}`).join('') + 'Z';
+        layer.appendChild(createSvgElement('path', { d }));
+      }
+      group.appendChild(layer);
+    };
+    addPaths('trim', production.trimPolygons, { fill: 'none', stroke: '#d00000', 'stroke-width': 0.5 });
+    addPaths('bleed', production.bleedPolygons, { fill: 'none', stroke: '#f2a900', 'stroke-width': 0.45, 'stroke-dasharray': '2,1' });
+    addPaths('safe', production.safePolygons, { fill: 'none', stroke: '#00a878', 'stroke-width': 0.45, 'stroke-dasharray': '1,1' });
+    if (prepressOverlays.dieline) {
+      const layer = createSvgElement('g', { fill: 'none', stroke: '#185adb', 'stroke-width': 0.4, 'stroke-dasharray': '2,1' });
+      for (const segment of production.fold) layer.appendChild(createSvgElement('line', { x1: segment.start.x, y1: segment.start.y, x2: segment.end.x, y2: segment.end.y }));
+      layer.setAttribute('stroke', '#185adb');
+      group.appendChild(layer);
+      const cuts = createSvgElement('g', { fill: 'none', stroke: '#d00000', 'stroke-width': 0.45 });
+      for (const segment of production.cut) cuts.appendChild(createSvgElement('line', { x1: segment.start.x, y1: segment.start.y, x2: segment.end.x, y2: segment.end.y }));
+      group.appendChild(cuts);
+    }
+    if (prepressOverlays.marks) {
+      const marks = createSvgElement('g', { fill: 'none', stroke: '#111', 'stroke-width': 0.35 });
+      const b = production.mediaBounds; const size = Math.max(2, prepress.slugMm * 0.45); const gap = Math.max(1, prepress.slugMm * 0.12);
+      for (const [x1, y1, x2, y2] of [[b.minX, b.minY, b.minX - size, b.minY], [b.maxX, b.minY, b.maxX + size, b.minY], [b.minX, b.maxY, b.minX - size, b.maxY], [b.maxX, b.maxY, b.maxX + size, b.maxY], [b.minX, b.minY, b.minX, b.minY - size], [b.maxX, b.minY, b.maxX, b.minY - size], [b.minX, b.maxY, b.minX, b.maxY + size], [b.maxX, b.maxY, b.maxX, b.maxY + size]]) {
+        marks.appendChild(createSvgElement('line', { x1, y1, x2, y2 }));
+      }
+      marks.setAttribute('transform', `translate(${gap} ${gap})`);
+      group.appendChild(marks);
+    }
+    svg.appendChild(group);
   }
 
   function createLayerEyeSvg() {
@@ -3009,6 +3140,43 @@ export function createArtworkApp({
   controls.boxHeight.addEventListener('change', () => handleBoxDimChange('height'));
   controls.boxDepth.addEventListener('change', () => handleBoxDimChange('depth'));
 
+  function readPrepressControl(control, fallback) {
+    if (!control) return fallback;
+    return control.type === 'checkbox' ? control.checked : control.value;
+  }
+
+  const prepressFieldMap = [
+    ['mode', 'prepressMode'], ['profileId', 'prepressProfile'], ['bleedMm', 'prepressBleed'],
+    ['safeMm', 'prepressSafe'], ['slugMm', 'prepressSlug'], ['requiredDpi', 'prepressDpi'],
+  ];
+  for (const [key, id] of prepressFieldMap) controls[id]?.addEventListener('change', () => setPrepressSettings({ [key]: readPrepressControl(controls[id], prepress[key]) }));
+  const allowanceMap = [
+    ['cutOffsetMm', 'prepressCutOffset'], ['creaseOffsetMm', 'prepressCreaseOffset'],
+    ['glueTabDeltaMm', 'prepressGlueDelta'], ['tuckClearanceDeltaMm', 'prepressTuckDelta'],
+  ];
+  for (const [key, id] of allowanceMap) controls[id]?.addEventListener('change', () => setPrepressSettings({ allowances: { [key]: readPrepressControl(controls[id], prepress.allowances[key]) } }));
+  const markMap = [['crop', 'prepressCropMarks'], ['registration', 'prepressRegistrationMarks'], ['slug', 'prepressSlugMark']];
+  for (const [key, id] of markMap) controls[id]?.addEventListener('change', () => setPrepressSettings({ marks: { [key]: readPrepressControl(controls[id], prepress.marks[key]) } }));
+  controls.prepressReset?.addEventListener('click', () => setPrepressSettings(DEFAULT_PREPRESS_SETTINGS));
+  controls.prepressPreset?.addEventListener('change', () => {
+    const preset = prepressPresets.find((entry) => entry.id === controls.prepressPreset.value);
+    if (preset) setPrepressSettings(preset.settings);
+  });
+  controls.prepressSavePreset?.addEventListener('click', async () => {
+    const name = windowRef.prompt?.('Prepress preset name', 'Production assist') || '';
+    if (!name.trim()) return;
+    try {
+      await savePrepressPreset({ name, settings: prepress });
+      prepressPresets = await getPrepressPresets();
+      renderPrepressControls();
+    } catch (error) {
+      showError(error, 'unexpectedError');
+    }
+  });
+  controls.prepressRun?.addEventListener('click', () => runCurrentPreflight());
+  controls.prepressReport?.addEventListener('click', () => exportPreflightReport().catch((error) => showError(error, 'unexpectedError')));
+  controls.prepressExport?.addEventListener('click', () => exportDeliverable('prepress-pdf'));
+
   controls.pageBoxSelect?.addEventListener('change', (event) => {
     const entry = getActiveEntry();
     if (!entry?.model?.hasArtwork || !entry.originalBlob) return;
@@ -3224,45 +3392,100 @@ export function createArtworkApp({
   });
 
   async function saveProjectArchive() {
+    if (operationProgress?.isBusy?.()) {
+      showToast(t('operationInProgress'));
+      return { status: 'busy' };
+    }
     if (artworks.length === 0) {
       showToast(t('loadBeforeSave'));
+      return { status: 'failed' };
+    }
+    clearError();
+    const destinationPromise = requestSaveDestination({
+      suggestedName: 'carton-project.carton',
+      types: [
+        {
+          description: 'CartonBuilder Project (*.carton)',
+          accept: { 'application/x-carton-project': ['.carton', '.json'] },
+        },
+      ],
+      windowRef,
+    });
+    const outcome = await runForegroundOperation({
+      id: 'project-save',
+      labelKey: 'projectSaving',
+      cancellable: true,
+      lockMode: 'actions',
+      work: async ({ signal, report, cancel }) => {
+        const destination = await destinationPromise;
+        if (!destination) {
+          cancel();
+          return null;
+        }
+        const blob = await createProjectArchive({
+          snapshot: createSnapshot(),
+          artworkBlobs: artworks.map((entry) => ({
+            originalBlob: entry.originalBlob,
+            previewBlob: entry.previewBlob,
+          })),
+          renderAssets: getRenderAssets() || [],
+          signal,
+          onProgress: ({ fraction, stageKey, stageParams }) => report({ fraction, stageKey, stageParams }),
+        });
+        await writeSaveDestination({
+          destination,
+          blob,
+          suggestedName: 'carton-project.carton',
+          windowRef,
+          documentRef,
+          signal,
+          onProgress: (written, total) => report({
+            fraction: 0.98 + (total ? (written / total) * 0.02 : 0),
+            stageKey: 'exportWritingFile',
+          }),
+        });
+        return true;
+      },
+    });
+
+    if (outcome.status === 'succeeded') showToast(t('projectSaved'));
+    else if (outcome.status === 'cancelled') showToast(t('operationCancelled'));
+    else {
+      console.error(outcome.error);
+      showError(outcome.error, 'projectSaveFailed');
+    }
+    return outcome;
+  }
+
+  projectInput.addEventListener('change', async () => {
+    if (operationProgress?.isBusy?.()) {
+      projectInput.value = '';
+      showToast(t('operationInProgress'));
       return;
     }
     try {
       clearError();
-      const blob = await createProjectArchive({
-        snapshot: createSnapshot(),
-        artworkBlobs: artworks.map((entry) => ({
-          originalBlob: entry.originalBlob,
-          previewBlob: entry.previewBlob,
-        })),
-        renderAssets: getRenderAssets() || [],
+      const outcome = await runForegroundOperation({
+        id: 'project-open',
+        labelKey: 'projectOpening',
+        cancellable: true,
+        lockMode: 'workspace',
+        work: async ({ signal, report }) => {
+          const project = await readProjectArchive(projectInput.files?.[0], {
+            signal,
+            onProgress: ({ fraction, stageKey, stageParams }) => report({ fraction, stageKey, stageParams }),
+          });
+          restoreProject(project);
+          onProjectLoaded(project.snapshot, project);
+          return project;
+        },
       });
-      await saveOrDownloadFile({
-        blob,
-        suggestedName: 'carton-project.carton',
-        types: [
-          {
-            description: 'CartonBuilder Project (*.carton)',
-            accept: { 'application/x-carton-project': ['.carton', '.json'] },
-          },
-        ],
-        windowRef,
-        documentRef,
-      });
-    } catch (error) {
-      console.error(error);
-      showError(error, 'projectSaveFailed');
-    }
-  }
-
-  projectInput.addEventListener('change', async () => {
-    try {
-      clearError();
-      const project = await readProjectArchive(projectInput.files?.[0]);
-      restoreProject(project);
-      onProjectLoaded(project.snapshot, project);
-      showToast(t('projectOpened'));
+      if (outcome.status === 'succeeded') showToast(t('projectOpened'));
+      else if (outcome.status === 'cancelled') showToast(t('operationCancelled'));
+      else {
+        console.error(outcome.error);
+        showError(outcome.error, 'projectOpenFailed');
+      }
     } catch (error) {
       console.error(error);
       showError(error, 'projectOpenFailed');
@@ -3271,85 +3494,240 @@ export function createArtworkApp({
     }
   });
 
+  function setPrepressSettings(next) {
+    prepress = sanitizePrepressSettings({ ...prepress, ...(next || {}), allowances: { ...prepress.allowances, ...(next?.allowances || {}) }, marks: { ...prepress.marks, ...(next?.marks || {}) }, technicalLines: { ...prepress.technicalLines, ...(next?.technicalLines || {}) } });
+    lastPreflight = null;
+    render();
+    scheduleSave();
+    return clonePrepressSettings(prepress);
+  }
+
+  function preflightBlobSignature(blob) {
+    if (!blob) return null;
+    return {
+      size: Number(blob.size) || 0,
+      type: blob.type || '',
+      lastModified: Number(blob.lastModified) || 0,
+    };
+  }
+
+  function getPreflightSignature() {
+    return JSON.stringify({
+      box: boxModel.toJSON(),
+      settings: prepress,
+      artworks: artworks.map((entry) => ({
+        model: entry.model?.toJSON?.() || entry.model || null,
+        visible: entry.visible !== false,
+        outputRole: entry.outputRole || 'print',
+        finish: finishState(entry),
+        originalBlob: preflightBlobSignature(entry.originalBlob),
+        previewBlob: preflightBlobSignature(entry.previewBlob),
+      })),
+    });
+  }
+
+  function setPrepressOverlay(name, visible) {
+    if (!Object.hasOwn(prepressOverlays, name)) return false;
+    prepressOverlays[name] = Boolean(visible);
+    renderPrepressOverlay();
+    return prepressOverlays[name];
+  }
+
+  function getPrepressSettings() {
+    return clonePrepressSettings(prepress);
+  }
+
+  function runCurrentPreflight() {
+    const report = runPrepressPreflight({ boxModel, artworks: getArtworks(), settings: prepress });
+    lastPreflight = { signature: getPreflightSignature(), report };
+    if (controls.prepressStatus) {
+      controls.prepressStatus.textContent = report.valid
+        ? `Preflight passed with ${report.warnings.length} warnings and ${report.manualReview.length} manual checks.`
+        : `Preflight blocked: ${report.blocking.length} blocking issue(s).`;
+      controls.prepressStatus.classList.toggle('is-error', !report.valid);
+    }
+    return report;
+  }
+
+  function getCurrentPreflight({ fresh = false } = {}) {
+    const signature = getPreflightSignature();
+    if (!fresh && lastPreflight?.signature === signature) return lastPreflight.report;
+    return runCurrentPreflight();
+  }
+
+  async function exportPreflightReport() {
+    const report = getCurrentPreflight({ fresh: true });
+    await saveOrDownloadFile({
+      blob: createPreflightReportBlob(report),
+      suggestedName: 'carton-preflight-report.json',
+      types: [{ description: 'Preflight JSON (*.json)', accept: { 'application/json': ['.json'] } }],
+      windowRef,
+      documentRef,
+    });
+    return true;
+  }
+
   async function exportDeliverable(type) {
-    try {
-      clearError();
-      let blob;
-      let suggestedName;
-      let types;
-      let fallback = 'unexpectedError';
-      const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
-
-      if (type === 'svg') {
-        blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
-        suggestedName = getExportFilename(boxModel.dimensions);
-        types = [{
-          description: 'Scalable Vector Graphics (*.svg)',
-          accept: { 'image/svg+xml': ['.svg'] },
-        }];
-      } else if (type === 'png' || type === 'jpg') {
-        const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
-        const { createPreviewBlob } = await import('../export/artworkExport.js');
-        const selectedDpi = exportArtworks
-          .map((entry) => Number(entry.model.quality?.render))
-          .filter((value) => Number.isFinite(value) && value > 0);
-        const hasAutoQuality = exportArtworks.some(
-          (entry) => !Number.isFinite(Number(entry.model.quality?.render)),
-        );
-        const exportDpi = Math.max(
-          selectedDpi.length ? Math.max(...selectedDpi) : 150,
-          hasAutoQuality ? 300 : 0,
-        );
-        blob = await createPreviewBlob({
-          boxModel,
-          artworks: exportArtworks,
-          type: mimeType,
-          dpi: exportDpi,
-        });
-        suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
-        types = type === 'png'
-          ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
-          : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
-        fallback = type === 'png' ? 'exportPngFailed' : 'exportJpgFailed';
-      } else if (type === 'pdf') {
-        const { createPdfExport } = await import('../export/artworkExport.js');
-        blob = await createPdfExport({ boxModel, artworks: exportArtworks });
-        suggestedName = 'carton-artwork.pdf';
-        types = [{
-          description: 'PDF Document (*.pdf)',
-          accept: { 'application/pdf': ['.pdf'] },
-        }];
-        fallback = 'exportPdfFailed';
-      } else if (type === 'html') {
-        const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
-        const renderState = sanitizeRenderSettings(getRenderState());
-        const previewState = getPreview3dState?.() || null;
-        blob = await createInteractive3dHtml({
-          boxModel,
-          artworks: exportArtworks,
-          htmlQuality: renderState.quality.html,
-          renderState,
-          previewState,
-          locale: documentRef.documentElement.lang || 'en',
-          documentRef,
-        });
-        suggestedName = 'carton-3d.html';
-        types = [{
-          description: 'Interactive 3D HTML (*.html)',
-          accept: { 'text/html': ['.html'] },
-        }];
-        fallback = 'exportPdfFailed';
-      } else {
-        return false;
-      }
-
-      await saveOrDownloadFile({ blob, suggestedName, types, windowRef, documentRef });
-      return true;
-    } catch (error) {
-      console.error(error);
-      showError(error, fallback);
+    if (operationProgress?.isBusy?.()) {
+      showToast(t('operationInProgress'));
       return false;
     }
+    const initialSuggestedName = type === 'svg'
+      ? getExportFilename(boxModel.dimensions)
+      : type === 'prepress-svg'
+        ? getPrepressExportFilename(boxModel.dimensions)
+        : type === 'png'
+          ? 'carton-artwork-preview.png'
+          : type === 'jpg'
+            ? 'carton-artwork-preview.jpg'
+            : type === 'pdf'
+              ? 'carton-artwork.pdf'
+              : type === 'prepress-pdf'
+                ? 'carton-prepress-production-assist.pdf'
+                : type === 'html'
+                  ? 'carton-3d.html'
+                  : null;
+    if (!initialSuggestedName) return false;
+    const initialTypes = type === 'svg' || type === 'prepress-svg'
+      ? [{ description: 'Scalable Vector Graphics (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }]
+      : type === 'png'
+        ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
+        : type === 'jpg'
+          ? [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }]
+          : type === 'html'
+            ? [{ description: 'Interactive 3D HTML (*.html)', accept: { 'text/html': ['.html'] } }]
+            : [{ description: 'PDF Document (*.pdf)', accept: { 'application/pdf': ['.pdf'] } }];
+    const destinationPromise = requestSaveDestination({
+      suggestedName: initialSuggestedName,
+      types: initialTypes,
+      windowRef,
+    });
+    const outcome = await runForegroundOperation({
+      id: `artwork-export-${type}`,
+      labelKey: 'projectExporting',
+      cancellable: true,
+      lockMode: 'actions',
+      work: async ({ signal, report, cancel }) => {
+        try {
+          clearError();
+          report({ stageKey: 'operationPreparing' });
+          let blob;
+          let suggestedName;
+          let types;
+          let fallback = 'unexpectedError';
+          const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
+
+          if (type === 'svg') {
+            blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
+            suggestedName = getExportFilename(boxModel.dimensions);
+            types = [{
+              description: 'Scalable Vector Graphics (*.svg)',
+              accept: { 'image/svg+xml': ['.svg'] },
+            }];
+          } else if (type === 'prepress-svg') {
+            blob = new Blob([await createPrepressSvg({
+              boxModel,
+              artworks: exportArtworks,
+              settings: prepress,
+            })], { type: 'image/svg+xml;charset=utf-8' });
+            suggestedName = getPrepressExportFilename(boxModel.dimensions);
+            types = [{ description: 'Prepress SVG (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }];
+          } else if (type === 'png' || type === 'jpg') {
+            const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
+            const { createPreviewBlob } = await import('../export/artworkExport.js');
+            const selectedDpi = exportArtworks
+              .map((entry) => Number(entry.model.quality?.render))
+              .filter((value) => Number.isFinite(value) && value > 0);
+            const hasAutoQuality = exportArtworks.some(
+              (entry) => !Number.isFinite(Number(entry.model.quality?.render)),
+            );
+            const exportDpi = Math.max(
+              selectedDpi.length ? Math.max(...selectedDpi) : 150,
+              hasAutoQuality ? 300 : 0,
+            );
+            blob = await createPreviewBlob({
+              boxModel,
+              artworks: exportArtworks,
+              type: mimeType,
+              dpi: exportDpi,
+            });
+            suggestedName = type === 'png' ? 'carton-artwork-preview.png' : 'carton-artwork-preview.jpg';
+            types = type === 'png'
+              ? [{ description: 'PNG Image (*.png)', accept: { 'image/png': ['.png'] } }]
+              : [{ description: 'JPEG Image (*.jpg)', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
+            fallback = type === 'png' ? 'exportPngFailed' : 'exportJpgFailed';
+          } else if (type === 'pdf') {
+            const { createPdfExport } = await import('../export/artworkExport.js');
+            blob = await createPdfExport({ boxModel, artworks: exportArtworks });
+            suggestedName = 'carton-artwork.pdf';
+            types = [{
+              description: 'PDF Document (*.pdf)',
+              accept: { 'application/pdf': ['.pdf'] },
+            }];
+            fallback = 'exportPdfFailed';
+          } else if (type === 'prepress-pdf') {
+            const report = getCurrentPreflight({ fresh: true });
+            if (!report.valid) throw new AppError('prepressBlocked');
+            const { createPrepressPdfExport } = await import('../export/artworkExport.js');
+            blob = await createPrepressPdfExport({ boxModel, artworks: exportArtworks, settings: prepress, preflight: report });
+            suggestedName = 'carton-prepress-production-assist.pdf';
+            types = [{ description: 'Prepress PDF (not PDF/X) (*.pdf)', accept: { 'application/pdf': ['.pdf'] } }];
+            fallback = 'exportPdfFailed';
+          } else if (type === 'html') {
+            const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
+            const renderState = sanitizeRenderSettings(getRenderState());
+            const previewState = getPreview3dState?.() || null;
+            blob = await createInteractive3dHtml({
+              boxModel,
+              artworks: exportArtworks,
+              htmlQuality: renderState.quality.html,
+              renderState,
+              boardAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
+              previewState,
+              locale: documentRef.documentElement.lang || 'en',
+              documentRef,
+            });
+            suggestedName = 'carton-3d.html';
+            types = [{
+              description: 'Interactive 3D HTML (*.html)',
+              accept: { 'text/html': ['.html'] },
+            }];
+            fallback = 'exportPdfFailed';
+          } else {
+            return false;
+          }
+
+          const destination = await destinationPromise;
+          if (!destination) {
+            cancel();
+            return false;
+          }
+          await writeSaveDestination({
+            destination,
+            blob,
+            suggestedName,
+            windowRef,
+            documentRef,
+            signal,
+            onProgress: (written, total) => report({
+              fraction: 0.98 + (total ? (written / total) * 0.02 : 0),
+              stageKey: 'exportWritingFile',
+            }),
+          });
+          return true;
+        } catch (error) {
+          throw Object.assign(error, { fallbackKey: fallback });
+        }
+      },
+    });
+    if (outcome.status === 'succeeded') return true;
+    if (outcome.status === 'cancelled') {
+      showToast(t('operationCancelled'));
+      return false;
+    }
+    console.error(outcome.error);
+    showError(outcome.error, outcome.error?.fallbackKey || 'unexpectedError');
+    return false;
   }
 
   function readPublishSettings() {
@@ -3384,57 +3762,88 @@ export function createArtworkApp({
   }
 
   async function publishHtmlExport() {
-    try {
-      clearError();
-      const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
-      const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
-      const renderState = sanitizeRenderSettings(getRenderState());
-      const previewState = getPreview3dState?.() || null;
-      const blob = await createInteractive3dHtml({
-        boxModel,
-        artworks: exportArtworks,
-        htmlQuality: renderState.quality.html,
-        renderState,
-        previewState,
-        locale: documentRef.documentElement.lang || 'en',
-        documentRef,
-      });
-
-      let settings = readPublishSettings();
-      if (!settings.token) {
-        const token = windowRef.prompt?.(t('publishTokenPrompt'));
-        if (!token) return;
-        settings = { ...settings, token };
-        savePublishSettings(settings);
-      }
-      if (!settings.owner || !settings.repo) {
-        const owner = windowRef.prompt?.(t('publishOwnerPrompt'), settings.owner || '');
-        const repo = windowRef.prompt?.(t('publishRepoPrompt'), settings.repo || '');
-        if (!owner || !repo) return;
-        settings = { ...settings, owner, repo };
-        savePublishSettings(settings);
-      }
-
-      const { publishInteractiveHtml } = await import('../export/publishExport.js');
-      const filename = `carton-${Date.now()}.html`;
-      const { pageUrl } = await publishInteractiveHtml({
-        blob,
-        filename,
-        token: settings.token,
-        owner: settings.owner,
-        repo: settings.repo,
-      });
-
-      await copyToClipboard(pageUrl);
-      showToast(`${t('publishSuccess')}: ${pageUrl}`);
-    } catch (error) {
-      console.error(error);
-      showToast(t('publishFailed'));
+    if (operationProgress?.isBusy?.()) {
+      showToast(t('operationInProgress'));
+      return false;
     }
+    const outcome = await runForegroundOperation({
+      id: 'publish-html',
+      labelKey: 'exportPublishing',
+      cancellable: true,
+      lockMode: 'actions',
+      work: async ({ signal, report, cancel }) => {
+        clearError();
+        const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
+        const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
+        report({ stageKey: 'operationProcessing', fraction: 0.1 });
+        const renderState = sanitizeRenderSettings(getRenderState());
+        const previewState = getPreview3dState?.() || null;
+        const blob = await createInteractive3dHtml({
+          boxModel,
+          artworks: exportArtworks,
+          htmlQuality: renderState.quality.html,
+          renderState,
+          boardAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
+          previewState,
+          locale: documentRef.documentElement.lang || 'en',
+          documentRef,
+        });
+
+        let settings = readPublishSettings();
+        if (!settings.token) {
+          const token = windowRef.prompt?.(t('publishTokenPrompt'));
+          if (!token) {
+            cancel();
+            return false;
+          }
+          settings = { ...settings, token };
+          savePublishSettings(settings);
+        }
+        if (!settings.owner || !settings.repo) {
+          const owner = windowRef.prompt?.(t('publishOwnerPrompt'), settings.owner || '');
+          const repo = windowRef.prompt?.(t('publishRepoPrompt'), settings.repo || '');
+          if (!owner || !repo) {
+            cancel();
+            return false;
+          }
+          settings = { ...settings, owner, repo };
+          savePublishSettings(settings);
+        }
+
+        const { publishInteractiveHtml } = await import('../export/publishExport.js');
+        const filename = `carton-${Date.now()}.html`;
+        report({ stageKey: 'exportPublishing', fraction: 0.65 });
+        const { pageUrl } = await publishInteractiveHtml({
+          blob,
+          filename,
+          token: settings.token,
+          owner: settings.owner,
+          repo: settings.repo,
+          signal,
+        });
+
+        await copyToClipboard(pageUrl);
+        showToast(`${t('publishSuccess')}: ${pageUrl}`);
+        report({ stageKey: 'projectReady', fraction: 1 });
+        return true;
+      },
+    });
+    if (outcome.status === 'cancelled') {
+      showToast(t('operationCancelled'));
+      return false;
+    }
+    if (outcome.status !== 'succeeded' || outcome.value === false) {
+      console.error(outcome.error);
+      showToast(t('publishFailed'));
+      return false;
+    }
+    return true;
   }
 
   function restoreProject({ snapshot, artworkBlobs = [] }) {
     boxApp.loadState(snapshot.box);
+    prepress = sanitizePrepressSettings(snapshot.prepress);
+    lastPreflight = null;
     projectCreatedAt = snapshot.meta?.createdAt || new Date().toISOString();
     artworks.length = 0;
     for (let index = 0; index < (snapshot.artworks || []).length; index += 1) {
@@ -3618,6 +4027,7 @@ export function createArtworkApp({
   }
 
   render();
+  getPrepressPresets().then((presets) => { prepressPresets = presets; renderPrepressControls(); }).catch(() => {});
 
   return {
     get artwork() { return artwork; },
@@ -3643,8 +4053,16 @@ export function createArtworkApp({
     get previewBlob() { return previewBlob; },
     getArtworks,
     getArtworksJson,
+    getPrepressSettings,
+    setPrepressSettings,
+    setPrepressOverlay,
+    getPrepressOverlayState: () => ({ ...prepressOverlays }),
+    runPrepressPreflight: () => getCurrentPreflight(),
+    exportPreflightReport,
     removeSelectedArtwork() {
+      if (layerLocks.artwork) return false;
       showDeleteConfirmation();
+      return true;
     },
     setArtworkQuality,
     updateArtworkFinish,

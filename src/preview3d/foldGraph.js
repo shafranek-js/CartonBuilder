@@ -93,6 +93,10 @@ function findTargetAngle(parent, child, edge) {
 }
 
 function normalizePanels(source) {
+  if (source?.construction?.templateId && source.construction.templateId !== 'legacy-six-panel'
+    && typeof source.getElements === 'function') {
+    return source.getElements();
+  }
   const panels = typeof source?.getPanels === 'function'
     ? source.getPanels()
     : source?.panels;
@@ -104,6 +108,7 @@ function normalizePanels(source) {
 
 export function buildFoldGraph(source, { caliperMm = 0 } = {}) {
   const panels = normalizePanels(source);
+  const polygonal = source?.construction?.templateId && source.construction.templateId !== 'legacy-six-panel';
   const nodes = new Map();
   let rootId = null;
 
@@ -134,6 +139,32 @@ export function buildFoldGraph(source, { caliperMm = 0 } = {}) {
     }
 
     const parent = nodes.get(node.parentId);
+    if (polygonal) {
+      const hinge = node.panel.hinge;
+      if (!parent || !hinge) throw new Error(`Invalid polygon hinge relationship for ${node.id}.`);
+      const parentCenter = {
+        x: parent.panel.x + parent.panel.width / 2,
+        y: parent.panel.y + parent.panel.height / 2,
+      };
+      const childCenter = {
+        x: node.panel.x + node.panel.width / 2,
+        y: node.panel.y + node.panel.height / 2,
+      };
+      node.axis = [Number(hinge.axis?.[0]) || 0, Number(hinge.axis?.[1]) || 0, 0];
+      node.targetAngle = Number(node.panel.foldAngleDeg || 0) * Math.PI / 180;
+      node.parentOffset = [
+        Number(hinge.parentPoint.x) - parentCenter.x,
+        parentCenter.y - Number(hinge.parentPoint.y),
+        0,
+      ];
+      node.centerOffset = [
+        childCenter.x - Number(hinge.childPoint.x),
+        Number(hinge.childPoint.y) - childCenter.y,
+        0,
+      ];
+      parent.children.push(node.id);
+      continue;
+    }
     const definition = EDGE_GEOMETRY[node.parentEdge];
     if (!parent || !definition) {
       throw new Error(`Invalid 3D parent relationship for ${node.id}.`);

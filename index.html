@@ -136,6 +136,29 @@
           </div>
         </header>
 
+        <section class="construction-library" aria-label="Construction Library">
+          <div class="construction-library-heading">
+            <strong data-i18n="constructionLibrary">Construction Library</strong>
+            <span id="constructionStatus" class="construction-status" role="status"></span>
+          </div>
+          <div class="construction-library-controls">
+            <label for="constructionTemplate" data-i18n="constructionTemplate">Construction:</label>
+            <select id="constructionTemplate" name="constructionTemplate">
+              <option value="legacy-six-panel" data-i18n="constructionLegacy">Legacy Custom Net</option>
+              <option value="ste" data-i18n="constructionSte">Straight Tuck End</option>
+              <option value="rte" data-i18n="constructionRte">Reverse Tuck End</option>
+            </select>
+            <button id="constructionResetDefaults" type="button" class="footer-button" data-i18n="constructionReset">Reset Defaults</button>
+          </div>
+          <div id="constructionParameters" class="construction-parameters" hidden>
+            <label><span data-i18n="glueTabWidth">Glue tab</span><input id="constructionGlue" type="number" min="6" step="0.1"><span>mm</span></label>
+            <label><span data-i18n="tuckTabDepth">Tuck depth</span><input id="constructionTuck" type="number" min="6" step="0.1"><span>mm</span></label>
+            <label><span data-i18n="dustFlapReach">Dust reach</span><input id="constructionDust" type="number" min="6" step="0.1"><span>mm</span></label>
+            <label><span data-i18n="lockEar">Lock ear</span><input id="constructionEar" type="number" min="0" step="0.1"><span>mm</span></label>
+          </div>
+          <p id="constructionDisclaimer" class="construction-disclaimer" hidden data-i18n="constructionDisclaimer">Structural mockup — production allowances not applied.</p>
+        </section>
+
         <section class="designer" aria-label="Box net designer" data-i18n-aria-label="boxDesignerLabel">
           <div class="workspace-wrap">
             <svg id="workspace" role="img" aria-label="Interactive box net" data-i18n-aria-label="interactiveBoxNetLabel"></svg>
@@ -474,6 +497,35 @@
               </div>
             </details>
 
+            <details open class="tool-section" id="prepressSection">
+              <summary>Prepress</summary>
+              <p class="quality-help">Production-assist dieline. Not PDF/X certified or a contract color proof.</p>
+              <div class="artwork-quality-fields">
+                <label class="field"><span>Preset</span><select id="prepressPreset"><option value="">—</option></select></label>
+                <label class="field"><span>Mode</span><select id="prepressMode"><option value="technical-proof">Technical proof</option><option value="production-assist">Production assist</option></select></label>
+                <label class="field"><span>Profile</span><select id="prepressProfile"><option value="generic-folding-carton">Generic folding carton</option><option value="custom">Custom</option></select></label>
+                <label class="field"><span>Bleed (mm)</span><input id="prepressBleed" type="number" min="0" max="20" step="0.1"></label>
+                <label class="field"><span>Safe (mm)</span><input id="prepressSafe" type="number" min="0" max="20" step="0.1"></label>
+                <label class="field"><span>Slug (mm)</span><input id="prepressSlug" type="number" min="0" max="30" step="0.1"></label>
+                <label class="field"><span>Required DPI</span><input id="prepressDpi" type="number" min="30" max="1200" step="1"></label>
+                <label class="field"><span>Cut offset (mm)</span><input id="prepressCutOffset" type="number" min="-5" max="5" step="0.1"></label>
+                <label class="field"><span>Crease offset (mm)</span><input id="prepressCreaseOffset" type="number" min="-5" max="5" step="0.1"></label>
+                <label class="field"><span>Glue delta (mm)</span><input id="prepressGlueDelta" type="number" min="-10" max="10" step="0.1"></label>
+                <label class="field"><span>Tuck clearance (mm)</span><input id="prepressTuckDelta" type="number" min="-10" max="10" step="0.1"></label>
+                <label class="field"><span>Crop marks</span><input id="prepressCropMarks" type="checkbox"></label>
+                <label class="field"><span>Registration marks</span><input id="prepressRegistrationMarks" type="checkbox"></label>
+                <label class="field"><span>Slug</span><input id="prepressSlugMark" type="checkbox"></label>
+              </div>
+              <p class="quality-summary" id="prepressStatus" role="status"></p>
+              <div class="button-row">
+                <button type="button" id="prepressReset">Reset</button>
+                <button type="button" id="prepressSavePreset">Save preset</button>
+                <button type="button" id="prepressRun">Run preflight</button>
+                <button type="button" id="prepressReport">JSON report</button>
+                <button type="button" id="prepressExport">Prepress PDF</button>
+              </div>
+            </details>
+
             <details open class="tool-section artwork-finish-section" id="artworkFinishSection" hidden>
               <summary data-i18n="artworkFinishHeading">Presentation finish</summary>
               <label class="field"><span data-i18n="artworkFinishRole">Output</span>
@@ -600,6 +652,7 @@
           <button id="publish3dHtmlButton" type="button" data-i18n="publishHtml">Publish link</button>
           <a class="preview-showcase-link" id="previewShowcaseLink" href="./showcase/calmdownol/index.html" target="_blank" rel="noopener" data-i18n="viewShowcase">View live example</a>
         </div>
+        <p class="technical-proof-notice" data-i18n="technicalProofNotice">Technical proof: the PDF is 1:1 with a CutContour dieline, but it is not PDF/X certified. Verify it with your printer before production.</p>
         <div class="preview-main-row">
           <div class="preview-canvas-wrap preview-3d-panel" id="preview3dPanel" aria-busy="false">
             <canvas id="preview3dCanvas" role="img" tabindex="0" aria-label="Interactive folded carton preview" data-i18n-aria-label="preview3dCanvasLabel"></canvas>
@@ -788,10 +841,11 @@
 
             <details open class="tool-section">
               <summary data-i18n="model3d">Model</summary>
-              <div class="light-control">
+              <div class="light-control assembly-control">
                 <span data-i18n="foldProgress3d">Fold</span>
                 <input id="foldProgress" type="range" min="0" max="1" step="0.01" value="1">
                 <output id="foldProgressValue" for="foldProgress">100%</output>
+                <span id="assemblyStage" class="assembly-stage" role="status" aria-live="polite"></span>
               </div>
               <div class="button-row">
                 <button id="open3dButton" type="button" data-i18n="open3d">Open</button>
@@ -1165,6 +1219,14 @@
 
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
       <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+    </section>
+    <section class="operation-progress" id="operationProgress" role="status" aria-live="polite" aria-atomic="false" hidden>
+      <div class="operation-progress-heading">
+        <strong id="operationProgressLabel"></strong>
+        <button type="button" id="operationProgressCancel" data-i18n="cancel">Cancel</button>
+      </div>
+      <p id="operationProgressDetail"></p>
+      <progress id="operationProgressBar" role="progressbar" max="100" value="0" aria-valuemin="0" aria-valuemax="100" aria-label="Operation progress" data-i18n-aria-label="operationProgressLabel"></progress>
     </section>
   </main>
 

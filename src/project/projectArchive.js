@@ -19,6 +19,18 @@ const LEGACY_FORMAT_VERSION = 1;
 const MAX_ARCHIVE_BYTES = 120 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 
+function assertNotAborted(signal) {
+  if (signal?.aborted) throw new DOMException('Project archive operation aborted.', 'AbortError');
+}
+
+function reportProgress(onProgress, fraction, stageKey, stageParams = {}) {
+  onProgress?.({ fraction: Math.min(1, Math.max(0, fraction)), stageKey, stageParams });
+}
+
+function textSize(value) {
+  return new Blob([value]).size;
+}
+
 function safeExtension(fileName) {
   return String(fileName || '')
     .split('.')
@@ -27,8 +39,16 @@ function safeExtension(fileName) {
     .toLowerCase() || 'bin';
 }
 
-export async function createProjectArchive({ snapshot, artworkBlobs, renderAssets = [] }) {
+export async function createProjectArchive({
+  snapshot,
+  artworkBlobs,
+  renderAssets = [],
+  signal,
+  onProgress,
+}) {
+  assertNotAborted(signal);
   const validated = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
+  assertNotAborted(signal);
   // Always write the current schema after migration. Older archives remain
   // readable through the normal v1-v3 compatibility path below.
   const assets = validated.snapshot.artworks.map((entry, index) => ({
@@ -53,27 +73,77 @@ export async function createProjectArchive({ snapshot, artworkBlobs, renderAsset
     })),
   };
 
-  const writer = new ZipWriter(new BlobWriter('application/zip'));
-  await writer.add('manifest.json', new TextReader(JSON.stringify(manifest, null, 2)));
-  await writer.add('project.json', new TextReader(JSON.stringify(validated.snapshot, null, 2)));
+  const manifestText = JSON.stringify(manifest, null, 2);
+  const snapshotText = JSON.stringify(validated.snapshot, null, 2);
+  const entries = [
+    { path: 'manifest.json', reader: new TextReader(manifestText), size: textSize(manifestText) },
+    { path: 'project.json', reader: new TextReader(snapshotText), size: textSize(snapshotText) },
+  ];
   for (let index = 0; index < validated.artworkBlobs.length; index += 1) {
-    await writer.add(manifest.assets[index].path, new BlobReader(validated.artworkBlobs[index].originalBlob));
-    await writer.add(manifest.previews[index], new BlobReader(validated.artworkBlobs[index].previewBlob));
+    const artwork = validated.artworkBlobs[index];
+    entries.push({
+      path: manifest.assets[index].path,
+      reader: new BlobReader(artwork.originalBlob),
+      size: artwork.originalBlob.size,
+    });
+    entries.push({
+      path: manifest.previews[index],
+      reader: new BlobReader(artwork.previewBlob),
+      size: artwork.previewBlob.size,
+    });
   }
   for (const asset of validated.renderAssets) {
     const manifestAsset = manifest.renderAssets.find((entry) => entry.assetId === asset.assetId);
-    await writer.add(manifestAsset.path, new BlobReader(asset.blob));
+    entries.push({ path: manifestAsset.path, reader: new BlobReader(asset.blob), size: asset.blob.size });
   }
-  return writer.close();
+
+  const totalBytes = Math.max(1, entries.reduce((sum, entry) => sum + entry.size, 0));
+  let completedBytes = 0;
+  const writer = new ZipWriter(new BlobWriter('application/zip'));
+  let closed = false;
+  try {
+    reportProgress(onProgress, 0.05, 'projectValidating');
+    for (const entry of entries) {
+      assertNotAborted(signal);
+      await writer.add(entry.path, entry.reader, {
+        signal,
+        onprogress: (progress, total) => {
+          const entryFraction = total > 0 ? progress / total : 0;
+          reportProgress(
+            onProgress,
+            0.05 + ((completedBytes + entry.size * entryFraction) / totalBytes) * 0.9,
+            'projectPacking',
+            { fileName: entry.path },
+          );
+        },
+      });
+      completedBytes += entry.size;
+      reportProgress(onProgress, 0.05 + (completedBytes / totalBytes) * 0.9, 'projectPacking', { fileName: entry.path });
+    }
+    assertNotAborted(signal);
+    reportProgress(onProgress, 0.98, 'projectFinalizing');
+    const result = await writer.close();
+    closed = true;
+    reportProgress(onProgress, 1, 'projectReady');
+    return result;
+  } finally {
+    if (!closed) {
+      try { await writer.close(); } catch { /* best effort cleanup */ }
+    }
+  }
 }
 
-export async function readProjectArchive(blob) {
+export async function readProjectArchive(blob, { signal, onProgress } = {}) {
+  assertNotAborted(signal);
   if (!(blob instanceof Blob) || blob.size === 0 || blob.size > MAX_ARCHIVE_BYTES) {
     throw new AppError('projectArchiveInvalid');
   }
   const reader = new ZipReader(new BlobReader(blob));
   try {
-    const entries = await reader.getEntries();
+    const entries = await reader.getEntries({
+      signal,
+      onprogress: (index, total) => reportProgress(onProgress, total ? (index / total) * 0.1 : 0.05, 'projectReading'),
+    });
     const byName = new Map(entries.map((entry) => [entry.filename, entry]));
     const manifestEntry = byName.get('manifest.json');
     const projectEntry = byName.get('project.json');
@@ -82,9 +152,9 @@ export async function readProjectArchive(blob) {
       throw new AppError('projectMetadataTooLarge');
     }
 
-    const manifest = JSON.parse(await manifestEntry.getData(new TextWriter()));
+    const manifest = JSON.parse(await manifestEntry.getData(new TextWriter(), { signal }));
     if (manifest.format !== FORMAT) throw new AppError('projectVersionUnsupported');
-    const snapshot = JSON.parse(await projectEntry.getData(new TextWriter()));
+    const snapshot = JSON.parse(await projectEntry.getData(new TextWriter(), { signal }));
 
     if (manifest.version === LEGACY_FORMAT_VERSION) {
       if (!/^assets\/[^/]+$/.test(manifest.asset)) throw new AppError('projectAssetPathInvalid');
@@ -101,11 +171,12 @@ export async function readProjectArchive(blob) {
       }
       const result = await validateProjectBundle({
         snapshot,
-        originalBlob: await assetEntry.getData(new BlobWriter()),
-        previewBlob: await previewEntry.getData(new BlobWriter()),
+        originalBlob: await assetEntry.getData(new BlobWriter(), { signal }),
+        previewBlob: await previewEntry.getData(new BlobWriter(), { signal }),
       });
       if (Number(snapshot.schemaVersion) === 6) result.snapshot.schemaVersion = 7;
       else if (Number(snapshot.schemaVersion) < 8) result.snapshot.schemaVersion = snapshot.schemaVersion;
+      reportProgress(onProgress, 1, 'projectReady');
       return result;
     }
 
@@ -121,6 +192,20 @@ export async function readProjectArchive(blob) {
     }
 
     const artworkBlobs = [];
+    const totalAssets = manifest.assets.length * 2 + (manifest.version >= 3 ? manifest.renderAssets?.length || 0 : 0);
+    let completedAssets = 0;
+    const readBlob = async (entry, stageParams) => {
+      assertNotAborted(signal);
+      const result = await entry.getData(new BlobWriter(), {
+        signal,
+        onprogress: (progress, total) => {
+          const inner = total > 0 ? progress / total : 0;
+          reportProgress(onProgress, 0.1 + ((completedAssets + inner) / Math.max(1, totalAssets)) * 0.85, 'projectReading', stageParams);
+        },
+      });
+      completedAssets += 1;
+      return result;
+    };
     for (let index = 0; index < manifest.assets.length; index += 1) {
       const assetEntry = byName.get(manifest.assets[index].path);
       const previewEntry = byName.get(manifest.previews[index]);
@@ -133,8 +218,8 @@ export async function readProjectArchive(blob) {
         throw new AppError('projectPreviewTooLarge');
       }
       artworkBlobs.push({
-        originalBlob: await assetEntry.getData(new BlobWriter()),
-        previewBlob: await previewEntry.getData(new BlobWriter()),
+        originalBlob: await readBlob(assetEntry, { fileName: manifest.assets[index].path }),
+        previewBlob: await readBlob(previewEntry, { fileName: manifest.previews[index] }),
       });
     }
     const renderAssets = [];
@@ -154,15 +239,17 @@ export async function readProjectArchive(blob) {
         renderAssets.push({
           ...manifestAsset,
           kind,
-          blob: await assetEntry.getData(new BlobWriter()),
+          blob: await readBlob(assetEntry, { fileName: manifestAsset.path }),
         });
       }
     }
     const result = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
     if (Number(snapshot.schemaVersion) === 6) result.snapshot.schemaVersion = 7;
     else if (Number(snapshot.schemaVersion) < 8) result.snapshot.schemaVersion = snapshot.schemaVersion;
+    reportProgress(onProgress, 1, 'projectReady');
     return result;
   } catch (error) {
+    if (error?.name === 'AbortError') throw error;
     if (error instanceof AppError) throw error;
     throw new AppError('projectArchiveInvalid', {}, { cause: error });
   } finally {

@@ -136,6 +136,7 @@ export class WebGLCartonRenderer {
 
   updateSettings(settings, { render = true } = {}) {
     const previous = this.currentSettings;
+    const previousCameraObject = this.scene.camera;
     if (!previous || previous.material.profile !== settings.material.profile) {
       this.scene.setMaterialProfile(settings.material.profile);
     }
@@ -179,6 +180,12 @@ export class WebGLCartonRenderer {
       this.scene.setCameraState(presetChanged
         ? { ...settings.camera, position: undefined, target: undefined }
         : settings.camera);
+      if (this.scene.camera !== previousCameraObject) {
+        // BoxScene swaps between its perspective and orthographic camera
+        // objects. Every post-processing pass keeps its own camera reference,
+        // so rebuild the composer when that identity changes.
+        this.postProcessing.setScene(this.scene.scene, this.scene.camera);
+      }
     }
     this.currentSettings = structuredClone(settings);
     if (!previous || JSON.stringify(previous.effects) !== JSON.stringify(settings.effects)) {
@@ -197,7 +204,11 @@ export class WebGLCartonRenderer {
   }
 
   updateCamera(camera) {
+    const previousCameraObject = this.scene.camera;
     this.scene.setCameraState(camera);
+    if (this.scene.camera !== previousCameraObject) {
+      this.postProcessing.setScene(this.scene.scene, this.scene.camera);
+    }
   }
 
   setCameraState(camera) {

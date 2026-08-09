@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import {
+  BackSide,
+  FrontSide,
+  Mesh,
+  MeshStandardMaterial,
+  Raycaster,
+  Vector3,
+} from 'three';
 
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import { createPanelSolidGeometry } from '../../src/render/panelSolidGeometry.js';
+import { getInteriorMaterialSide } from '../../src/preview3d/BoxScene.js';
 import { getPanelVertexData } from '../../src/preview3d/panelGeometry.js';
 
 describe('panelSolidGeometry', () => {
@@ -45,6 +54,96 @@ describe('panelSolidGeometry', () => {
     expect(geometry.boundingBox.max.x).toBeCloseTo(10, 5);
     expect(geometry.boundingBox.min.x).toBeCloseTo(-10, 5);
     expect(geometry.getAttribute('position').count).toBeGreaterThan(8);
+    geometry.dispose();
+  });
+
+  it('renders the reversed solid interior cap from the interior side', () => {
+    const model = new BoxNetModel({ width: 100, height: 60, depth: 30 });
+    const geometry = createPanelSolidGeometry(model.getPanel('front'), model.getBounds(), {
+      thicknessMm: 1,
+      bevelRadiusMm: 0,
+    });
+    const materials = [
+      new MeshStandardMaterial({ side: FrontSide }),
+      new MeshStandardMaterial({ side: getInteriorMaterialSide('solid') }),
+      new MeshStandardMaterial({ side: FrontSide }),
+    ];
+    const mesh = new Mesh(geometry, materials);
+    mesh.updateMatrixWorld(true);
+
+    const interiorHits = new Raycaster(
+      new Vector3(0, 0, -10),
+      new Vector3(0, 0, 1),
+    ).intersectObject(mesh, false);
+    const exteriorHits = new Raycaster(
+      new Vector3(0, 0, 10),
+      new Vector3(0, 0, -1),
+    ).intersectObject(mesh, false);
+
+    expect(getInteriorMaterialSide('flat')).toBe(BackSide);
+    expect(getInteriorMaterialSide('solid')).toBe(FrontSide);
+    expect(interiorHits.some((hit) => hit.face.materialIndex === 1)).toBe(true);
+    expect(exteriorHits.some((hit) => hit.face.materialIndex === 0)).toBe(true);
+
+    materials.forEach((material) => material.dispose());
+    geometry.dispose();
+  });
+
+  it('keeps every solid triangle non-degenerate with cap normals facing outward', () => {
+    const model = new BoxNetModel({ width: 100, height: 60, depth: 30 });
+    const geometry = createPanelSolidGeometry(model.getPanel('front'), model.getBounds(), {
+      thicknessMm: 0.8,
+      bevelRadiusMm: 0.1,
+    });
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    const index = geometry.getIndex();
+
+    for (let offset = 0; offset < index.count; offset += 3) {
+      const a = new Vector3().fromBufferAttribute(position, index.getX(offset));
+      const b = new Vector3().fromBufferAttribute(position, index.getX(offset + 1));
+      const c = new Vector3().fromBufferAttribute(position, index.getX(offset + 2));
+      expect(new Vector3().crossVectors(b.sub(a), c.sub(a)).lengthSq()).toBeGreaterThan(1e-10);
+    }
+    expect(normal.getZ(0)).toBe(1);
+    const interiorStart = geometry.groups.find((group) => group.materialIndex === 1).start;
+    expect(normal.getZ(index.getX(interiorStart))).toBe(-1);
+    geometry.dispose();
+  });
+
+  it.each(['ste', 'rte'])('keeps polygon edge normals aligned and visible from both sides for %s', (templateId) => {
+    const model = new BoxNetModel({ width: 150, height: 90, depth: 40 }, null, { templateId });
+    const panel = model.getElements().find((element) => element.id === 'front');
+    const geometry = createPanelSolidGeometry(panel, model.getBounds(), { thicknessMm: 0.8 });
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    const index = geometry.getIndex();
+    const edgeGroup = geometry.groups.find((group) => group.materialIndex === 2);
+
+    for (let offset = edgeGroup.start; offset < edgeGroup.start + edgeGroup.count; offset += 3) {
+      const a = new Vector3().fromBufferAttribute(position, index.getX(offset));
+      const b = new Vector3().fromBufferAttribute(position, index.getX(offset + 1));
+      const c = new Vector3().fromBufferAttribute(position, index.getX(offset + 2));
+      const geometricNormal = new Vector3().crossVectors(b.sub(a), c.sub(a));
+      const vertexNormal = new Vector3().fromBufferAttribute(normal, index.getX(offset));
+      expect(geometricNormal.dot(vertexNormal)).toBeGreaterThan(0);
+    }
+
+    const materials = [
+      new MeshStandardMaterial({ side: FrontSide }),
+      new MeshStandardMaterial({ side: FrontSide }),
+      new MeshStandardMaterial({ side: FrontSide }),
+    ];
+    const mesh = new Mesh(geometry, materials);
+    mesh.updateMatrixWorld(true);
+    const outsideHits = new Raycaster(new Vector3(0, 50, 0), new Vector3(0, -1, 0))
+      .intersectObject(mesh, false);
+    const insideHits = new Raycaster(new Vector3(0, 40, 0), new Vector3(0, 1, 0))
+      .intersectObject(mesh, false);
+    expect(outsideHits.some((hit) => hit.face.materialIndex === 2)).toBe(true);
+    expect(insideHits.some((hit) => hit.face.materialIndex === 2)).toBe(true);
+
+    materials.forEach((material) => material.dispose());
     geometry.dispose();
   });
 });

@@ -11,17 +11,29 @@ import {
   vectorKey,
 } from './geometry.js';
 import { cloneBoardConstruction, sanitizeBoardConstruction } from './BoardConstruction.js';
+import {
+  buildConstructionTemplate,
+  sanitizeConstruction,
+  validateConstructionElements,
+} from './ConstructionTemplates.js';
 
 export class BoxNetModel {
-  constructor(dimensions = { width: 150, height: 90, depth: 40 }, board = null) {
-    this.reset(dimensions, board);
+  constructor(dimensions = { width: 150, height: 90, depth: 40 }, board = null, construction = null) {
+    this.reset(dimensions, board, construction);
   }
 
-  reset(dimensions = this.dimensions, board = this.board) {
+  reset(dimensions = this.dimensions, board = this.board, construction = this.construction) {
     this.dimensions = normalizeDimensions(dimensions);
     this.board = sanitizeBoardConstruction(board, this.dimensions);
+    this.construction = sanitizeConstruction(construction, this.dimensions, this.board);
     this.panels = new Map();
+    this.elements = new Map();
     this.creationSequence = 0;
+
+    if (this.construction.templateId !== 'legacy-six-panel') {
+      this._buildConstruction(this.construction.templateId, this.construction.parameters);
+      return this;
+    }
 
     const front = this._createPanel({
       faceKey: 'front',
@@ -43,6 +55,13 @@ export class BoxNetModel {
 
   updateDimensions(dimensions) {
     const normalized = normalizeDimensions(dimensions);
+    if (this.construction?.templateId !== 'legacy-six-panel') {
+      this.dimensions = normalized;
+      this.board = sanitizeBoardConstruction(this.board, this.dimensions);
+      this.construction = sanitizeConstruction(this.construction, this.dimensions, this.board);
+      this._buildConstruction(this.construction.templateId, this.construction.parameters);
+      return this;
+    }
     const oldDimensions = { ...this.dimensions };
     const oldBoard = cloneBoardConstruction(this.board, oldDimensions);
     this.dimensions = normalized;
@@ -89,11 +108,44 @@ export class BoxNetModel {
 
   setBoardConstruction(board) {
     this.board = sanitizeBoardConstruction(board, this.dimensions);
+    if (this.construction?.templateId !== 'legacy-six-panel') {
+      this.construction = sanitizeConstruction(this.construction, this.dimensions, this.board);
+      this._buildConstruction(this.construction.templateId, this.construction.parameters);
+    }
     return this;
   }
 
   setBoardCaliper(caliperMm) {
     return this.setBoardConstruction({ ...this.board, caliperMm });
+  }
+
+  setConstruction(templateId, parameters = {}) {
+    const next = sanitizeConstruction({ templateId, parameters }, this.dimensions, this.board);
+    if (next.templateId === 'legacy-six-panel') {
+      this.reset(this.dimensions, this.board, next);
+    } else {
+      this.construction = next;
+      this._buildConstruction(next.templateId, next.parameters);
+    }
+    return this;
+  }
+
+  _buildConstruction(templateId, parameters = {}) {
+    const generated = buildConstructionTemplate(templateId, this.dimensions, this.board, parameters);
+    this.construction = sanitizeConstruction(generated, this.dimensions, this.board);
+    this.construction.parameters = { ...generated.parameters };
+    const validation = validateConstructionElements(generated.elements);
+    if (!validation.valid) throw new Error(`Invalid ${templateId} construction: ${validation.reason}.`);
+    this.elements = new Map(generated.elements.map((element, order) => [
+      element.id,
+      { ...structuredClone(element), order },
+    ]));
+    this.panels = new Map(generated.elements
+      .filter((element) => element.surfaceKey)
+      .map((element, order) => [element.id, { ...structuredClone(element), order }]));
+    this.rootId = 'front';
+    this.creationSequence = generated.elements.length;
+    return this;
   }
 
   _createPanel({ faceKey, faceName, basis, x, y, parentId, parentEdge }) {
@@ -135,11 +187,42 @@ export class BoxNetModel {
     return Array.from(this.panels.values()).sort((a, b) => a.order - b.order);
   }
 
+  getElements() {
+    if (this.construction?.templateId !== 'legacy-six-panel') {
+      return Array.from(this.elements.values()).sort((a, b) => a.order - b.order);
+    }
+    return this.getPanels().map((panel) => ({
+      ...structuredClone(panel),
+      role: 'body',
+      surfaceKey: panel.faceKey,
+      polygon: [
+        { x: panel.x, y: panel.y },
+        { x: panel.x + panel.width, y: panel.y },
+        { x: panel.x + panel.width, y: panel.y + panel.height },
+        { x: panel.x, y: panel.y + panel.height },
+      ],
+      foldAngleDeg: 0,
+      phase: [0, 1],
+      overlapLayer: 0,
+      hinge: null,
+    }));
+  }
+
+  getElement(elementId) {
+    if (this.construction?.templateId !== 'legacy-six-panel') return this.elements.get(elementId) || null;
+    return this.getElements().find((element) => element.id === elementId) || null;
+  }
+
+  getFeatures() {
+    return this.getElements().filter((element) => !element.surfaceKey);
+  }
+
   get panelCount() {
-    return this.panels.size;
+    return this.getPanels().length;
   }
 
   get isComplete() {
+    if (this.construction?.templateId !== 'legacy-six-panel') return this.panelCount === 6;
     return this.panelCount === 6;
   }
 
@@ -214,7 +297,7 @@ export class BoxNetModel {
   }
 
   getBounds() {
-    const panels = this.getPanels();
+    const panels = this.getElements();
     if (panels.length === 0) {
       return { minX: 0, minY: 0, maxX: 1, maxY: 1, width: 1, height: 1 };
     }
@@ -238,6 +321,7 @@ export class BoxNetModel {
     return {
       dimensions: { ...this.dimensions },
       board: cloneBoardConstruction(this.board, this.dimensions),
+      construction: structuredClone(this.construction),
       complete: this.isComplete,
       panels: this.getPanels().map((panel) => ({
         id: panel.id,
@@ -248,12 +332,13 @@ export class BoxNetModel {
         height: panel.height,
         parentId: panel.parentId,
         parentEdge: panel.parentEdge,
-        basis: {
+        basis: panel.basis ? {
           normal: cloneVector(panel.basis.normal),
           up: cloneVector(panel.basis.up),
           right: cloneVector(panel.basis.right),
-        },
+        } : null,
       })),
+      elements: this.getElements().map((element) => structuredClone(element)),
     };
   }
 
@@ -267,8 +352,38 @@ export class BoxNetModel {
       throw new Error('Invalid box net state.');
     }
 
-    const model = new BoxNetModel(state.dimensions, state.board);
+    const construction = sanitizeConstruction(state.construction, state.dimensions, state.board);
+    if (construction.templateId !== 'legacy-six-panel') {
+      const model = new BoxNetModel(state.dimensions, state.board, construction);
+      if (Array.isArray(state.elements)) {
+        const expected = JSON.stringify(model.getElements().map((element) => ({
+          id: element.id,
+          role: element.role,
+          polygon: element.polygon,
+          parentId: element.parentId,
+          parentEdge: element.parentEdge,
+          foldAngleDeg: element.foldAngleDeg,
+          phase: element.phase,
+          overlapLayer: element.overlapLayer,
+        })));
+        const actual = JSON.stringify(state.elements.map((element) => ({
+          id: element.id,
+          role: element.role,
+          polygon: element.polygon,
+          parentId: element.parentId,
+          parentEdge: element.parentEdge,
+          foldAngleDeg: element.foldAngleDeg,
+          phase: element.phase,
+          overlapLayer: element.overlapLayer,
+        })));
+        if (expected !== actual) throw new Error('Serialized construction does not match its template parameters.');
+      }
+      return model;
+    }
+
+    const model = new BoxNetModel(state.dimensions, state.board, construction);
     model.panels.clear();
+    model.elements.clear();
     model.creationSequence = 0;
     model.rootId = null;
     const normalKeys = new Set();
@@ -401,7 +516,9 @@ export class BoxNetModel {
     const restored = BoxNetModel.fromJSON(state);
     this.dimensions = restored.dimensions;
     this.board = restored.board;
+    this.construction = restored.construction;
     this.panels = restored.panels;
+    this.elements = restored.elements;
     this.creationSequence = restored.creationSequence;
     this.rootId = restored.rootId;
     return this;
