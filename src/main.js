@@ -290,7 +290,6 @@ let currentStep = 'box';
 let artworkApp;
 let preview3dFacade;
 let renderApp;
-let resetArtworkAfterBoxCompletion = false;
 
 function updateStepNavigationStates() {
   const isBoxComplete = model.isComplete;
@@ -346,12 +345,9 @@ function showStep(step) {
 
   if (step === 'artwork') {
     panelDock.openPanels();
-    if (resetArtworkAfterBoxCompletion) {
-      artworkApp?.resetPlacementForNewDimensions();
-      resetArtworkAfterBoxCompletion = false;
-    } else {
-      artworkApp?.fitToScreen();
-    }
+    // Dimension changes preserve artwork transforms and history. Fit only the
+    // editor viewport; never refit or clear the user's artwork placement.
+    artworkApp?.fitToScreen();
     preview3dFacade?.suspend();
     renderApp?.deactivate();
     requestAnimationFrame(() => artworkApp?.render());
@@ -382,7 +378,6 @@ const boxApp = createBoxNetApp({
     showStep('artwork');
   },
   onDimensionReset: () => {
-    resetArtworkAfterBoxCompletion = true;
     preview3dFacade?.resetForProject();
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);

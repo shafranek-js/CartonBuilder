@@ -37,9 +37,9 @@ describe('Wave 9A prepress foundations', () => {
     expect(model.toJSON()).toEqual(before);
   });
 
-  it('provides named SVG production layers and explicit non-certification boundary', () => {
+  it('provides named SVG production layers and explicit non-certification boundary', async () => {
     const model = new BoxNetModel({ width: 100, height: 120, depth: 50 }, null, { templateId: 'ste' });
-    const svg = createPrepressSvg(model, { mode: 'production-assist' });
+    const svg = await createPrepressSvg({ boxModel: model, settings: { mode: 'production-assist' } });
     for (const id of ['Artwork', 'Bleed', 'Safe', 'CutContour', 'Crease', 'Marks', 'Slug']) expect(svg).toContain(`id="${id}"`);
     expect(svg).toContain('data-spot="CutContour"');
     expect(svg).toContain('production-assist');

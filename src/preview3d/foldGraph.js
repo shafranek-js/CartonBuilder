@@ -158,8 +158,8 @@ export function buildFoldGraph(source, { caliperMm = 0 } = {}) {
         0,
       ];
       node.centerOffset = [
-        Number(hinge.childPoint.x) - childCenter.x,
-        childCenter.y - Number(hinge.childPoint.y),
+        childCenter.x - Number(hinge.childPoint.x),
+        Number(hinge.childPoint.y) - childCenter.y,
         0,
       ];
       parent.children.push(node.id);

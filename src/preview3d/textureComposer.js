@@ -343,7 +343,7 @@ export async function composeArtworkTexture({
   throwIfAborted(signal);
 
   const bounds = boxModel.getBounds();
-  const panels = boxModel.getPanels();
+  const panels = boxModel.getElements?.() || boxModel.getPanels();
   const { width, height, pixelsPerMm } = getTextureSize(
     bounds,
     entries,

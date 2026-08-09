@@ -15,6 +15,26 @@ export function createLazyPreview3DFacade({
   let disposed = false;
   let requestedActive = false;
   const statePatch = {};
+  const patchTokens = new Map();
+
+  function queueStatePatch(key, value, apply) {
+    const token = Symbol(key);
+    statePatch[key] = value;
+    patchTokens.set(key, token);
+    ensureController()
+      .then((target) => {
+        if (!target) return;
+        apply(target);
+        if (patchTokens.get(key) === token) {
+          delete statePatch[key];
+          patchTokens.delete(key);
+        }
+      })
+      .catch(() => {
+        // Keep the requested value visible through getState(); a later
+        // activation/retry will apply it to the controller.
+      });
+  }
 
   async function ensureController() {
     if (disposed) return null;
@@ -54,16 +74,13 @@ export function createLazyPreview3DFacade({
     },
     setFoldProgress(value) {
       const next = Math.max(0, Math.min(1, Number(value)));
-      if (Number.isFinite(next)) statePatch.foldProgress = next;
-      ensureController().then((target) => target?.setFoldProgress(value));
+      if (Number.isFinite(next)) queueStatePatch('foldProgress', next, (target) => target.setFoldProgress(next));
     },
     setCameraProjection(value) {
-      statePatch.cameraProjection = value;
-      ensureController().then((target) => target?.setCameraProjection(value));
+      queueStatePatch('cameraProjection', value, (target) => target.setCameraProjection(value));
     },
     setScenePreset(value) {
-      statePatch.scenePreset = value;
-      ensureController().then((target) => target?.setScenePreset(value));
+      queueStatePatch('scenePreset', value, (target) => target.setScenePreset(value));
     },
     setBoardAppearance(value) {
       ensureController().then((target) => target?.setBoardAppearance(value));
@@ -72,8 +89,7 @@ export function createLazyPreview3DFacade({
       ensureController().then((target) => target?.setBoardCaliper(value));
     },
     selectPanel(panelId) {
-      statePatch.selectedPanelId = panelId;
-      ensureController().then((target) => target?.selectPanel(panelId));
+      queueStatePatch('selectedPanelId', panelId, (target) => target.selectPanel(panelId));
     },
     resetView() {
       controller?.resetView();
@@ -103,6 +119,7 @@ export function createLazyPreview3DFacade({
     },
     resetForProject() {
       for (const key of Object.keys(statePatch)) delete statePatch[key];
+      patchTokens.clear();
       controller?.resetForProject();
     },
     dispose() {

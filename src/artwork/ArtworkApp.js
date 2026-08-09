@@ -3422,6 +3422,30 @@ export function createArtworkApp({
     return clonePrepressSettings(prepress);
   }
 
+  function preflightBlobSignature(blob) {
+    if (!blob) return null;
+    return {
+      size: Number(blob.size) || 0,
+      type: blob.type || '',
+      lastModified: Number(blob.lastModified) || 0,
+    };
+  }
+
+  function getPreflightSignature() {
+    return JSON.stringify({
+      box: boxModel.toJSON(),
+      settings: prepress,
+      artworks: artworks.map((entry) => ({
+        model: entry.model?.toJSON?.() || entry.model || null,
+        visible: entry.visible !== false,
+        outputRole: entry.outputRole || 'print',
+        finish: finishState(entry),
+        originalBlob: preflightBlobSignature(entry.originalBlob),
+        previewBlob: preflightBlobSignature(entry.previewBlob),
+      })),
+    });
+  }
+
   function setPrepressOverlay(name, visible) {
     if (!Object.hasOwn(prepressOverlays, name)) return false;
     prepressOverlays[name] = Boolean(visible);
@@ -3434,18 +3458,25 @@ export function createArtworkApp({
   }
 
   function runCurrentPreflight() {
-    lastPreflight = runPrepressPreflight({ boxModel, artworks: getArtworks(), settings: prepress });
+    const report = runPrepressPreflight({ boxModel, artworks: getArtworks(), settings: prepress });
+    lastPreflight = { signature: getPreflightSignature(), report };
     if (controls.prepressStatus) {
-      controls.prepressStatus.textContent = lastPreflight.valid
-        ? `Preflight passed with ${lastPreflight.warnings.length} warnings and ${lastPreflight.manualReview.length} manual checks.`
-        : `Preflight blocked: ${lastPreflight.blocking.length} blocking issue(s).`;
-      controls.prepressStatus.classList.toggle('is-error', !lastPreflight.valid);
+      controls.prepressStatus.textContent = report.valid
+        ? `Preflight passed with ${report.warnings.length} warnings and ${report.manualReview.length} manual checks.`
+        : `Preflight blocked: ${report.blocking.length} blocking issue(s).`;
+      controls.prepressStatus.classList.toggle('is-error', !report.valid);
     }
-    return lastPreflight;
+    return report;
+  }
+
+  function getCurrentPreflight({ fresh = false } = {}) {
+    const signature = getPreflightSignature();
+    if (!fresh && lastPreflight?.signature === signature) return lastPreflight.report;
+    return runCurrentPreflight();
   }
 
   async function exportPreflightReport() {
-    const report = lastPreflight || runCurrentPreflight();
+    const report = getCurrentPreflight({ fresh: true });
     await saveOrDownloadFile({
       blob: createPreflightReportBlob(report),
       suggestedName: 'carton-preflight-report.json',
@@ -3473,7 +3504,11 @@ export function createArtworkApp({
           accept: { 'image/svg+xml': ['.svg'] },
         }];
       } else if (type === 'prepress-svg') {
-        blob = new Blob([createPrepressSvg(boxModel, prepress)], { type: 'image/svg+xml;charset=utf-8' });
+        blob = new Blob([await createPrepressSvg({
+          boxModel,
+          artworks: exportArtworks,
+          settings: prepress,
+        })], { type: 'image/svg+xml;charset=utf-8' });
         suggestedName = getPrepressExportFilename(boxModel.dimensions);
         types = [{ description: 'Prepress SVG (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }];
       } else if (type === 'png' || type === 'jpg') {
@@ -3510,7 +3545,7 @@ export function createArtworkApp({
         }];
         fallback = 'exportPdfFailed';
       } else if (type === 'prepress-pdf') {
-        const report = lastPreflight || runCurrentPreflight();
+        const report = getCurrentPreflight({ fresh: true });
         if (!report.valid) throw new AppError('prepressBlocked');
         const { createPrepressPdfExport } = await import('../export/artworkExport.js');
         blob = await createPrepressPdfExport({ boxModel, artworks: exportArtworks, settings: prepress, preflight: report });
@@ -3849,10 +3884,12 @@ export function createArtworkApp({
     setPrepressSettings,
     setPrepressOverlay,
     getPrepressOverlayState: () => ({ ...prepressOverlays }),
-    runPrepressPreflight: runCurrentPreflight,
+    runPrepressPreflight: () => getCurrentPreflight(),
     exportPreflightReport,
     removeSelectedArtwork() {
+      if (layerLocks.artwork) return false;
       showDeleteConfirmation();
+      return true;
     },
     setArtworkQuality,
     updateArtworkFinish,

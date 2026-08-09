@@ -227,25 +227,20 @@ function setPageBox(page, name, box, origin) {
 }
 
 function addPrepressLayer(pdfDocument, page, name, segments, bounds, {
-  color = [0, 0, 0], dash = null, separation = null, strokePt = 0.25,
+  color = [0, 0, 0], dash = null, separation = null, separationKind = null,
+  strokePt = 0.25, overprint = false,
 } = {}) {
   const context = pdfDocument.context;
-  const ocg = context.obj({ Type: 'OCG', Name: name });
-  const ocgRef = context.register(ocg);
-  const properties = ensureResourceDictionary(page, 'Properties');
-  properties.set(PDFName.of(name), ocgRef);
-  const existing = pdfDocument.catalog.lookupMaybe(PDFName.of('OCProperties'), PDFDict);
-  const ocProperties = existing || context.obj({ OCGs: [], D: { Order: [], ON: [] } });
-  if (!existing) pdfDocument.catalog.set(PDFName.of('OCProperties'), ocProperties);
-  const ocgs = ocProperties.lookup(PDFName.of('OCGs'));
-  const defaultConfig = ocProperties.lookup(PDFName.of('D'), PDFDict);
-  const order = defaultConfig.lookup(PDFName.of('Order'));
-  const on = defaultConfig.lookup(PDFName.of('ON'));
-  ocgs.push(ocgRef); order.push(ocgRef);
-  if (!['Bleed', 'Safe'].includes(name)) on.push(ocgRef);
+  const ocgRef = registerOptionalContentGroup(pdfDocument, page, name, { on: !['Bleed', 'Safe'].includes(name) });
   const definition = separation
     ? (() => {
-        const tintFunctionRef = context.register(context.obj({ FunctionType: 2, Domain: [0, 1], C0: [0, 0, 0, 0], C1: separation === 'CutContour' ? [0, 1, 0, 0] : [1, 0, 0, 0], N: 1 }));
+        const tintFunctionRef = context.register(context.obj({
+          FunctionType: 2,
+          Domain: [0, 1],
+          C0: [0, 0, 0, 0],
+          C1: (separationKind || separation) === 'crease' ? [1, 0, 0, 0] : [0, 1, 0, 0],
+          N: 1,
+        }));
         const cs = context.obj([PDFName.of('Separation'), PDFName.of(separation), PDFName.of('DeviceCMYK'), tintFunctionRef]);
         const resourceName = `${name}CS`;
         ensureResourceDictionary(page, 'ColorSpace').set(PDFName.of(resourceName), cs);
@@ -259,10 +254,9 @@ function addPrepressLayer(pdfDocument, page, name, segments, bounds, {
   ];
   if (definition) operators.push(PDFOperator.of('CS', [PDFName.of(definition)]), PDFOperator.of('SCN', [PDFNumber.of(1)]));
   else operators.push(setStrokingRgbColor(...color));
-  // Cut/crease technical lines are intended to overprint in production
-  // workflows. This is an explicit PDF graphics-state flag; it does not
-  // claim ICC/PDF-X certification for the generated file.
-  if (separation) operators.push(PDFOperator.of('OP', ['true']));
+  if (separation && overprint) {
+    operators.push(PDFOperator.of('gs', [PDFName.of(ensureOverprintExtGState(page))]));
+  }
   if (dash) operators.push(setDashPattern(dash.map((value) => value * POINTS_PER_MM), 0));
   page.pushOperators(...operators);
   for (const segment of segments || []) {
@@ -273,6 +267,39 @@ function addPrepressLayer(pdfDocument, page, name, segments, bounds, {
     );
   }
   page.pushOperators(PDFOperator.of('EMC'), popGraphicsState());
+}
+
+function registerOptionalContentGroup(pdfDocument, page, name, { on = true } = {}) {
+  const context = pdfDocument.context;
+  const properties = ensureResourceDictionary(page, 'Properties');
+  if (properties.has(PDFName.of(name))) return properties.get(PDFName.of(name));
+  const ocgRef = context.register(context.obj({ Type: 'OCG', Name: name }));
+  properties.set(PDFName.of(name), ocgRef);
+  const existing = pdfDocument.catalog.lookupMaybe(PDFName.of('OCProperties'), PDFDict);
+  const ocProperties = existing || context.obj({ OCGs: [], D: { Order: [], ON: [] } });
+  if (!existing) pdfDocument.catalog.set(PDFName.of('OCProperties'), ocProperties);
+  const ocgs = ocProperties.lookup(PDFName.of('OCGs'));
+  const defaultConfig = ocProperties.lookup(PDFName.of('D'), PDFDict);
+  const order = defaultConfig.lookup(PDFName.of('Order'));
+  const onEntries = defaultConfig.lookup(PDFName.of('ON'));
+  ocgs.push(ocgRef);
+  order.push(ocgRef);
+  if (on) onEntries.push(ocgRef);
+  return ocgRef;
+}
+
+function ensureOverprintExtGState(page) {
+  const resources = ensureResourceDictionary(page, 'ExtGState');
+  const name = 'GSOverprint';
+  if (!resources.has(PDFName.of(name))) {
+    resources.set(PDFName.of(name), page.doc.context.register(page.doc.context.obj({
+      Type: 'ExtGState',
+      OP: true,
+      op: true,
+      OPM: 1,
+    })));
+  }
+  return name;
 }
 
 function rotatedOrigin(centerX, centerY, width, height, angleDegrees) {
@@ -516,6 +543,8 @@ export async function createPrepressPdfExport({
   setPageBox(page, 'MediaBox', media, media);
 
   addPolygonClip(page, production.bleedPolygons, media);
+  registerOptionalContentGroup(pdfDocument, page, 'Artwork');
+  page.pushOperators(PDFOperator.of('BDC', [PDFName.of('OC'), PDFName.of('Artwork')]));
   for (const entry of entries) {
     const artwork = entry.model;
     const centerX = (artwork.centerXmm - media.minX) * POINTS_PER_MM;
@@ -537,15 +566,26 @@ export async function createPrepressPdfExport({
     }
     page.pushOperators(popGraphicsState());
   }
+  page.pushOperators(PDFOperator.of('EMC'));
   page.pushOperators(popGraphicsState());
 
   const cutSegments = production.cut;
   const creaseSegments = production.fold;
-  addPrepressLayer(pdfDocument, page, 'Artwork', [], media, { color: [0, 0, 0] });
   addPrepressLayer(pdfDocument, page, 'Bleed', polygonSegments(production.bleedPolygons), media, { color: [0.95, 0.65, 0.05], strokePt: 0.2 });
   addPrepressLayer(pdfDocument, page, 'Safe', polygonSegments(production.safePolygons), media, { color: [0, 0.55, 0.35], dash: [2, 1], strokePt: 0.2 });
-  addPrepressLayer(pdfDocument, page, 'CutContour', cutSegments, media, { separation: 'CutContour', strokePt: production.settings.technicalLines.strokePt });
-  addPrepressLayer(pdfDocument, page, 'Crease', creaseSegments, media, { separation: 'Crease', dash: [2, 1], strokePt: production.settings.technicalLines.strokePt });
+  addPrepressLayer(pdfDocument, page, production.settings.technicalLines.cutSpotName, cutSegments, media, {
+    separation: production.settings.technicalLines.cutSpotName,
+    separationKind: 'cut',
+    strokePt: production.settings.technicalLines.strokePt,
+    overprint: production.settings.technicalLines.overprint,
+  });
+  addPrepressLayer(pdfDocument, page, production.settings.technicalLines.creaseSpotName, creaseSegments, media, {
+    separation: production.settings.technicalLines.creaseSpotName,
+    separationKind: 'crease',
+    dash: [2, 1],
+    strokePt: production.settings.technicalLines.strokePt,
+    overprint: production.settings.technicalLines.overprint,
+  });
   if (production.settings.marks.crop || production.settings.marks.registration) {
     addPrepressLayer(pdfDocument, page, 'Marks', cropMarkSegments(trim, production.settings.slugMm), media, { color: [0, 0, 0], strokePt: 0.2 });
   } else {
