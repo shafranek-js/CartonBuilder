@@ -142,6 +142,11 @@ parity, schema v14 migration, unit and Chromium/Edge construction checks,
 production build and `graphify update .`. Production crease allowance remains
 Wave 9 scope.
 
+Wave 9A prepress foundations are implemented: schema v15 settings, derived
+production trim/bleed/safe geometry, marks/overlays, transient preflight and
+separate non-PDF/X Prepress PDF/SVG. Wave 9B remains the gate for ICC, PDF/X,
+trapping and certification.
+
 Этот список является release-проверкой фактов, а не основанием считать
 непроверенную функцию Implemented.
 
