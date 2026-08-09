@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { validateBytes } from 'gltf-validator';
 
 import { createInteractive3dHtml } from '../../src/export/interactive3dExport.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
@@ -25,6 +26,10 @@ function buildCompleteBox() {
   return model;
 }
 
+function buildParametricBox(templateId = 'ste') {
+  return new BoxNetModel({ width: 150, height: 90, depth: 40 }, null, { templateId });
+}
+
 const fakeArtwork = { hasArtwork: true, quality: { render: 'auto' } };
 const fakePreview = new Blob(['preview'], { type: 'image/png' });
 
@@ -40,7 +45,82 @@ function stubTextureComposer() {
   });
 }
 
+function readEmbeddedData(html) {
+  const match = html.match(/<script id="embeddedViewerData"[^>]*>([\s\S]*?)<\/script>/i);
+  if (!match) throw new Error('Embedded viewer data was not found.');
+  return JSON.parse(match[1]);
+}
+
+function readGlbJson(dataUrl) {
+  const bytes = readGlbBytes(dataUrl);
+  expect(bytes.toString('ascii', 0, 4)).toBe('glTF');
+  const jsonLength = bytes.readUInt32LE(12);
+  const chunkType = bytes.toString('ascii', 16, 20);
+  expect(chunkType).toBe('JSON');
+  return JSON.parse(bytes.toString('utf8', 20, 20 + jsonLength).trim());
+}
+
+function readGlbBytes(dataUrl) {
+  return Buffer.from(dataUrl.split(',')[1], 'base64');
+}
+
 describe('createInteractive3dHtml', () => {
+  it('exports opaque interior and edge appearance with separate fallback GLB materials', async () => {
+    const boxModel = buildCompleteBox();
+    boxModel.setBoardCaliper(0.7);
+    const blob = await createInteractive3dHtml({
+      boxModel,
+      artworks: fakeEntries(),
+      boardAppearance: {
+        thicknessMm: 0.7,
+        bevelRadiusMm: 0.1,
+        interiorColor: '#ff00ff',
+        edgeColor: '#00ffff',
+      },
+      composeTexture: async () => ({
+        canvas: {
+          toDataURL: () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69flkwAAAABJRU5ErkJggg==',
+        },
+      }),
+    });
+    const html = await blob.text();
+    const data = readEmbeddedData(html);
+    const glb = readGlbJson(data.models.glb);
+
+    expect(data.boardAppearance).toEqual({
+      thicknessMm: 0.7,
+      bevelRadiusMm: 0.1,
+      interiorColor: '#ff00ff',
+      edgeColor: '#00ffff',
+    });
+    expect(html).toContain("color: DATA.boardAppearance?.interiorColor || '#f4f2ec'");
+    expect(html).toContain('side: THREE.FrontSide');
+    expect(html).toContain("color: DATA.boardAppearance?.edgeColor || '#c8c1b5'");
+    expect(glb.materials.map((material) => material.name)).toEqual(['Artwork', 'Interior', 'Edges']);
+    expect(glb.materials[1].pbrMetallicRoughness.baseColorFactor).toEqual([1, 0, 1, 1]);
+    expect(glb.materials[2].pbrMetallicRoughness.baseColorFactor).toEqual([0, 1, 1, 1]);
+    expect(glb.meshes.every((mesh) => (
+      mesh.primitives.length === 3
+      && mesh.primitives.map((primitive) => primitive.material).join(',') === '0,1,2'
+    ))).toBe(true);
+    const validation = await validateBytes(new Uint8Array(readGlbBytes(data.models.glb)));
+    expect(validation.issues.numErrors, JSON.stringify(validation.issues.messages)).toBe(0);
+  });
+
+  it('embeds all parametric polygon elements and assembly phases', async () => {
+    const blob = await createInteractive3dHtml({
+      boxModel: buildParametricBox('rte'),
+      artworks: fakeEntries(),
+      composeTexture: stubTextureComposer(),
+    });
+    const html = await blob.text();
+    expect(html).toContain('"templateId":"rte"');
+    for (const id of ['top-closure', 'bottom-closure', 'top-tuck', 'bottom-tuck', 'left-top-dust', 'right-bottom-dust']) {
+      expect(html).toContain(`"id":"${id}"`);
+    }
+    expect(html).toContain('"phase":[0.9,1]');
+  });
+
   it('embeds the fold graph, artwork texture and inline three.js in one file', async () => {
     const blob = await createInteractive3dHtml({
       boxModel: buildCompleteBox(),

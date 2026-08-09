@@ -116,6 +116,16 @@ export function runRenderExportPreflight({
     issues.push(issue('hdri-glb', 'warning'));
   }
 
+  const geometry = diagnostics.geometry || {};
+  const unexpectedIntersections = Number(geometry.unexpectedIntersections ?? geometry.intersections);
+  if (Number.isFinite(unexpectedIntersections) && unexpectedIntersections > 0) {
+    issues.push(issue('invalid-geometry', 'error', {
+      templateId: geometry.templateId || 'unknown',
+      unexpectedIntersections,
+      invalidElement: geometry.invalidElement || null,
+    }));
+  }
+
   if (estimatedBytes > memoryBudgetBytes * 0.75) {
     issues.push(issue('memory-budget', 'warning', {
       estimatedBytes,

@@ -322,8 +322,8 @@ camera projection, scene preset, panel selection, reset/render, state,
 resource diagnostics, and disposal. Its state is deliberately excluded from
 autosave and `.carton`. Presentation state is available as
 `window.cartonBuilderApp.render`; its serializable settings are included in the
-current schema v13 project snapshot. Schema v13 adds canonical board
-construction while retaining the unified output kind, turntable options and GLB
+current schema v14 project snapshot. Schema v14 adds canonical board
+construction plus STE/RTE polygon construction elements while retaining the unified output kind, turntable options and GLB
 options, camera framing, vertical correction, global View Preset references and per-artwork preview/render
 quality. It also persists per-layer finish roles and finish parameters. Legacy
 cropped artwork is normalized to the same visual-equivalent
@@ -340,9 +340,9 @@ The existing events are unchanged:
   artwork editors. Render output is an sRGB presentation image, not a CMYK,
   ICC, Pantone, overprint, certified print-proof, or production finish
   separation workflow.
-- There are no flaps, bleed, safe area, trapping, crop
-  marks, ICC/CMYK conversion workflow, overprint validation, PDF/X output,
-  production validation, collision simulation, or free-angle rotation.
+- STE/RTE flaps and staged structural assembly are supported, but production
+  bleed, safe area, trapping, crop marks, ICC/CMYK conversion, PDF/X output,
+  ECMA/FEFCO certification and manufacturing allowances remain Wave 9.
 - Presentation Render and Studio/Photorealistic Preview share thickness-aware
   solid board geometry with surface-aware hinges, bounded bevel, interior and
   edge materials, settled GTAO/TAA, optional DOF, adaptive quality diagnostics,

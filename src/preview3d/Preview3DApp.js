@@ -1,5 +1,6 @@
 import { t } from '../i18n.js';
 import { resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
+import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { BoxScene } from './BoxScene.js';
 import { composeArtworkTexture } from './textureComposer.js';
 import {
@@ -90,6 +91,7 @@ export function createPreview3DApp({
   getArtworks,
   getArtworksJson,
   getRenderState = () => null,
+  getBoardAppearance = () => null,
   setHtmlExportQuality = () => false,
   documentRef = document,
   windowRef = window,
@@ -107,6 +109,7 @@ export function createPreview3DApp({
     exportHtmlSummary: documentRef.getElementById('previewExportHtmlSummary'),
     foldSlider: documentRef.getElementById('foldProgress'),
     foldValue: documentRef.getElementById('foldProgressValue'),
+    assemblyStage: documentRef.getElementById('assemblyStage'),
     open: documentRef.getElementById('open3dButton'),
     fold: documentRef.getElementById('fold3dButton'),
     reset: documentRef.getElementById('reset3dViewButton'),
@@ -161,6 +164,14 @@ export function createPreview3DApp({
   let videoLoopFrame = null;
   let videoLoopVideo = null;
   const listeners = [];
+
+  function resolveBoardAppearance(value = getBoardAppearance?.()) {
+    const source = value && typeof value === 'object' ? value : {};
+    return sanitizeBoardAppearance({
+      ...source,
+      thicknessMm: boxModel.board?.caliperMm ?? source.thicknessMm,
+    });
+  }
 
   function stopVideoLoop() {
     if (videoLoopFrame != null) {
@@ -396,10 +407,25 @@ export function createPreview3DApp({
     element.style.setProperty('--slider-progress', `${((Number(value) - min) / (max - min)) * 100}%`);
   }
 
+  function getAssemblyStage(progress) {
+    if (boxModel.construction?.templateId === 'legacy-six-panel') return '';
+    const value = Math.min(1, Math.max(0, Number(progress) || 0));
+    if (value >= 0.999) return t('assemblyStageClosed');
+    if (value >= 0.96) return t('assemblyStageTopTuck');
+    if (value >= 0.90) return t('assemblyStageTopClosure');
+    if (value >= 0.84) return t('assemblyStageTopDust');
+    if (value >= 0.72) return t('assemblyStageBottomTuck');
+    if (value >= 0.58) return t('assemblyStageBottomClosure');
+    if (value >= 0.55) return t('assemblyStageBottomDust');
+    if (value >= 0.25) return t('assemblyStageGlue');
+    return t('assemblyStageBody');
+  }
+
   function updateControls() {
     elements.foldSlider.value = String(state.foldProgress);
     setRangeProgress(elements.foldSlider, state.foldProgress);
     elements.foldValue.value = `${Math.round(state.foldProgress * 100)}%`;
+    if (elements.assemblyStage) elements.assemblyStage.textContent = getAssemblyStage(state.foldProgress);
     elements.camera.value = state.cameraProjection;
     elements.preset.value = state.scenePreset;
     elements.lightAzimuth.value = String(state.lightAzimuth);
@@ -528,7 +554,7 @@ export function createPreview3DApp({
           cameraFov: state.cameraFov,
           backgroundColor: state.backgroundColor || undefined,
           geometryMode: state.scenePreset === 'technical' ? 'flat' : 'solid',
-          boardAppearance: { thicknessMm: boxModel.board?.caliperMm },
+          boardAppearance: resolveBoardAppearance(),
           windowRef,
           onSelection: (panelId) => {
             state.selectedPanelId = panelId;
@@ -577,6 +603,7 @@ export function createPreview3DApp({
     elements.foldSlider.value = String(state.foldProgress);
     elements.foldSlider.style.setProperty('--slider-progress', `${state.foldProgress * 100}%`);
     elements.foldValue.value = `${Math.round(state.foldProgress * 100)}%`;
+    if (elements.assemblyStage) elements.assemblyStage.textContent = getAssemblyStage(state.foldProgress);
     if (announce) schedulePersist();
     updateSummary({ announce });
   }
@@ -676,7 +703,14 @@ export function createPreview3DApp({
   function setBoardCaliper(caliperMm) {
     const next = Number(caliperMm);
     if (!Number.isFinite(next)) return;
-    scene?.setBoardAppearance({ thicknessMm: next });
+    scene?.setBoardAppearance(sanitizeBoardAppearance({
+      ...(getBoardAppearance?.() || scene?.boardAppearance || {}),
+      thicknessMm: next,
+    }));
+  }
+
+  function setBoardAppearance(boardAppearance) {
+    scene?.setBoardAppearance(resolveBoardAppearance(boardAppearance));
   }
 
   function selectPanel(panelId) {
@@ -901,6 +935,7 @@ export function createPreview3DApp({
     setFoldProgress,
     setCameraProjection,
     setScenePreset,
+    setBoardAppearance,
     setBoardCaliper,
     selectPanel,
     resetView,

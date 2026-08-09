@@ -395,6 +395,14 @@ const boxApp = createBoxNetApp({
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
   },
+  onConstructionChange: () => {
+    // Construction changes invalidate all derived polygon/UV/hinge resources.
+    // The active facade/render app will lazily rebuild on its next frame.
+    preview3dFacade?.resetForProject?.();
+    renderApp?.resetForProject?.();
+    updateStepNavigationStates();
+  },
+  hasArtwork: () => Boolean(artworkApp?.artwork?.hasArtwork),
   onChange: () => {
     updateStepNavigationStates();
     artworkApp?.scheduleSave();
@@ -457,6 +465,7 @@ preview3dFacade = createLazyPreview3DFacade({
     getArtworks: () => artworkApp.getArtworks(),
     getArtworksJson: () => artworkApp.getArtworksJson(),
     getRenderState: () => renderApp?.getState?.(),
+    getBoardAppearance: () => renderApp?.getBoardAppearance?.(),
     setHtmlExportQuality: (value) => renderApp?.setHtmlExportQuality?.(value),
   }),
 });
@@ -468,7 +477,7 @@ renderApp = createRenderApp({
   initialState: storedRenderSettings?.renderSettings || DEFAULT_RENDER_SETTINGS,
   initialBoardAppearance: storedRenderSettings?.boardAppearance,
   onStateChange: () => {
-    preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
+    preview3dFacade?.setBoardAppearance?.(renderApp?.getBoardAppearance?.());
     writeRenderSettings({
       renderSettings: renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
       boardAppearance: renderApp?.getBoardAppearance?.(),

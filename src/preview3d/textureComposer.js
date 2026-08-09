@@ -74,7 +74,21 @@ function throwIfAborted(signal) {
 function drawPanelUnion(context, panels) {
   context.beginPath();
   for (const panel of panels) {
-    context.rect(panel.x, panel.y, panel.width, panel.height);
+    if (typeof context.moveTo !== 'function' || typeof context.lineTo !== 'function') {
+      context.rect(panel.x, panel.y, panel.width, panel.height);
+      continue;
+    }
+    const points = Array.isArray(panel.polygon) && panel.polygon.length >= 3
+      ? panel.polygon
+      : [
+          { x: panel.x, y: panel.y },
+          { x: panel.x + panel.width, y: panel.y },
+          { x: panel.x + panel.width, y: panel.y + panel.height },
+          { x: panel.x, y: panel.y + panel.height },
+        ];
+    context.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+    context.closePath();
   }
 }
 

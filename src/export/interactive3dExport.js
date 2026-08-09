@@ -4,8 +4,10 @@ import roomEnvironmentSource from '../../node_modules/three/examples/jsm/environ
 import gltfLoaderSource from '../../node_modules/three/examples/jsm/loaders/GLTFLoader.js?raw';
 import bufferGeometryUtilsSource from '../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js?raw';
 import skeletonUtilsSource from '../../node_modules/three/examples/jsm/utils/SkeletonUtils.js?raw';
+import { ShapeUtils, Vector2 } from 'three';
 
 import { HTML_EXPORT_QUALITY_OPTIONS } from '../render/RenderSettings.js';
+import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { buildFoldGraph } from '../preview3d/foldGraph.js';
 import {
   composeArtworkTexture,
@@ -410,13 +412,13 @@ const VIEWER_SCRIPT = `
     clearcoatRoughness: 0.85,
   });
   const backMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0xf4f2ec,
-    side: THREE.BackSide,
+    color: DATA.boardAppearance?.interiorColor || '#f4f2ec',
+    side: THREE.FrontSide,
     roughness: 0.95,
     metalness: 0,
   });
   const edgeMaterial = new THREE.MeshStandardMaterial({
-    color: 0xc8c1b5,
+    color: DATA.boardAppearance?.edgeColor || '#c8c1b5',
     roughness: 0.9,
     metalness: 0,
   });
@@ -468,6 +470,43 @@ const VIEWER_SCRIPT = `
   }
 
   function buildPanelObjects(node) {
+    if (Array.isArray(node.polygon) && node.polygon.length >= 3) {
+      const cx = node.rect.x + node.width / 2;
+      const cy = node.rect.y + node.height / 2;
+      const local = node.polygon.map((point) => new THREE.Vector2(point.x - cx, cy - point.y));
+      const triangles = THREE.ShapeUtils.triangulateShape(local, []);
+      const half = Math.max(0, Number(DATA.caliperMm) || 0) / 2;
+      const frontPositions = local.flatMap(({ x, y }) => [x, y, half]);
+      const frontUvs = node.polygon.flatMap((point) => [
+        (point.x - DATA.bounds.minX) / DATA.bounds.width,
+        1 - (point.y - DATA.bounds.minY) / DATA.bounds.height,
+      ]);
+      const cap = new THREE.BufferGeometry();
+      cap.setAttribute('position', new THREE.Float32BufferAttribute(frontPositions, 3));
+      cap.setAttribute('uv', new THREE.Float32BufferAttribute(frontUvs, 2));
+      cap.setIndex(triangles.flat()); cap.computeVertexNormals(); cap.computeBoundingSphere();
+      const exterior = new THREE.Mesh(cap, frontMaterial);
+      exterior.matrixAutoUpdate = false; exterior.castShadow = true; exterior.userData.panelId = node.id;
+      const back = new THREE.BufferGeometry();
+      back.setAttribute('position', new THREE.Float32BufferAttribute(local.flatMap(({ x, y }) => [x, y, -half]), 3));
+      back.setIndex(triangles.flatMap(([a, b, c]) => [c, b, a])); back.computeVertexNormals(); back.computeBoundingSphere();
+      const interior = new THREE.Mesh(back, backMaterial); interior.matrixAutoUpdate = false;
+      const sidePositions = [];
+      const sideIndices = [];
+      for (let index = 0; index < local.length; index += 1) {
+        const next = (index + 1) % local.length;
+        const base = sidePositions.length / 3;
+        const { x: ax, y: ay } = local[index]; const { x: bx, y: by } = local[next];
+        sidePositions.push(ax, ay, half, bx, by, half, bx, by, -half, ax, ay, -half);
+        sideIndices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+      const sidesGeometry = new THREE.BufferGeometry();
+      sidesGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sidePositions, 3));
+      sidesGeometry.setIndex(sideIndices); sidesGeometry.computeVertexNormals(); sidesGeometry.computeBoundingSphere();
+      const sides = new THREE.Mesh(sidesGeometry, edgeMaterial); sides.matrixAutoUpdate = false;
+      scene.add(exterior, interior, sides); meshes.set(node.id, [exterior, interior, sides]);
+      return;
+    }
     const hw = node.width / 2;
     const hh = node.height / 2;
     const u0 = (node.rect.x - DATA.bounds.minX) / DATA.bounds.width;
@@ -534,7 +573,10 @@ const VIEWER_SCRIPT = `
       if (!matrix) continue;
       const hw = node.width / 2;
       const hh = node.height / 2;
-      for (const point of [[-hw, -hh, 0], [hw, -hh, 0], [hw, hh, 0], [-hw, hh, 0]]) {
+      const points = Array.isArray(node.polygon)
+        ? node.polygon.map((point) => [point.x - (node.rect.x + node.width / 2), (node.rect.y + node.height / 2) - point.y, 0])
+        : [[-hw, -hh, 0], [hw, -hh, 0], [hw, hh, 0], [-hw, hh, 0]];
+      for (const point of points) {
         corner.set(point[0], point[1], point[2]).applyMatrix4(matrix);
         if (corner.x < minX) minX = corner.x;
         if (corner.x > maxX) maxX = corner.x;
@@ -553,7 +595,7 @@ const VIEWER_SCRIPT = `
       minY,
       maxY,
       maxRadius: Math.max(1, maxRadius),
-    };
+      };
   }
 
   const extents = computeBoxExtents();
@@ -814,9 +856,11 @@ const VIEWER_SCRIPT = `
       } else {
         const axis = new THREE.Vector3(node.axis[0], node.axis[1], node.axis[2]);
         const rotation = new THREE.Matrix4().makeRotationAxis(axis, node.targetAngle * progress);
+        const phase = Array.isArray(node.phase) ? node.phase : [0, 1];
+        const staged = Math.min(1, Math.max(0, (progress - phase[0]) / Math.max(1e-6, phase[1] - phase[0])));
         frame = parentFrame.clone()
           .multiply(new THREE.Matrix4().makeTranslation(node.parentOffset[0], node.parentOffset[1], node.parentOffset[2] + (DATA.caliperMm || 0) / 2))
-          .multiply(rotation)
+          .multiply(new THREE.Matrix4().makeRotationAxis(axis, node.targetAngle * staged))
           .multiply(new THREE.Matrix4().makeTranslation(node.centerOffset[0], node.centerOffset[1], node.centerOffset[2] - (DATA.caliperMm || 0) / 2));
       }
       transforms.set(id, frame);
@@ -1336,13 +1380,25 @@ function align4(value) {
   return (value + 3) & ~3;
 }
 
+function hexToColorFactor(value) {
+  const normalized = /^#[0-9a-f]{6}$/i.test(value) ? value.slice(1) : 'ffffff';
+  const number = Number.parseInt(normalized, 16);
+  return [
+    ((number >> 16) & 0xff) / 255,
+    ((number >> 8) & 0xff) / 255,
+    (number & 0xff) / 255,
+    1,
+  ];
+}
+
 /**
  * Builds a compact, valid GLB fallback without invoking GLTFExporter. The
  * renderer's full GLB export remains available from Render, while HTML export
  * gets a deterministic model immediately and never blocks the UI on a large
  * WebGL scene or texture encoder.
  */
-function createCartonGlbDataUrl({ nodes, bounds, textureUrl, caliperMm = 0.35 }) {
+function createCartonGlbDataUrl({ nodes, bounds, textureUrl, boardAppearance = null }) {
+  const appearance = sanitizeBoardAppearance(boardAppearance);
   const buffer = [];
   const views = [];
   const accessors = [];
@@ -1361,8 +1417,67 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl, caliperMm = 0.35 })
   const minX = Number(bounds.minX) || 0;
   const minY = Number(bounds.minY) || 0;
   const scale = 0.001;
-  const halfCaliper = Math.max(0, Number(caliperMm) || 0) * scale / 2;
+  const halfCaliper = appearance.thicknessMm * scale / 2;
   for (const node of nodes) {
+    if (Array.isArray(node.polygon) && node.polygon.length >= 3) {
+      const points = node.polygon;
+      const local = points.map((point) => new Vector2(
+        (point.x - minX) * scale,
+        -(point.y - minY) * scale,
+      ));
+      const triangles = ShapeUtils.triangulateShape(local, []);
+      const positions = [];
+      const uvs = [];
+      for (const point of points) {
+        positions.push((point.x - minX) * scale, -(point.y - minY) * scale, halfCaliper);
+        uvs.push((point.x - minX) / Math.max(1, bounds.width), 1 - (point.y - minY) / Math.max(1, bounds.height));
+      }
+      for (const point of points) {
+        positions.push((point.x - minX) * scale, -(point.y - minY) * scale, -halfCaliper);
+        uvs.push((point.x - minX) / Math.max(1, bounds.width), 1 - (point.y - minY) / Math.max(1, bounds.height));
+      }
+      const frontIndices = [];
+      const backIndices = [];
+      const sideIndices = [];
+      const count = points.length;
+      for (const [a, b, c] of triangles) {
+        frontIndices.push(a, b, c);
+        backIndices.push(count + c, count + b, count + a);
+      }
+      for (let index = 0; index < count; index += 1) {
+        const next = (index + 1) % count;
+        sideIndices.push(index, next, count + next, index, count + next, count + index);
+      }
+      const positionView = append(new Float32Array(positions), 34962);
+      const uvView = append(new Float32Array(uvs), 34962);
+      const IndexCtor = positions.length / 3 > 65535 ? Uint32Array : Uint16Array;
+      const indexComponentType = IndexCtor === Uint32Array ? 5125 : 5123;
+      const frontIndexView = append(new IndexCtor(frontIndices), 34963);
+      const backIndexView = append(new IndexCtor(backIndices), 34963);
+      const sideIndexView = append(new IndexCtor(sideIndices), 34963);
+      const xs = positions.filter((_, index) => index % 3 === 0);
+      const ys = positions.filter((_, index) => index % 3 === 1);
+      const positionAccessor = accessors.push({
+        bufferView: positionView,
+        componentType: 5126,
+        count: positions.length / 3,
+        type: 'VEC3',
+        min: [Math.min(...xs), Math.min(...ys), -halfCaliper],
+        max: [Math.max(...xs), Math.max(...ys), halfCaliper],
+      }) - 1;
+      const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: uvs.length / 2, type: 'VEC2' }) - 1;
+      const frontAccessor = accessors.push({ bufferView: frontIndexView, componentType: indexComponentType, count: frontIndices.length, type: 'SCALAR', min: [0], max: [count - 1] }) - 1;
+      const backAccessor = accessors.push({ bufferView: backIndexView, componentType: indexComponentType, count: backIndices.length, type: 'SCALAR', min: [count], max: [positions.length / 3 - 1] }) - 1;
+      const sideAccessor = accessors.push({ bufferView: sideIndexView, componentType: indexComponentType, count: sideIndices.length, type: 'SCALAR', min: [0], max: [positions.length / 3 - 1] }) - 1;
+      const meshIndex = meshes.push({ name: node.name, primitives: [
+        { attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: frontAccessor, material: 0 },
+        { attributes: { POSITION: positionAccessor }, indices: backAccessor, material: 1 },
+        { attributes: { POSITION: positionAccessor }, indices: sideAccessor, material: 2 },
+      ] }) - 1;
+      const nodeIndex = gltfNodes.push({ name: node.name, mesh: meshIndex, extras: { cartonBuilderPanelId: node.id, role: node.role || 'body' } }) - 1;
+      rootChildren.push(nodeIndex + 1);
+      continue;
+    }
     const x0 = (node.rect.x - minX) * scale;
     const x1 = (node.rect.x + node.width - minX) * scale;
     const y0 = -(node.rect.y - minY) * scale;
@@ -1379,26 +1494,44 @@ function createCartonGlbDataUrl({ nodes, bounds, textureUrl, caliperMm = 0.35 })
       u0, v0, u1, v0, u1, v1, u0, v1,
       u0, v0, u1, v0, u1, v1, u0, v1,
     ]), 34962);
-    const indexView = append(new Uint16Array([
-      0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6,
+    const frontIndices = new Uint16Array([0, 1, 2, 0, 2, 3]);
+    const backIndices = new Uint16Array([4, 6, 5, 4, 7, 6]);
+    const sideIndices = new Uint16Array([
       0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2,
       2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
-    ]), 34963);
+    ]);
+    const frontIndexView = append(frontIndices, 34963);
+    const backIndexView = append(backIndices, 34963);
+    const sideIndexView = append(sideIndices, 34963);
     const positionAccessor = accessors.push({ bufferView: positionView, componentType: 5126, count: 8, type: 'VEC3', min: [x0, Math.min(y0, y1), -halfCaliper], max: [x1, Math.max(y0, y1), halfCaliper] }) - 1;
     const uvAccessor = accessors.push({ bufferView: uvView, componentType: 5126, count: 8, type: 'VEC2' }) - 1;
-    const indexAccessor = accessors.push({ bufferView: indexView, componentType: 5123, count: 36, type: 'SCALAR', min: [0], max: [7] }) - 1;
-    const meshIndex = meshes.push({ name: node.name, primitives: [{ attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: indexAccessor, material: 0 }] }) - 1;
+    const frontAccessor = accessors.push({ bufferView: frontIndexView, componentType: 5123, count: frontIndices.length, type: 'SCALAR', min: [0], max: [3] }) - 1;
+    const backAccessor = accessors.push({ bufferView: backIndexView, componentType: 5123, count: backIndices.length, type: 'SCALAR', min: [4], max: [7] }) - 1;
+    const sideAccessor = accessors.push({ bufferView: sideIndexView, componentType: 5123, count: sideIndices.length, type: 'SCALAR', min: [0], max: [7] }) - 1;
+    const meshIndex = meshes.push({ name: node.name, primitives: [
+      { attributes: { POSITION: positionAccessor, TEXCOORD_0: uvAccessor }, indices: frontAccessor, material: 0 },
+      { attributes: { POSITION: positionAccessor }, indices: backAccessor, material: 1 },
+      { attributes: { POSITION: positionAccessor }, indices: sideAccessor, material: 2 },
+    ] }) - 1;
     const nodeIndex = gltfNodes.push({ name: node.name, mesh: meshIndex, extras: { cartonBuilderPanelId: node.id } }) - 1;
     rootChildren.push(nodeIndex + 1);
   }
-  gltfNodes.unshift({ name: 'CartonBuilder GLB', children: rootChildren, extras: { sourceUnit: 'mm', presentation: 'solid', caliperMm } });
+  gltfNodes.unshift({
+    name: 'CartonBuilder GLB',
+    children: rootChildren,
+    extras: { sourceUnit: 'mm', presentation: 'solid', caliperMm: appearance.thicknessMm },
+  });
   const json = {
     asset: { version: '2.0', generator: 'CartonBuilder HTML export' },
     scene: 0,
     scenes: [{ nodes: [0] }],
     nodes: gltfNodes,
     meshes,
-    materials: [{ name: 'Artwork', pbrMetallicRoughness: { baseColorTexture: { index: 0 }, metallicFactor: 0, roughnessFactor: 0.78 } }],
+    materials: [
+      { name: 'Artwork', pbrMetallicRoughness: { baseColorTexture: { index: 0 }, metallicFactor: 0, roughnessFactor: 0.78 } },
+      { name: 'Interior', pbrMetallicRoughness: { baseColorFactor: hexToColorFactor(appearance.interiorColor), metallicFactor: 0, roughnessFactor: 0.95 } },
+      { name: 'Edges', pbrMetallicRoughness: { baseColorFactor: hexToColorFactor(appearance.edgeColor), metallicFactor: 0, roughnessFactor: 0.9 } },
+    ],
     textures: [{ sampler: 0, source: 0 }],
     samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 }],
     images: [{ uri: textureUrl, mimeType: 'image/png' }],
@@ -1432,6 +1565,7 @@ export async function createInteractive3dHtml({
   artworks,
   htmlQuality = 'auto',
   renderState = null,
+  boardAppearance = null,
   previewState = null,
   locale = 'en',
   glbBlob = null,
@@ -1458,6 +1592,9 @@ export async function createInteractive3dHtml({
       width: node.panel.width,
       height: node.panel.height,
       rect: { x: node.panel.x, y: node.panel.y },
+      polygon: Array.isArray(node.panel.polygon) ? node.panel.polygon : null,
+      role: node.panel.role || 'body',
+      phase: node.panel.phase || [0, 1],
       parentId: node.parentId,
       parentEdge: node.parentEdge,
       axis: node.axis,
@@ -1524,8 +1661,12 @@ export async function createInteractive3dHtml({
 
   const presentationId = stablePresentationId(boxModel, entries);
   const normalizedLocale = locale === 'ru' ? 'ru' : 'en';
+  const appearance = sanitizeBoardAppearance({
+    ...(boardAppearance && typeof boardAppearance === 'object' ? boardAppearance : {}),
+    thicknessMm: boxModel.board?.caliperMm ?? boardAppearance?.thicknessMm,
+  });
   const glbData = await blobToDataUrl(glbBlob)
-    || createCartonGlbDataUrl({ nodes, bounds, textureUrl, caliperMm: boxModel.board?.caliperMm });
+    || createCartonGlbDataUrl({ nodes, bounds, textureUrl, boardAppearance: appearance });
   const musicData = await blobToDataUrl(musicBlob);
   const sourceRender = renderState && typeof renderState === 'object' ? renderState : {};
   const sourcePreview = previewState && typeof previewState === 'object' ? previewState : {};
@@ -1568,7 +1709,9 @@ export async function createInteractive3dHtml({
   const data = {
     schemaVersion: 1,
     geometryMode: 'solid',
-    caliperMm: Number(boxModel.board?.caliperMm) || 0.35,
+    caliperMm: appearance.thicknessMm,
+    boardAppearance: appearance,
+    construction: boxModel.construction ? structuredClone(boxModel.construction) : { templateId: 'legacy-six-panel', templateVersion: 1, parameters: {} },
     presentationId,
     locale: normalizedLocale,
     initialState,

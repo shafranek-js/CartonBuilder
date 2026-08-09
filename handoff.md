@@ -77,11 +77,13 @@ Render владеет presentation-сценой и тяжёлыми эффект
 - `src/main.js` — workflow navigation, app wiring, autosave callbacks and
   Preview/Render activation lifecycle.
 
-Wave 8A добавляет `docs/13. geometry-fidelity-runtime-specification.md`:
-canonical `BoxNetModel.board.caliperMm`, schema v13 migration и общий
-thickness-aware solid solver для Studio/Photorealistic Preview, закрытого
-Render, GLB, turntable и standalone HTML. Technical Preview и SVG/PDF остаются
-плоскими.
+Wave 8A/8B добавляют `docs/13. geometry-fidelity-runtime-specification.md` и
+`docs/14. carton-construction-runtime-specification.md`: canonical
+`BoxNetModel.board.caliperMm`, schema v14 migration, STE/RTE polygon elements,
+staged flap assembly и общий thickness-aware solid solver для
+Studio/Photorealistic Preview, закрытого Render, GLB, turntable и standalone
+HTML. Technical Preview остаётся плоским; legacy SVG/PDF совместимы, а
+структурные STE/RTE exports помечаются как mockup без production allowances.
 
 Canonical state is `BoxNetModel + ArtworkModel[]`. SVG, PDF, Preview and Render
 are adapters and must not become alternate sources of transform or geometry
@@ -283,8 +285,9 @@ runtime-документы:
    `docs/12. hdri-environment-runtime-specification.md`: linear-light 1K/2K/4K
    runtime preparation, device fallback, bounded two-entry PMREM cache,
    transient diagnostics, custom-map recovery and archive v4 boundaries.
-2. Следующая отдельная волна — Wave 8 Geometry Fidelity; не смешивать её с
-   HDRI runtime cache или изменениями schema/archive.
+2. Следующая отдельная волна — Wave 9 Prepress: production crease allowances,
+   bleed/safe area, ECMA/FEFCO certification, PDF/X, CMYK/ICC, marks и
+   trapping. Не смешивать её с HDRI runtime cache или изменениями schema/archive.
 3. Поддерживать `docs/README.md` в том же PR, что и изменения функциональности;
    новый документ добавлять туда с одним статусом и владельцем.
 4. Любое изменение canonical model сопровождать schema/history/archive tests и

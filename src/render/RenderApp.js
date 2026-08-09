@@ -112,6 +112,7 @@ function renderPreflightIssueText(entry) {
     case 'jpeg-background': return t('renderPreflightJpegBackground');
     case 'basic-glb-finishes': return t('renderPreflightBasicGlbFinishes');
     case 'hdri-glb': return t('renderPreflightHdriGlb');
+    case 'invalid-geometry': return t('renderPreflightInvalidGeometry', { templateId: details.templateId, element: details.invalidElement || 'unknown' });
     case 'memory-budget': return t('renderPreflightMemory', { estimated: formatMegabytes(details.estimatedBytes), budget: formatMegabytes(details.memoryBudgetBytes) });
     default: return entry.code;
   }

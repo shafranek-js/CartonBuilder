@@ -3295,6 +3295,52 @@ dialog {
   border-radius: 8px;
 }
 
+.construction-library {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--panel-border, #4a4a4a);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel-bg, #2b2b2b) 88%, transparent);
+  color: var(--text, #fff);
+  font-size: 11px;
+}
+
+.construction-library-heading,
+.construction-library-controls,
+.construction-parameters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.construction-library-heading { justify-content: space-between; }
+.construction-status { color: var(--accent, #d8ef79); }
+.construction-library select,
+.construction-library input {
+  min-height: 26px;
+  border: 1px solid var(--panel-border, #5a5a5a);
+  border-radius: 4px;
+  background: var(--workspace, #242424);
+  color: var(--text, #fff);
+}
+.construction-library input { width: 68px; padding: 0 5px; }
+.construction-parameters label { display: inline-flex; align-items: center; gap: 4px; }
+.construction-disclaimer { margin: 0; color: var(--muted-text, #c8c8c8); font-size: 10px; }
+.assembly-stage { flex: 0 0 100%; min-width: 0; color: var(--muted-text, #c8c8c8); font-size: 0.78rem; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.light-control.assembly-control {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 52px;
+  grid-template-rows: auto auto;
+  align-items: center;
+}
+.light-control.assembly-control > span:first-child { grid-column: 1; grid-row: 1; }
+.light-control.assembly-control > .slider-track-wrap { grid-column: 2; grid-row: 1; }
+.light-control.assembly-control > output { grid-column: 3; grid-row: 1; }
+.light-control.assembly-control > .assembly-stage { grid-column: 1 / -1; grid-row: 2; width: auto; }
+
 #separationsDialog {
   position: fixed;
   top: 50%;

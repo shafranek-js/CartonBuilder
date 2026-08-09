@@ -28,6 +28,7 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
 
   const bounds = boxModel.getBounds();
   const panels = boxModel.getPanels().map((panel) => clone(panel));
+  const elements = boxModel.getElements?.().map((element) => clone(element)) || panels;
   const flatNetUvs = panels.map((panel) => ({
     panelId: panel.id,
     u0: (panel.x - bounds.minX) / bounds.width,
@@ -40,9 +41,12 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
       dimensions: clone(boxModel.dimensions),
       bounds: clone(bounds),
       board: clone(boxModel.board || { caliperMm: appearance.thicknessMm }),
+      construction: clone(boxModel.construction || { templateId: 'legacy-six-panel', templateVersion: 1, parameters: {} }),
       panels,
+      elements,
     },
     panelGeometry: panels,
+    elementGeometry: elements,
     geometryMode: 'solid',
     hingeOffsetMm: appearance.thicknessMm / 2,
     flatNetUvs,
@@ -50,6 +54,14 @@ export function buildRenderSceneModel({ boxModel, artworks, renderSettings, boar
       panelId: panel.id,
       parentId: panel.parentId || null,
       parentEdge: panel.parentEdge || null,
+      progress: 1,
+    })),
+    elementFoldTransforms: elements.map((element) => ({
+      elementId: element.id,
+      parentId: element.parentId || null,
+      parentEdge: element.parentEdge || null,
+      hinge: clone(element.hinge || null),
+      phase: clone(element.phase || [0, 1]),
       progress: 1,
     })),
     artworks: visibleArtworks,

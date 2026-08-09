@@ -27,6 +27,24 @@ const EXPORT_DPI = 300;
 const MAX_RASTER_EDGE = 32767;
 const MAX_RASTER_PIXELS = 64_000_000;
 
+function panelPoints(panel) {
+  return Array.isArray(panel.polygon) && panel.polygon.length >= 3
+    ? panel.polygon
+    : [
+        { x: panel.x, y: panel.y },
+        { x: panel.x + panel.width, y: panel.y },
+        { x: panel.x + panel.width, y: panel.y + panel.height },
+        { x: panel.x, y: panel.y + panel.height },
+      ];
+}
+
+function tracePanelPath(context, panel) {
+  const points = panelPoints(panel);
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+}
+
 function createCanvas(width, height) {
   if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height);
   const canvas = document.createElement('canvas');
@@ -78,9 +96,7 @@ export async function createPreviewBlob({
   context.scale(pixelsPerMm, pixelsPerMm);
   context.translate(-bounds.minX, -bounds.minY);
   context.beginPath();
-  for (const panel of boxModel.getPanels()) {
-    context.rect(panel.x, panel.y, panel.width, panel.height);
-  }
+  for (const panel of boxModel.getElements?.() || boxModel.getPanels()) tracePanelPath(context, panel);
   context.clip();
 
   const bitmaps = [];
@@ -157,12 +173,21 @@ export async function createPreviewBlob({
 
 function addPanelClip(page, boxModel, bounds) {
   page.pushOperators(pushGraphicsState());
-  for (const panel of boxModel.getPanels()) {
-    page.pushOperators(rectangle(
-      (panel.x - bounds.minX) * POINTS_PER_MM,
-      (bounds.maxY - panel.y - panel.height) * POINTS_PER_MM,
-      panel.width * POINTS_PER_MM,
-      panel.height * POINTS_PER_MM,
+  for (const panel of boxModel.getElements?.() || boxModel.getPanels()) {
+    const points = panelPoints(panel);
+    page.pushOperators(moveTo(
+      (points[0].x - bounds.minX) * POINTS_PER_MM,
+      (bounds.maxY - points[0].y) * POINTS_PER_MM,
+    ));
+    for (const point of points.slice(1)) {
+      page.pushOperators(lineTo(
+        (point.x - bounds.minX) * POINTS_PER_MM,
+        (bounds.maxY - point.y) * POINTS_PER_MM,
+      ));
+    }
+    page.pushOperators(lineTo(
+      (points[0].x - bounds.minX) * POINTS_PER_MM,
+      (bounds.maxY - points[0].y) * POINTS_PER_MM,
     ));
   }
   page.pushOperators(clip(), endPath());
@@ -303,6 +328,10 @@ export async function createPdfExport({
     .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && entry.originalBlob);
   if (!entries.length) throw new AppError('artworkRequired');
   const pdfDocument = await PDFDocument.create();
+  if (boxModel.construction?.templateId && boxModel.construction.templateId !== 'legacy-six-panel') {
+    pdfDocument.setSubject('Structural mockup — production allowances not applied.');
+    pdfDocument.setKeywords(['CartonBuilder', 'structural mockup', 'production allowances not applied']);
+  }
   const bounds = boxModel.getBounds();
   const pageWidth = bounds.width * POINTS_PER_MM;
   const pageHeight = bounds.height * POINTS_PER_MM;
