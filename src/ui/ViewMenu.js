@@ -7,6 +7,8 @@ export function createViewMenu({
   onOverprintToggle = async () => {},
   isOverprintAvailable = () => true,
   onSeparations = () => {},
+  onPrepressOverlayToggle = () => {},
+  getPrepressOverlayState = () => ({}),
   onOpen = () => {},
   documentRef = document,
 }) {
@@ -23,6 +25,11 @@ export function createViewMenu({
   }
 
   function renderContent() {
+    const overlays = getPrepressOverlayState() || {};
+    const overlayItems = ['trim', 'bleed', 'safe', 'dieline', 'marks'].map((name) => `
+      <button type="button" class="file-menu-item view-menu-toggle prepress-overlay-toggle" id="menuPrepressOverlay${name}" role="menuitemcheckbox" aria-checked="${Boolean(overlays[name])}">
+        <span class="file-menu-item-title">${name[0].toUpperCase() + name.slice(1)} overlay</span><span class="file-menu-shortcut">${overlays[name] ? '✓' : ''}</span>
+      </button>`).join('');
     if (isOverprintAvailable()) {
       const enabled = isOverprintEnabled();
       checkMark = enabled;
@@ -34,6 +41,9 @@ export function createViewMenu({
         <button type="button" class="file-menu-item" id="menuSeparationsBtn" role="menuitem">
           <span class="file-menu-item-title">${t('separations') || 'Separations…'}</span>
         </button>
+        <div class="file-menu-divider"></div>
+        <div class="view-menu-note" role="note">Prepress overlays</div>
+        ${overlayItems}
         <div class="view-menu-note" id="overprintProofNote" role="note">
           ${t('overprintProofNote') || 'Monitor preview is not a contract color proof.'}
         </div>
@@ -56,6 +66,13 @@ export function createViewMenu({
         togglePopover(false);
         onSeparations();
       });
+      for (const name of ['trim', 'bleed', 'safe', 'dieline', 'marks']) {
+        popoverContainer.querySelector(`#menuPrepressOverlay${name}`)?.addEventListener('click', () => {
+          const next = !Boolean(getPrepressOverlayState()?.[name]);
+          onPrepressOverlayToggle(name, next);
+          renderContent();
+        });
+      }
       return;
     }
     popoverContainer.innerHTML = `
@@ -66,7 +83,17 @@ export function createViewMenu({
       <div class="view-menu-note" id="overprintProofNote" role="note">
         ${t('overprintProofNote') || 'Monitor preview is not a contract color proof.'}
       </div>
+      <div class="file-menu-divider"></div>
+      <div class="view-menu-note" role="note">Prepress overlays</div>
+      ${overlayItems}
     `;
+    for (const name of ['trim', 'bleed', 'safe', 'dieline', 'marks']) {
+      popoverContainer.querySelector(`#menuPrepressOverlay${name}`)?.addEventListener('click', () => {
+        const next = !Boolean(getPrepressOverlayState()?.[name]);
+        onPrepressOverlayToggle(name, next);
+        renderContent();
+      });
+    }
   }
 
   triggerButton.addEventListener('click', (e) => {

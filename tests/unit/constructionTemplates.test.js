@@ -57,7 +57,7 @@ describe('parametric carton constructions', () => {
     };
     delete snapshot.box.construction;
     const migrated = migrateProjectSnapshot(snapshot);
-    expect(migrated.schemaVersion).toBe(14);
+    expect(migrated.schemaVersion).toBe(15);
     expect(migrated.box.construction.templateId).toBe('legacy-six-panel');
     expect(migrated.box.panels).toEqual(snapshot.box.panels);
   });

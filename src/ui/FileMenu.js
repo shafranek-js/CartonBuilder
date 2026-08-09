@@ -75,6 +75,12 @@ export function createFileMenu({
               <button type="button" class="file-menu-item" id="menuExportPdfBtn">
                 <span class="file-menu-item-title">${t('exportPdf') || 'Export PDF'}</span>
               </button>
+              <button type="button" class="file-menu-item" id="menuExportPrepressPdfBtn">
+                <span class="file-menu-item-title">${t('exportPrepressPdf') || 'Prepress PDF (not PDF/X)'}</span>
+              </button>
+              <button type="button" class="file-menu-item" id="menuExportPrepressSvgBtn">
+                <span class="file-menu-item-title">${t('exportPrepressSvg') || 'Prepress SVG'}</span>
+              </button>
             </div>
           </div>
           <div class="file-menu-item file-menu-submenu-anchor">
@@ -120,6 +126,8 @@ export function createFileMenu({
     bindExportButton('#menuExportJpgBtn', 'jpg');
     bindExportButton('#menuExportSvgBtn', 'svg');
     bindExportButton('#menuExportPdfBtn', 'pdf');
+    bindExportButton('#menuExportPrepressPdfBtn', 'prepress-pdf');
+    bindExportButton('#menuExportPrepressSvgBtn', 'prepress-svg');
     bindExportButton('#menuExport3dHtmlBtn', 'html');
     bindExportButton('#menuExportGlbBtn', 'render-glb');
     bindExportButton('#menuExportTurntableBtn', 'render-sequence');

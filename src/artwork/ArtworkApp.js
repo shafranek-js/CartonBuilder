@@ -1,4 +1,4 @@
-import { createExportSvg, getExportFilename } from '../export/svgExport.js';
+import { createExportSvg, createPrepressSvg, getExportFilename, getPrepressExportFilename } from '../export/svgExport.js';
 import { createDiagnosticsBlob, recordDiagnostic } from '../diagnostics.js';
 import { AppError } from '../errors.js';
 import { getExportWarnings } from '../export/exportChecks.js';
@@ -34,6 +34,10 @@ import { DEFAULT_PAGE_BOX, PAGE_BOXES } from './pdfArtworkLoader.js';
 import { getOverprintMode, isOverprintEnabled, setOverprintEnabled as setOverprintSetting } from './overprintSettings.js';
 import { getMuPdfClient } from '../pdf-renderer/mupdfClient.js';
 import { getPdfSeparations } from './pdfArtworkLoader.js';
+import { clonePrepressSettings, DEFAULT_PREPRESS_SETTINGS, sanitizePrepressSettings } from '../prepress/prepressState.js';
+import { runPrepressPreflight, createPreflightReportBlob } from '../prepress/prepressPreflight.js';
+import { buildProductionDieline } from '../prepress/productionDieline.js';
+import { getPrepressPresets, savePrepressPreset } from '../prepress/PrepressPresetStore.js';
 
 const SNAP_SCREEN_PX = 6;
 const SNAP_RELEASE_SCREEN_PX = 9;
@@ -200,6 +204,10 @@ export function createArtworkApp({
   };
   const artworks = [];
   let activeArtworkIndex = -1;
+  let prepress = clonePrepressSettings(DEFAULT_PREPRESS_SETTINGS);
+  const prepressOverlays = { trim: false, bleed: false, safe: false, dieline: false, marks: false };
+  let lastPreflight = null;
+  let prepressPresets = [];
   let originalBlob = null;
   let previewBlob = null;
   const svg = documentRef.getElementById('artworkWorkspace');
@@ -283,6 +291,26 @@ export function createArtworkApp({
     boxDepth: documentRef.getElementById('artworkBoxDepth'),
     boxConstrainBtn: documentRef.getElementById('boxConstrainProportionsBtn'),
     boxDimensionsSection: documentRef.getElementById('boxDimensionsSection'),
+    prepressMode: documentRef.getElementById('prepressMode'),
+    prepressPreset: documentRef.getElementById('prepressPreset'),
+    prepressProfile: documentRef.getElementById('prepressProfile'),
+    prepressBleed: documentRef.getElementById('prepressBleed'),
+    prepressSafe: documentRef.getElementById('prepressSafe'),
+    prepressSlug: documentRef.getElementById('prepressSlug'),
+    prepressDpi: documentRef.getElementById('prepressDpi'),
+    prepressCutOffset: documentRef.getElementById('prepressCutOffset'),
+    prepressCreaseOffset: documentRef.getElementById('prepressCreaseOffset'),
+    prepressGlueDelta: documentRef.getElementById('prepressGlueDelta'),
+    prepressTuckDelta: documentRef.getElementById('prepressTuckDelta'),
+    prepressCropMarks: documentRef.getElementById('prepressCropMarks'),
+    prepressRegistrationMarks: documentRef.getElementById('prepressRegistrationMarks'),
+    prepressSlugMark: documentRef.getElementById('prepressSlugMark'),
+    prepressReset: documentRef.getElementById('prepressReset'),
+    prepressSavePreset: documentRef.getElementById('prepressSavePreset'),
+    prepressRun: documentRef.getElementById('prepressRun'),
+    prepressExport: documentRef.getElementById('prepressExport'),
+    prepressReport: documentRef.getElementById('prepressReport'),
+    prepressStatus: documentRef.getElementById('prepressStatus'),
   };
 
   const layerControls = {
@@ -657,6 +685,7 @@ export function createArtworkApp({
       activeArtworkIndex,
       render: sanitizeRenderSettings(getRenderState()),
       renderAppearance: sanitizeBoardAppearance(getRenderBoardAppearance()),
+      prepress: clonePrepressSettings(prepress),
       view: {
         ...viewport.toJSON(),
         layers: { ...layers },
@@ -833,6 +862,40 @@ export function createArtworkApp({
     documentRef.querySelectorAll('.adobe-layer-row[data-layer-id="artwork"]').forEach((row) => {
       row.classList.toggle('active', isArtworkSelected);
     });
+  }
+
+  function renderPrepressControls() {
+    const map = [
+      ['prepressMode', prepress.mode], ['prepressProfile', prepress.profileId],
+      ['prepressBleed', prepress.bleedMm], ['prepressSafe', prepress.safeMm],
+      ['prepressSlug', prepress.slugMm], ['prepressDpi', prepress.requiredDpi],
+      ['prepressCutOffset', prepress.allowances.cutOffsetMm],
+      ['prepressCreaseOffset', prepress.allowances.creaseOffsetMm],
+      ['prepressGlueDelta', prepress.allowances.glueTabDeltaMm],
+      ['prepressTuckDelta', prepress.allowances.tuckClearanceDeltaMm],
+      ['prepressCropMarks', prepress.marks.crop], ['prepressRegistrationMarks', prepress.marks.registration],
+      ['prepressSlugMark', prepress.marks.slug],
+    ];
+    for (const [id, value] of map) {
+      const control = controls[id];
+      if (!control) continue;
+      if (control.type === 'checkbox') control.checked = Boolean(value);
+      else control.value = String(value);
+    }
+    if (controls.prepressPreset) {
+      const selected = controls.prepressPreset.value;
+      const option = (label, value) => { const next = documentRef.createElement('option'); next.textContent = label; next.value = value; return next; };
+      controls.prepressPreset.replaceChildren(option('—', ''));
+      for (const preset of prepressPresets) controls.prepressPreset.appendChild(option(preset.name, preset.id));
+      controls.prepressPreset.value = prepressPresets.some((preset) => preset.id === selected) ? selected : '';
+    }
+    if (controls.prepressStatus) {
+      const production = buildProductionDieline(boxModel, prepress);
+      controls.prepressStatus.textContent = production.diagnostics.valid
+        ? `${prepress.mode === 'production-assist' ? 'Production assist' : 'Technical proof'} · ${production.diagnostics.elementCount} elements · ${production.diagnostics.bleedBounds.width.toFixed(1)} × ${production.diagnostics.bleedBounds.height.toFixed(1)} mm`
+        : 'Prepress contour needs review';
+      controls.prepressStatus.classList.toggle('is-error', !production.diagnostics.valid);
+    }
   }
 
   function renderSublayers() {
@@ -1248,6 +1311,7 @@ export function createArtworkApp({
 
   function render() {
     renderControls();
+    renderPrepressControls();
     renderSublayers();
     syncArtworkVisibility();
     // Keep the crop controls synchronized after history restores a snapshot.
@@ -1258,6 +1322,7 @@ export function createArtworkApp({
     updateCropStatus();
     controls.clearCrop.disabled = !artwork.crop && !cropMode;
     renderer.render();
+    renderPrepressOverlay();
   }
 
   function createSvgElement(name, attributes, innerHtml) {
@@ -1267,6 +1332,47 @@ export function createArtworkApp({
     }
     if (innerHtml) element.innerHTML = innerHtml;
     return element;
+  }
+
+  function renderPrepressOverlay() {
+    if (!svg) return;
+    svg.querySelector('#prepressOverlay')?.remove();
+    if (!Object.values(prepressOverlays).some(Boolean)) return;
+    let production;
+    try { production = buildProductionDieline(boxModel, prepress); } catch { return; }
+    const group = createSvgElement('g', { id: 'prepressOverlay', 'pointer-events': 'none' });
+    const addPaths = (id, polygons, attributes) => {
+      if (!prepressOverlays[id] || !polygons?.length) return;
+      const layer = createSvgElement('g', attributes);
+      for (const polygon of polygons) {
+        if (!polygon || polygon.length < 3) continue;
+        const d = polygon.map(({ x, y }, index) => `${index ? 'L' : 'M'}${x} ${y}`).join('') + 'Z';
+        layer.appendChild(createSvgElement('path', { d }));
+      }
+      group.appendChild(layer);
+    };
+    addPaths('trim', production.trimPolygons, { fill: 'none', stroke: '#d00000', 'stroke-width': 0.5 });
+    addPaths('bleed', production.bleedPolygons, { fill: 'none', stroke: '#f2a900', 'stroke-width': 0.45, 'stroke-dasharray': '2,1' });
+    addPaths('safe', production.safePolygons, { fill: 'none', stroke: '#00a878', 'stroke-width': 0.45, 'stroke-dasharray': '1,1' });
+    if (prepressOverlays.dieline) {
+      const layer = createSvgElement('g', { fill: 'none', stroke: '#185adb', 'stroke-width': 0.4, 'stroke-dasharray': '2,1' });
+      for (const segment of production.fold) layer.appendChild(createSvgElement('line', { x1: segment.start.x, y1: segment.start.y, x2: segment.end.x, y2: segment.end.y }));
+      layer.setAttribute('stroke', '#185adb');
+      group.appendChild(layer);
+      const cuts = createSvgElement('g', { fill: 'none', stroke: '#d00000', 'stroke-width': 0.45 });
+      for (const segment of production.cut) cuts.appendChild(createSvgElement('line', { x1: segment.start.x, y1: segment.start.y, x2: segment.end.x, y2: segment.end.y }));
+      group.appendChild(cuts);
+    }
+    if (prepressOverlays.marks) {
+      const marks = createSvgElement('g', { fill: 'none', stroke: '#111', 'stroke-width': 0.35 });
+      const b = production.mediaBounds; const size = Math.max(2, prepress.slugMm * 0.45); const gap = Math.max(1, prepress.slugMm * 0.12);
+      for (const [x1, y1, x2, y2] of [[b.minX, b.minY, b.minX - size, b.minY], [b.maxX, b.minY, b.maxX + size, b.minY], [b.minX, b.maxY, b.minX - size, b.maxY], [b.maxX, b.maxY, b.maxX + size, b.maxY], [b.minX, b.minY, b.minX, b.minY - size], [b.maxX, b.minY, b.maxX, b.minY - size], [b.minX, b.maxY, b.minX, b.maxY + size], [b.maxX, b.maxY, b.maxX, b.maxY + size]]) {
+        marks.appendChild(createSvgElement('line', { x1, y1, x2, y2 }));
+      }
+      marks.setAttribute('transform', `translate(${gap} ${gap})`);
+      group.appendChild(marks);
+    }
+    svg.appendChild(group);
   }
 
   function createLayerEyeSvg() {
@@ -3009,6 +3115,43 @@ export function createArtworkApp({
   controls.boxHeight.addEventListener('change', () => handleBoxDimChange('height'));
   controls.boxDepth.addEventListener('change', () => handleBoxDimChange('depth'));
 
+  function readPrepressControl(control, fallback) {
+    if (!control) return fallback;
+    return control.type === 'checkbox' ? control.checked : control.value;
+  }
+
+  const prepressFieldMap = [
+    ['mode', 'prepressMode'], ['profileId', 'prepressProfile'], ['bleedMm', 'prepressBleed'],
+    ['safeMm', 'prepressSafe'], ['slugMm', 'prepressSlug'], ['requiredDpi', 'prepressDpi'],
+  ];
+  for (const [key, id] of prepressFieldMap) controls[id]?.addEventListener('change', () => setPrepressSettings({ [key]: readPrepressControl(controls[id], prepress[key]) }));
+  const allowanceMap = [
+    ['cutOffsetMm', 'prepressCutOffset'], ['creaseOffsetMm', 'prepressCreaseOffset'],
+    ['glueTabDeltaMm', 'prepressGlueDelta'], ['tuckClearanceDeltaMm', 'prepressTuckDelta'],
+  ];
+  for (const [key, id] of allowanceMap) controls[id]?.addEventListener('change', () => setPrepressSettings({ allowances: { [key]: readPrepressControl(controls[id], prepress.allowances[key]) } }));
+  const markMap = [['crop', 'prepressCropMarks'], ['registration', 'prepressRegistrationMarks'], ['slug', 'prepressSlugMark']];
+  for (const [key, id] of markMap) controls[id]?.addEventListener('change', () => setPrepressSettings({ marks: { [key]: readPrepressControl(controls[id], prepress.marks[key]) } }));
+  controls.prepressReset?.addEventListener('click', () => setPrepressSettings(DEFAULT_PREPRESS_SETTINGS));
+  controls.prepressPreset?.addEventListener('change', () => {
+    const preset = prepressPresets.find((entry) => entry.id === controls.prepressPreset.value);
+    if (preset) setPrepressSettings(preset.settings);
+  });
+  controls.prepressSavePreset?.addEventListener('click', async () => {
+    const name = windowRef.prompt?.('Prepress preset name', 'Production assist') || '';
+    if (!name.trim()) return;
+    try {
+      await savePrepressPreset({ name, settings: prepress });
+      prepressPresets = await getPrepressPresets();
+      renderPrepressControls();
+    } catch (error) {
+      showError(error, 'unexpectedError');
+    }
+  });
+  controls.prepressRun?.addEventListener('click', () => runCurrentPreflight());
+  controls.prepressReport?.addEventListener('click', () => exportPreflightReport().catch((error) => showError(error, 'unexpectedError')));
+  controls.prepressExport?.addEventListener('click', () => exportDeliverable('prepress-pdf'));
+
   controls.pageBoxSelect?.addEventListener('change', (event) => {
     const entry = getActiveEntry();
     if (!entry?.model?.hasArtwork || !entry.originalBlob) return;
@@ -3271,6 +3414,48 @@ export function createArtworkApp({
     }
   });
 
+  function setPrepressSettings(next) {
+    prepress = sanitizePrepressSettings({ ...prepress, ...(next || {}), allowances: { ...prepress.allowances, ...(next?.allowances || {}) }, marks: { ...prepress.marks, ...(next?.marks || {}) }, technicalLines: { ...prepress.technicalLines, ...(next?.technicalLines || {}) } });
+    lastPreflight = null;
+    render();
+    scheduleSave();
+    return clonePrepressSettings(prepress);
+  }
+
+  function setPrepressOverlay(name, visible) {
+    if (!Object.hasOwn(prepressOverlays, name)) return false;
+    prepressOverlays[name] = Boolean(visible);
+    renderPrepressOverlay();
+    return prepressOverlays[name];
+  }
+
+  function getPrepressSettings() {
+    return clonePrepressSettings(prepress);
+  }
+
+  function runCurrentPreflight() {
+    lastPreflight = runPrepressPreflight({ boxModel, artworks: getArtworks(), settings: prepress });
+    if (controls.prepressStatus) {
+      controls.prepressStatus.textContent = lastPreflight.valid
+        ? `Preflight passed with ${lastPreflight.warnings.length} warnings and ${lastPreflight.manualReview.length} manual checks.`
+        : `Preflight blocked: ${lastPreflight.blocking.length} blocking issue(s).`;
+      controls.prepressStatus.classList.toggle('is-error', !lastPreflight.valid);
+    }
+    return lastPreflight;
+  }
+
+  async function exportPreflightReport() {
+    const report = lastPreflight || runCurrentPreflight();
+    await saveOrDownloadFile({
+      blob: createPreflightReportBlob(report),
+      suggestedName: 'carton-preflight-report.json',
+      types: [{ description: 'Preflight JSON (*.json)', accept: { 'application/json': ['.json'] } }],
+      windowRef,
+      documentRef,
+    });
+    return true;
+  }
+
   async function exportDeliverable(type) {
     try {
       clearError();
@@ -3287,6 +3472,10 @@ export function createArtworkApp({
           description: 'Scalable Vector Graphics (*.svg)',
           accept: { 'image/svg+xml': ['.svg'] },
         }];
+      } else if (type === 'prepress-svg') {
+        blob = new Blob([createPrepressSvg(boxModel, prepress)], { type: 'image/svg+xml;charset=utf-8' });
+        suggestedName = getPrepressExportFilename(boxModel.dimensions);
+        types = [{ description: 'Prepress SVG (*.svg)', accept: { 'image/svg+xml': ['.svg'] } }];
       } else if (type === 'png' || type === 'jpg') {
         const mimeType = type === 'png' ? 'image/png' : 'image/jpeg';
         const { createPreviewBlob } = await import('../export/artworkExport.js');
@@ -3319,6 +3508,14 @@ export function createArtworkApp({
           description: 'PDF Document (*.pdf)',
           accept: { 'application/pdf': ['.pdf'] },
         }];
+        fallback = 'exportPdfFailed';
+      } else if (type === 'prepress-pdf') {
+        const report = lastPreflight || runCurrentPreflight();
+        if (!report.valid) throw new AppError('prepressBlocked');
+        const { createPrepressPdfExport } = await import('../export/artworkExport.js');
+        blob = await createPrepressPdfExport({ boxModel, artworks: exportArtworks, settings: prepress, preflight: report });
+        suggestedName = 'carton-prepress-production-assist.pdf';
+        types = [{ description: 'Prepress PDF (not PDF/X) (*.pdf)', accept: { 'application/pdf': ['.pdf'] } }];
         fallback = 'exportPdfFailed';
       } else if (type === 'html') {
         const { createInteractive3dHtml } = await import('../export/interactive3dExport.js');
@@ -3437,6 +3634,8 @@ export function createArtworkApp({
 
   function restoreProject({ snapshot, artworkBlobs = [] }) {
     boxApp.loadState(snapshot.box);
+    prepress = sanitizePrepressSettings(snapshot.prepress);
+    lastPreflight = null;
     projectCreatedAt = snapshot.meta?.createdAt || new Date().toISOString();
     artworks.length = 0;
     for (let index = 0; index < (snapshot.artworks || []).length; index += 1) {
@@ -3620,6 +3819,7 @@ export function createArtworkApp({
   }
 
   render();
+  getPrepressPresets().then((presets) => { prepressPresets = presets; renderPrepressControls(); }).catch(() => {});
 
   return {
     get artwork() { return artwork; },
@@ -3645,6 +3845,12 @@ export function createArtworkApp({
     get previewBlob() { return previewBlob; },
     getArtworks,
     getArtworksJson,
+    getPrepressSettings,
+    setPrepressSettings,
+    setPrepressOverlay,
+    getPrepressOverlayState: () => ({ ...prepressOverlays }),
+    runPrepressPreflight: runCurrentPreflight,
+    exportPreflightReport,
     removeSelectedArtwork() {
       showDeleteConfirmation();
     },

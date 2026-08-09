@@ -204,6 +204,8 @@ if (viewMenuTriggerBtn && viewMenuPopover) {
     onOverprintToggle: async (next) => artworkApp?.setOverprintEnabled?.(next),
     isOverprintAvailable: () => artworkApp?.isOverprintAvailable?.() ?? false,
     onSeparations: () => artworkApp?.openSeparations?.(),
+    onPrepressOverlayToggle: (name, visible) => artworkApp?.setPrepressOverlay?.(name, visible),
+    getPrepressOverlayState: () => artworkApp?.getPrepressOverlayState?.() || {},
     onOpen: () => {
       fileMenu?.togglePopover(false);
       editMenu?.togglePopover(false);

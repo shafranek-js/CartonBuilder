@@ -14,8 +14,9 @@ import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/Rende
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
+import { sanitizePrepressSettings } from '../prepress/prepressState.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 14;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 15;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -319,6 +320,15 @@ MIGRATIONS.set(13, (snapshot) => {
   return migrated;
 });
 
+MIGRATIONS.set(14, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 15,
+  prepress: sanitizePrepressSettings({
+    mode: 'technical-proof',
+    ...(snapshot.prepress || {}),
+  }),
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -367,6 +377,7 @@ export function migrateProjectSnapshot(input) {
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
   snapshot.render = sanitizeRenderSettings(snapshot.render);
+  snapshot.prepress = sanitizePrepressSettings(snapshot.prepress);
   if (Object.hasOwn(snapshot, 'renderAppearance')) {
     snapshot.renderAppearance = sanitizeBoardAppearance(snapshot.renderAppearance);
   }

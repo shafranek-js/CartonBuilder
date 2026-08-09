@@ -85,6 +85,13 @@ Studio/Photorealistic Preview, закрытого Render, GLB, turntable и stan
 HTML. Technical Preview остаётся плоским; legacy SVG/PDF совместимы, а
 структурные STE/RTE exports помечаются как mockup без production allowances.
 
+Wave 9A adds `docs/15. prepress-foundation-runtime-specification.md`: schema v15
+prepress settings, derived production trim/bleed/safe geometry, View overlays,
+transient preflight JSON and separate non-PDF/X Prepress PDF/SVG layers. These
+allowances never mutate canonical artwork or 3D Render geometry. Wave 9B still
+covers ICC/Output Intent, PDF/X, trapping, vendor profiles and production
+certification.
+
 Canonical state is `BoxNetModel + ArtworkModel[]`. SVG, PDF, Preview and Render
 are adapters and must not become alternate sources of transform or geometry
 state. Render and Preview must keep separate mutable Three.js resources.

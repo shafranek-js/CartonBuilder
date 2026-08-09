@@ -55,7 +55,7 @@ import {
 } from './panelGeometry.js';
 import { disposeObject3D } from './disposeScene.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
-import { validateConstructionElements } from '../model/ConstructionTemplates.js';
+import { validateConstructionCollision } from './geometryCollision.js';
 import { createPanelSolidGeometry } from '../render/panelSolidGeometry.js';
 import {
   cameraHeadingElevation,
@@ -2058,15 +2058,14 @@ export class BoxScene {
       this.boxRoot.updateMatrixWorld(true);
       bounds.setFromObject(this.boxRoot);
     }
-    // The fold solver shares crease surfaces by construction. AABB overlap is
-    // intentionally not used here because it reports false positives for
-    // rotated panels; polygon validation is the authoritative structural
-    // guard, and render preflight blocks any unexpected intersections it reports.
     const elements = this.boxModel.getElements?.() || this.boxModel.getPanels();
     const construction = this.boxModel.construction || { templateId: 'legacy-six-panel', templateVersion: 1, parameters: {} };
     const validation = construction.templateId === 'legacy-six-panel'
-      ? { valid: true, reason: null }
-      : validateConstructionElements(elements);
+      ? { valid: true, allowedIntersections: 0, unexpectedIntersections: 0, minimumClearanceMm: 0 }
+      : validateConstructionCollision(this.boxModel, {
+        progress: this.foldProgress,
+        caliperMm: this.boardAppearance.thicknessMm,
+      });
     const panelsMin = Math.min(...this.boxModel.getPanels().map((panel) => Math.min(panel.width, panel.height)));
     const effectiveCaliperMm = this.geometryMode === 'solid' ? this.boardAppearance.thicknessMm : 0;
     const effectiveBevelMm = this.geometryMode === 'solid'
@@ -2081,19 +2080,20 @@ export class BoxScene {
       effectiveCaliperMm,
       requestedBevelMm: this.boardAppearance.bevelRadiusMm,
       effectiveBevelMm,
-      maxHingeGapMm: validation.valid ? 0 : 1,
-      intersections: validation.valid ? 0 : 1,
+      maxHingeGapMm: validation.valid ? 0 : Math.max(0.05, Number(validation.minimumClearanceMm) || 0),
+      intersections: validation.unexpectedIntersections || 0,
       templateId: construction.templateId,
       templateVersion: construction.templateVersion || 1,
       elementCount: elements.length,
       assemblyStage: construction.templateId === 'legacy-six-panel'
         ? null
         : this.foldProgress >= 1 ? 'closed' : this.foldProgress >= 0.5 ? 'half' : 'open',
-      minimumClearanceMm: Number(construction.parameters?.clearanceMm ?? (this.boardAppearance.thicknessMm * 2)) || 0,
-      allowedIntersections: elements.filter((element) => Number(element.overlapLayer) > 0).length,
-      unexpectedIntersections: validation.valid ? 0 : 1,
-      invalidElement: validation.valid ? null : validation.elementId || null,
-      invalidHinge: validation.valid ? null : validation.elementId || null,
+      minimumClearanceMm: Number(validation.minimumClearanceMm) || Number(construction.parameters?.clearanceMm ?? (this.boardAppearance.thicknessMm * 2)) || 0,
+      allowedIntersections: validation.allowedIntersections || 0,
+      unexpectedIntersections: validation.unexpectedIntersections || 0,
+      invalidElement: validation.invalidElement || null,
+      invalidHinge: validation.invalidHinge || null,
+      collisionPairs: validation.pairs || [],
       bounds: {
         min: bounds.isEmpty() ? null : bounds.min.toArray(),
         max: bounds.isEmpty() ? null : bounds.max.toArray(),

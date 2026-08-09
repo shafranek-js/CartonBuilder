@@ -15,6 +15,11 @@ The current workflow is:
    packaging finishes, review export preflight/health diagnostics, and export
    PNG/JPG stills, turntables or a self-contained GLB.
 
+Artwork also includes a Prepress panel for production-assist trim/bleed/safe
+overlays, manual allowance review, marks, transient preflight and separate
+Prepress PDF/SVG output. These files are explicitly not PDF/X certified or
+contract colour proofs; 3D geometry and normal Render exports are unchanged.
+
 All artwork processing happens in the browser. The application does not upload
 assets or project data to a server.
 
@@ -88,6 +93,8 @@ after code changes.
 - `src/project/` — IndexedDB autosave and versioned `.carton` ZIP import/export.
 - `src/export/` — SVG, raster preview, preflight checks, and physical-size PDF
   adapters. Heavy PDF code is loaded only when required.
+- `src/prepress/` — schema-safe production dieline derivation, prepress settings,
+  presets and Blocking/Warning/Manual review preflight.
 - `src/preview3d/` — lazy-loaded Three.js fold graph, procedural panel geometry,
   shared artwork texture, cameras, scene presets, picking, and GPU lifecycle.
 - `src/render/` — persisted presentation settings, Render scene descriptor,
