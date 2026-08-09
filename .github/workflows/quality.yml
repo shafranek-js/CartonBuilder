@@ -80,6 +80,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Build
+        run: npm run build
+
       - name: Run full Chromium E2E shard
         run: npm run test:e2e:ci:fast -- --shard=${{ matrix.shard }}/3 --workers=1
 
