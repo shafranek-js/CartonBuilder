@@ -6,8 +6,8 @@
 import { sha256Async, utf8ByteLength } from "./crypto.js";
 import { scanSvgSecurity } from "./security.js";
 import { validateCompiledCartonWorkflowSchema } from "./compiledSchema.js";
-import { validateModelExport } from "./pbd-export/modelJson.js";
-import { validateSvgV4Export } from "./pbd-export/svgMetadata.js";
+import { validateModelExport } from "../export/modelJson.mjs";
+import { validateSvgV4Export } from "../export/svgMetadata.mjs";
 
 export const CONTRACT_VERSION = "carton-workflow.v1";
 export const WORKFLOW_MODE = "technical";

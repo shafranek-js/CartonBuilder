@@ -250,9 +250,11 @@ function inspectElement(elem, issues) {
  * Scan SVG markup for disallowed active content or external network resources using a true XML DOM parser.
  *
  * @param {string} markup
+ * @param {object} [options]
+ * @param {() => void} [options.onParserCalled] Diagnostic hook to verify when parser is invoked
  * @returns {Array<{ code: string, severity: string, message: string }>}
  */
-export function scanSvgSecurity(markup) {
+export function scanSvgSecurity(markup, options = {}) {
   const issues = [];
   if (typeof markup !== "string") {
     return [{ code: "SVG_NOT_STRING", severity: "ERROR", message: "SVG markup must be a string." }];
@@ -267,11 +269,30 @@ export function scanSvgSecurity(markup) {
     });
   }
 
-  // 2. Rejection of processing instructions before parsing
-  if (/<\?[\s\S]*?\?>/i.test(markup)) {
-    const piMatch = markup.match(/<\?([a-zA-Z0-9_-]+)/);
-    const piName = piMatch ? piMatch[1].toLowerCase() : "";
-    if (piName !== "xml") {
+  // 2. Comprehensive check of ALL processing instructions (<? ... ?>)
+  const piRegex = /<\?([\s\S]*?)\?>/g;
+  let piMatch;
+  while ((piMatch = piRegex.exec(markup)) !== null) {
+    const fullPi = piMatch[0];
+    const matchIndex = piMatch.index;
+
+    // Standard XML declaration must start with <?xml followed by whitespace or ?>
+    const isXmlDecl = /^<\?xml(?:\s|[\r\n]|\?>)/i.test(fullPi);
+
+    if (isXmlDecl) {
+      // XML declaration is ONLY allowed at the very start of the document (ignoring leading whitespace / BOM)
+      const prefix = markup.slice(0, matchIndex).replace(/^\uFEFF/, "").trim();
+      if (prefix.length > 0) {
+        issues.push({
+          code: "SVG_SECURITY_PROCESSING_INSTRUCTION_FORBIDDEN",
+          severity: "ERROR",
+          message: "Forbidden XML declaration occurring after non-whitespace content.",
+        });
+      }
+    } else {
+      // Any other processing instruction (e.g. <?xml-stylesheet ...?>) is strictly forbidden
+      const piNameMatch = fullPi.match(/^<\?([^\s>]+)/);
+      const piName = piNameMatch ? piNameMatch[1] : "pi";
       issues.push({
         code: "SVG_SECURITY_PROCESSING_INSTRUCTION_FORBIDDEN",
         severity: "ERROR",
@@ -280,7 +301,17 @@ export function scanSvgSecurity(markup) {
     }
   }
 
-  // 3. True XML parsing with standard DOMParser (browser) or @xmldom/xmldom (Node)
+  // SHORT-CIRCUIT: Do NOT invoke DOMParser if pre-parse security violations are detected
+  if (issues.length > 0) {
+    return issues;
+  }
+
+  // 3. Diagnostic callback to verify parser invocation
+  if (typeof options.onParserCalled === "function") {
+    options.onParserCalled();
+  }
+
+  // 4. True XML parsing with standard DOMParser (browser) or @xmldom/xmldom (Node)
   const parserErrors = [];
   let doc = null;
 
@@ -328,7 +359,7 @@ export function scanSvgSecurity(markup) {
     return issues;
   }
 
-  // 4. Recursive inspection of DOM tree
+  // 5. Recursive inspection of DOM tree
   inspectElement(doc.documentElement, issues);
 
   return issues;

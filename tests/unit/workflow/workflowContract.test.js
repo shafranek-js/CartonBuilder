@@ -14,6 +14,7 @@ import {
   validateModelExport,
   validateSvgV4Export,
 } from "../../../src/workflow/index.js";
+import { isPathSafe } from "../../../scripts/sync-workflow-contract.mjs";
 
 const fixturesDir = path.resolve("src/workflow/fixtures");
 const workflowPackageDir = path.resolve("src/workflow");
@@ -21,6 +22,10 @@ const workflowPackageDir = path.resolve("src/workflow");
 function loadFixture(filename) {
   const filepath = path.join(fixturesDir, filename);
   return JSON.parse(fs.readFileSync(filepath, "utf8"));
+}
+
+function sha256Bytes(content) {
+  return crypto.createHash("sha256").update(content).digest("hex");
 }
 
 describe("carton-workflow.v1 package manifest and byte-for-byte integrity", () => {
@@ -41,7 +46,7 @@ describe("carton-workflow.v1 package manifest and byte-for-byte integrity", () =
       const fullPath = path.join(workflowPackageDir, entry.path);
       expect(fs.existsSync(fullPath)).toBe(true);
       const content = fs.readFileSync(fullPath);
-      const actualSha = crypto.createHash("sha256").update(content).digest("hex");
+      const actualSha = sha256Bytes(content);
       expect(content.length).toBe(entry.byteLength);
       expect(actualSha).toBe(entry.sha256);
     }
@@ -120,6 +125,24 @@ describe("preflight payload size limits and short-circuit behavior", () => {
 });
 
 describe("XML/SVG security preflight and entity decoding", () => {
+  it("detects XML declaration followed by forbidden <?xml-stylesheet and does NOT call DOMParser", () => {
+    const svg = `<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="https://evil.example/x.xsl"?>
+<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
+    let parserCalled = false;
+    const issues = scanSvgSecurity(svg, { onParserCalled: () => { parserCalled = true; } });
+    expect(issues.some((i) => i.code === "SVG_SECURITY_PROCESSING_INSTRUCTION_FORBIDDEN")).toBe(true);
+    expect(parserCalled).toBe(false);
+  });
+
+  it("detects <!DOCTYPE and does NOT call DOMParser", () => {
+    const svg = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg"></svg>';
+    let parserCalled = false;
+    const issues = scanSvgSecurity(svg, { onParserCalled: () => { parserCalled = true; } });
+    expect(issues.some((i) => i.code === "SVG_SECURITY_DOCTYPE_FORBIDDEN")).toBe(true);
+    expect(parserCalled).toBe(false);
+  });
+
   it("detects entity-encoded javascript: URI schemes", () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><rect href="java&#x73;cript:alert(1)" /></svg>';
     const issues = scanSvgSecurity(svg);
@@ -160,18 +183,6 @@ describe("XML/SVG security preflight and entity decoding", () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><style>@import "https://evil.com";</style></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_STYLE_IMPORT_FORBIDDEN")).toBe(true);
-  });
-
-  it("detects XML processing instructions", () => {
-    const svg = '<?xml-stylesheet type="text/xsl" href="exploit.xsl"?><svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"></svg>';
-    const issues = scanSvgSecurity(svg);
-    expect(issues.some((i) => i.code === "SVG_SECURITY_PROCESSING_INSTRUCTION_FORBIDDEN")).toBe(true);
-  });
-
-  it("detects <!DOCTYPE declarations", () => {
-    const svg = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg"></svg>';
-    const issues = scanSvgSecurity(svg);
-    expect(issues.some((i) => i.code === "SVG_SECURITY_DOCTYPE_FORBIDDEN")).toBe(true);
   });
 
   it("detects malformed XML (duplicate attributes)", () => {
@@ -282,16 +293,84 @@ describe("schema/runtime parity with PBD canonical validators", () => {
   });
 });
 
-describe("sync script path safety and atomic replacement", () => {
-  it("rejects path traversal and preserves destination on invalid source", () => {
+describe("sync script path safety, security gates and atomic replacement", () => {
+  it("isPathSafe helper correctly identifies valid relative paths and rejects traversals", () => {
+    const base = path.resolve("dist/test-base");
+    expect(isPathSafe(base, "file.txt")).toBe(true);
+    expect(isPathSafe(base, "sub/dir/file.txt")).toBe(true);
+    expect(isPathSafe(base, "../outside.txt")).toBe(false);
+    expect(isPathSafe(base, "sub/../../outside.txt")).toBe(false);
+    expect(isPathSafe(base, "/etc/passwd")).toBe(false);
+    expect(isPathSafe(base, "C:\\Windows\\system32")).toBe(false);
+  });
+
+  it("rejects malicious package with path traversal in manifest before touching destination", () => {
+    const testTempDir = path.resolve("tests/unit/workflow/.tmp-traversal-pkg");
+    if (fs.existsSync(testTempDir)) fs.rmSync(testTempDir, { recursive: true, force: true });
+    fs.mkdirSync(testTempDir, { recursive: true });
+
+    const dummyFile = path.join(testTempDir, "valid.txt");
+    fs.writeFileSync(dummyFile, "hello", "utf8");
+
+    const maliciousManifest = {
+      packageName: "@cartonbuilder/workflow-v1",
+      packageVersion: "1.0.0",
+      contractVersion: "carton-workflow.v1",
+      pbdCommit: "mock-commit",
+      files: [
+        { path: "valid.txt", byteLength: 5, sha256: sha256Bytes(Buffer.from("hello")) },
+        { path: "../../../malicious.txt", byteLength: 10, sha256: "0".repeat(64) },
+      ],
+    };
+    fs.writeFileSync(path.join(testTempDir, "package-manifest.json"), JSON.stringify(maliciousManifest), "utf8");
+
+    const manifestBefore = fs.readFileSync(path.join(workflowPackageDir, "package-manifest.json"), "utf8");
+
     expect(() => {
-      execSync("node scripts/sync-workflow-contract.mjs --source /invalid/nonexistent/path", {
+      execSync(`node scripts/sync-workflow-contract.mjs --source "${testTempDir}"`, {
         encoding: "utf8",
         stdio: "pipe",
       });
     }).toThrow();
 
-    // Verify existing src/workflow remains intact
-    expect(fs.existsSync(path.join(workflowPackageDir, "package-manifest.json"))).toBe(true);
+    // Verify existing src/workflow was completely untouched
+    const manifestAfter = fs.readFileSync(path.join(workflowPackageDir, "package-manifest.json"), "utf8");
+    expect(manifestAfter).toBe(manifestBefore);
+
+    fs.rmSync(testTempDir, { recursive: true, force: true });
+  });
+
+  it("rejects corrupted package with SHA-256 hash mismatch and preserves destination", () => {
+    const testTempDir = path.resolve("tests/unit/workflow/.tmp-corrupted-pkg");
+    if (fs.existsSync(testTempDir)) fs.rmSync(testTempDir, { recursive: true, force: true });
+    fs.mkdirSync(testTempDir, { recursive: true });
+
+    const dummyFile = path.join(testTempDir, "valid.txt");
+    fs.writeFileSync(dummyFile, "hello corrupted", "utf8");
+
+    const corruptedManifest = {
+      packageName: "@cartonbuilder/workflow-v1",
+      packageVersion: "1.0.0",
+      contractVersion: "carton-workflow.v1",
+      pbdCommit: "mock-commit",
+      files: [
+        { path: "valid.txt", byteLength: 15, sha256: "0".repeat(64) }, // Invalid SHA
+      ],
+    };
+    fs.writeFileSync(path.join(testTempDir, "package-manifest.json"), JSON.stringify(corruptedManifest), "utf8");
+
+    const manifestBefore = fs.readFileSync(path.join(workflowPackageDir, "package-manifest.json"), "utf8");
+
+    expect(() => {
+      execSync(`node scripts/sync-workflow-contract.mjs --source "${testTempDir}"`, {
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+    }).toThrow();
+
+    const manifestAfter = fs.readFileSync(path.join(workflowPackageDir, "package-manifest.json"), "utf8");
+    expect(manifestAfter).toBe(manifestBefore);
+
+    fs.rmSync(testTempDir, { recursive: true, force: true });
   });
 });

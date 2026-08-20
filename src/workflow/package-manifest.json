@@ -2,22 +2,37 @@
   "packageName": "@cartonbuilder/workflow-v1",
   "packageVersion": "1.0.0",
   "contractVersion": "carton-workflow.v1",
-  "pbdCommit": "fe514a8b54c465152c1c24e509ed5ab4ea9bc5ff",
+  "pbdCommit": "fc55cfe82373b0421fd58b12b70e009b2aa1ecb5",
   "files": [
     {
-      "path": "builder.js",
-      "byteLength": 2714,
-      "sha256": "906d2c435e7c857a297fdade24ee2a36a0a85bbfa527700b214b6f6ee0a0a6bd"
+      "path": "export/modelJson.mjs",
+      "byteLength": 10222,
+      "sha256": "496d97b13f76347c1499dd24b77bf9b2a860ccc984b27e3251d4c0dc3d3b615c"
     },
     {
-      "path": "compiledSchema.js",
-      "byteLength": 37917,
-      "sha256": "2df19b6655dc023517249ce38fdcbd4974327f0662ab4964eb5900f6196fca17"
+      "path": "export/svgAnnotations.mjs",
+      "byteLength": 969,
+      "sha256": "ba983efc92ea3a5f8617a6ff5f3e7e4c0ca0b802faca72d12413d9444c2b09d8"
     },
     {
-      "path": "crypto.js",
-      "byteLength": 893,
-      "sha256": "087f34e63247fca880520b753824e301315c8508817f665a921d002d1d270329"
+      "path": "export/svgBounds.mjs",
+      "byteLength": 740,
+      "sha256": "ca9fcfbc23008199eaba417abb946dd8b0496b7948879feb5e0626295b94749b"
+    },
+    {
+      "path": "export/svgDiagnostics.mjs",
+      "byteLength": 15819,
+      "sha256": "c7240cbdcf8fe059ae1c5667aefe69868b0263668c51186d39155caf8b79e6f4"
+    },
+    {
+      "path": "export/svgGeometry.mjs",
+      "byteLength": 3306,
+      "sha256": "ac54c248eabeeff18e6bc46ca689be17c3f7047b5c66963f9ba4e7bde7cba359"
+    },
+    {
+      "path": "export/svgMetadata.mjs",
+      "byteLength": 51572,
+      "sha256": "8b4a035164333078c4f894997631033507361fe1cf11f0cbdb7f181bbbd5a269"
     },
     {
       "path": "fixtures/rte-workflow.v1.json",
@@ -36,43 +51,18 @@
     },
     {
       "path": "index.js",
-      "byteLength": 710,
-      "sha256": "bc5270b2f6acdc30610905602fa64b3fdea2ba4ca85c69d97fdc6ade57c162cf"
+      "byteLength": 101,
+      "sha256": "d945a11671b5458bf1a4ac292ac6c1c72ac2e70ff166d9d4258dd4eab2e8be73"
+    },
+    {
+      "path": "index.mjs",
+      "byteLength": 101,
+      "sha256": "d945a11671b5458bf1a4ac292ac6c1c72ac2e70ff166d9d4258dd4eab2e8be73"
     },
     {
       "path": "package.json",
-      "byteLength": 450,
-      "sha256": "54f78702bb399bccf3c9ef4010dff8188fef3bc1c006412aa3e754c1ce12c5c2"
-    },
-    {
-      "path": "pbd-export/modelJson.js",
-      "byteLength": 10222,
-      "sha256": "496d97b13f76347c1499dd24b77bf9b2a860ccc984b27e3251d4c0dc3d3b615c"
-    },
-    {
-      "path": "pbd-export/svgAnnotations.js",
-      "byteLength": 969,
-      "sha256": "ba983efc92ea3a5f8617a6ff5f3e7e4c0ca0b802faca72d12413d9444c2b09d8"
-    },
-    {
-      "path": "pbd-export/svgBounds.js",
-      "byteLength": 740,
-      "sha256": "ca9fcfbc23008199eaba417abb946dd8b0496b7948879feb5e0626295b94749b"
-    },
-    {
-      "path": "pbd-export/svgDiagnostics.js",
-      "byteLength": 15819,
-      "sha256": "c7240cbdcf8fe059ae1c5667aefe69868b0263668c51186d39155caf8b79e6f4"
-    },
-    {
-      "path": "pbd-export/svgGeometry.js",
-      "byteLength": 3306,
-      "sha256": "ac54c248eabeeff18e6bc46ca689be17c3f7047b5c66963f9ba4e7bde7cba359"
-    },
-    {
-      "path": "pbd-export/svgMetadata.js",
-      "byteLength": 51572,
-      "sha256": "8b4a035164333078c4f894997631033507361fe1cf11f0cbdb7f181bbbd5a269"
+      "byteLength": 862,
+      "sha256": "799a41bc49daee57479ea42598bdfaebb2ee1211f0740d31794a5504cb5a512c"
     },
     {
       "path": "schema/carton-workflow.v1.schema.json",
@@ -80,14 +70,34 @@
       "sha256": "7fad8c94922f6d52bdf7ee87de2ee545f00253fb556de19ee007306fa0956be7"
     },
     {
-      "path": "security.js",
-      "byteLength": 10194,
-      "sha256": "78b7b3c173d684ed313a641a36f7f06bcb9de01eacc4abe324d488c974f27d65"
+      "path": "workflow/builder.js",
+      "byteLength": 2714,
+      "sha256": "906d2c435e7c857a297fdade24ee2a36a0a85bbfa527700b214b6f6ee0a0a6bd"
     },
     {
-      "path": "validator.js",
-      "byteLength": 8241,
-      "sha256": "a22c00e5fa4976d082e3aee05c47cf68ece7d8f84a1621d3cc59718b1d9a5cbf"
+      "path": "workflow/compiledSchema.js",
+      "byteLength": 37917,
+      "sha256": "2df19b6655dc023517249ce38fdcbd4974327f0662ab4964eb5900f6196fca17"
+    },
+    {
+      "path": "workflow/crypto.js",
+      "byteLength": 893,
+      "sha256": "087f34e63247fca880520b753824e301315c8508817f665a921d002d1d270329"
+    },
+    {
+      "path": "workflow/index.js",
+      "byteLength": 706,
+      "sha256": "94578b54a012980d8b10aedc2156691fcab2b0f32a923cefffd5509a1831dd0b"
+    },
+    {
+      "path": "workflow/security.js",
+      "byteLength": 11461,
+      "sha256": "c8d68268c89731ce16583317432907f05fcf08d2858429daf7d9846d6298c202"
+    },
+    {
+      "path": "workflow/validator.js",
+      "byteLength": 8237,
+      "sha256": "57619f17056e69c0c1fa1c9a472d44d4fed5d49970c89cccaae507881b4d5040"
     }
   ]
 }
