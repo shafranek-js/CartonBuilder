@@ -1,6 +1,8 @@
 /**
- * Strict XML and SVG security preflight scanner with true XML parsing and element/attribute allowlisting.
+ * Strict XML and SVG security preflight scanner using standard DOMParser / @xmldom/xmldom.
  */
+
+import { DOMParser as XmldomParser } from "@xmldom/xmldom";
 
 const ALLOWED_ELEMENTS = new Set([
   "svg",
@@ -110,125 +112,93 @@ function inspectStyleContent(rawStyle, location, issues) {
   }
 }
 
+function findNamespaceUri(elem, prefix) {
+  let curr = elem;
+  const xmlnsAttr = `xmlns:${prefix}`;
+  while (curr && curr.nodeType === 1) {
+    if (curr.hasAttribute && curr.hasAttribute(xmlnsAttr)) {
+      return curr.getAttribute(xmlnsAttr);
+    }
+    if (curr.attributes) {
+      for (let i = 0; i < curr.attributes.length; i++) {
+        if ((curr.attributes[i].name || "").toLowerCase() === xmlnsAttr.toLowerCase()) {
+          return curr.attributes[i].value;
+        }
+      }
+    }
+    curr = curr.parentNode;
+  }
+  return null;
+}
+
 /**
- * Recursive descent lightweight XML parser and structural validator.
+ * Recursively inspect an XML DOM Element and its subtree against the security allowlist.
  */
-function parseAndInspectXml(markup, issues) {
-  let pos = 0;
-  const len = markup.length;
-  const tagStack = [];
+function inspectElement(elem, issues) {
+  if (!elem || elem.nodeType !== 1) return;
 
-  while (pos < len) {
-    const nextOpen = markup.indexOf("<", pos);
-    if (nextOpen === -1) break;
+  const rawTagName = elem.tagName || elem.nodeName || "";
+  const tagName = rawTagName.toLowerCase();
 
-    // Skip comments <!-- ... -->
-    if (markup.startsWith("<!--", nextOpen)) {
-      const closeComment = markup.indexOf("-->", nextOpen + 4);
-      if (closeComment === -1) {
-        issues.push({ code: "SVG_XML_SYNTAX_ERROR", severity: "ERROR", message: "Unclosed XML comment." });
-        return;
-      }
-      pos = closeComment + 3;
-      continue;
-    }
-
-    // Skip CDATA <![CDATA[ ... ]]>
-    if (markup.startsWith("<![CDATA[", nextOpen)) {
-      const closeCdata = markup.indexOf("]]>", nextOpen + 9);
-      if (closeCdata === -1) {
-        issues.push({ code: "SVG_XML_SYNTAX_ERROR", severity: "ERROR", message: "Unclosed CDATA section." });
-        return;
-      }
-      pos = closeCdata + 3;
-      continue;
-    }
-
-    // Find closing >
-    let inQuote = false;
-    let quoteChar = "";
-    let closeIndex = -1;
-
-    for (let i = nextOpen + 1; i < len; i++) {
-      const char = markup[i];
-      if ((char === '"' || char === "'") && !inQuote) {
-        inQuote = true;
-        quoteChar = char;
-      } else if (char === quoteChar && inQuote) {
-        inQuote = false;
-      } else if (char === ">" && !inQuote) {
-        closeIndex = i;
-        break;
-      }
-    }
-
-    if (closeIndex === -1) {
-      issues.push({ code: "SVG_XML_SYNTAX_ERROR", severity: "ERROR", message: "Malformed XML: unclosed tag." });
-      return;
-    }
-
-    const tagContent = markup.slice(nextOpen + 1, closeIndex).trim();
-    pos = closeIndex + 1;
-
-    // Closing tag: </tag>
-    if (tagContent.startsWith("/")) {
-      const closingTagName = tagContent.slice(1).trim().toLowerCase();
-      if (tagStack.length === 0 || tagStack[tagStack.length - 1] !== closingTagName) {
-        issues.push({
-          code: "SVG_XML_SYNTAX_ERROR",
-          severity: "ERROR",
-          message: `Mismatched closing tag "</${closingTagName}>".`,
-        });
-        return;
-      }
-      tagStack.pop();
-      continue;
-    }
-
-    const isSelfClosing = tagContent.endsWith("/");
-    const cleanContent = isSelfClosing ? tagContent.slice(0, -1).trim() : tagContent;
-
-    const spaceIdx = cleanContent.search(/\s/);
-    const tagName = (spaceIdx === -1 ? cleanContent : cleanContent.slice(0, spaceIdx)).toLowerCase();
-    const attrString = spaceIdx === -1 ? "" : cleanContent.slice(spaceIdx).trim();
-
-    // Check tag against allowlist
-    if (!ALLOWED_ELEMENTS.has(tagName)) {
+  // Namespace check for element prefix
+  if (rawTagName.includes(":")) {
+    const prefix = rawTagName.split(":")[0].toLowerCase();
+    if (prefix !== "xml" && prefix !== "xmlns" && !findNamespaceUri(elem, prefix)) {
       issues.push({
-        code: "SVG_SECURITY_ELEMENT_FORBIDDEN",
+        code: "SVG_XML_SYNTAX_ERROR",
         severity: "ERROR",
-        message: `Forbidden element <${tagName}> in SVG.`,
+        message: `Undeclared XML namespace prefix "${prefix}" on element <${rawTagName}>.`,
       });
     }
+  }
 
-    if (!isSelfClosing) {
-      tagStack.push(tagName);
-    }
+  // Strip prefix if any (e.g. svg:rect -> rect)
+  const localName = (elem.localName || tagName.split(":").pop() || "").toLowerCase();
 
-    // Parse attributes
-    const attrRegex = /([a-zA-Z0-9:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
-    let attrMatch;
-    while ((attrMatch = attrRegex.exec(attrString)) !== null) {
-      const attrName = attrMatch[1].toLowerCase();
-      const rawValue = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
+  if (!ALLOWED_ELEMENTS.has(localName)) {
+    issues.push({
+      code: "SVG_SECURITY_ELEMENT_FORBIDDEN",
+      severity: "ERROR",
+      message: `Forbidden element <${rawTagName}> in SVG.`,
+    });
+  }
+
+  // Inspect all attributes
+  if (elem.attributes) {
+    for (let i = 0; i < elem.attributes.length; i++) {
+      const attr = elem.attributes[i];
+      const attrName = (attr.name || attr.nodeName || "").toLowerCase();
+      const rawValue = attr.value ?? attr.nodeValue ?? "";
       const decodedVal = decodeXmlEntities(rawValue);
       const cleanVal = decodedVal.replace(/[\u0000-\u001F\u007F-\u009F\s]/g, "");
 
-      // Event handlers
+      // Namespace check for attribute prefix
+      if (attrName.includes(":")) {
+        const prefix = attrName.split(":")[0].toLowerCase();
+        if (prefix !== "xml" && prefix !== "xmlns" && !findNamespaceUri(elem, prefix)) {
+          issues.push({
+            code: "SVG_XML_SYNTAX_ERROR",
+            severity: "ERROR",
+            message: `Undeclared XML namespace prefix "${prefix}" in attribute "${attrName}".`,
+          });
+        }
+      }
+
+      // Event handlers: onload, onclick, onerror, etc.
       if (/^on[a-z]+/i.test(attrName)) {
         issues.push({
           code: "SVG_SECURITY_EVENT_HANDLER_FORBIDDEN",
           severity: "ERROR",
-          message: `Forbidden inline event handler "${attrName}" on <${tagName}>.`,
+          message: `Forbidden inline event handler "${attrName}" on <${rawTagName}>.`,
         });
       }
 
-      // JavaScript / data / file URI schemes
+      // JavaScript / dangerous URI schemes
       if (/^javascript:/i.test(cleanVal) || /javascript:/i.test(cleanVal)) {
         issues.push({
           code: "SVG_SECURITY_JAVASCRIPT_URI_FORBIDDEN",
           severity: "ERROR",
-          message: `Forbidden "javascript:" URI in attribute "${attrName}" on <${tagName}>.`,
+          message: `Forbidden "javascript:" URI in attribute "${attrName}" on <${rawTagName}>.`,
         });
       }
 
@@ -236,12 +206,13 @@ function parseAndInspectXml(markup, issues) {
         issues.push({
           code: "SVG_SECURITY_DANGEROUS_URI_FORBIDDEN",
           severity: "ERROR",
-          message: `Forbidden URI scheme "${cleanVal}" in attribute "${attrName}" on <${tagName}>.`,
+          message: `Forbidden URI scheme in attribute "${attrName}" on <${rawTagName}>.`,
         });
       }
 
-      // Fragment-only policy for href/xlink:href/src
-      if (attrName === "href" || attrName === "xlink:href" || attrName === "src") {
+      // Fragment-only policy for href / xlink:href / src
+      const localAttrName = attrName.split(":").pop() || "";
+      if (localAttrName === "href" || localAttrName === "src") {
         if (!cleanVal.startsWith("#")) {
           issues.push({
             code: "SVG_SECURITY_EXTERNAL_LINK_FORBIDDEN",
@@ -252,23 +223,31 @@ function parseAndInspectXml(markup, issues) {
       }
 
       // Style attribute inspection
-      if (attrName === "style") {
-        inspectStyleContent(rawValue, `style attribute on <${tagName}>`, issues);
+      if (localAttrName === "style") {
+        inspectStyleContent(rawValue, `style attribute on <${rawTagName}>`, issues);
       }
     }
   }
 
-  if (tagStack.length > 0) {
-    issues.push({
-      code: "SVG_XML_SYNTAX_ERROR",
-      severity: "ERROR",
-      message: `Unclosed tags remaining in XML: ${tagStack.join(", ")}.`,
-    });
+  // If this is a <style> element, inspect text content
+  if (localName === "style") {
+    const styleText = elem.textContent || elem.nodeValue || "";
+    inspectStyleContent(styleText, "<style> element", issues);
+  }
+
+  // Inspect children
+  if (elem.childNodes) {
+    for (let i = 0; i < elem.childNodes.length; i++) {
+      const child = elem.childNodes[i];
+      if (child.nodeType === 1) {
+        inspectElement(child, issues);
+      }
+    }
   }
 }
 
 /**
- * Scan SVG markup for disallowed active content or external network resources.
+ * Scan SVG markup for disallowed active content or external network resources using a true XML DOM parser.
  *
  * @param {string} markup
  * @returns {Array<{ code: string, severity: string, message: string }>}
@@ -279,7 +258,7 @@ export function scanSvgSecurity(markup) {
     return [{ code: "SVG_NOT_STRING", severity: "ERROR", message: "SVG markup must be a string." }];
   }
 
-  // 1. Rejection of <!DOCTYPE (XXE prevention)
+  // 1. Rejection of <!DOCTYPE (XXE prevention) before parsing
   if (/<!DOCTYPE\b/i.test(markup)) {
     issues.push({
       code: "SVG_SECURITY_DOCTYPE_FORBIDDEN",
@@ -288,7 +267,7 @@ export function scanSvgSecurity(markup) {
     });
   }
 
-  // 2. Rejection of processing instructions
+  // 2. Rejection of processing instructions before parsing
   if (/<\?[\s\S]*?\?>/i.test(markup)) {
     const piMatch = markup.match(/<\?([a-zA-Z0-9_-]+)/);
     const piName = piMatch ? piMatch[1].toLowerCase() : "";
@@ -301,15 +280,56 @@ export function scanSvgSecurity(markup) {
     }
   }
 
-  // 3. Inspect style elements
-  const styleBlockRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
-  let styleMatch;
-  while ((styleMatch = styleBlockRegex.exec(markup)) !== null) {
-    inspectStyleContent(styleMatch[1], "<style> block", issues);
+  // 3. True XML parsing with standard DOMParser (browser) or @xmldom/xmldom (Node)
+  const parserErrors = [];
+  let doc = null;
+
+  try {
+    if (typeof globalThis.DOMParser !== "undefined" && !globalThis.__FORCE_XMLDOM__) {
+      const parser = new globalThis.DOMParser();
+      doc = parser.parseFromString(markup, "image/svg+xml");
+      const parserErrorsInDoc = doc.getElementsByTagName("parsererror");
+      if (parserErrorsInDoc && parserErrorsInDoc.length > 0) {
+        parserErrors.push(parserErrorsInDoc[0].textContent || "XML parsing error");
+      }
+    } else {
+      const parser = new XmldomParser({
+        errorHandler: {
+          error: (msg) => parserErrors.push(msg),
+          fatalError: (msg) => parserErrors.push(msg),
+          warning: (msg) => {
+            if (/unclosed|mismatched|syntax|invalid|redefined/i.test(msg)) {
+              parserErrors.push(msg);
+            }
+          },
+        },
+      });
+      doc = parser.parseFromString(markup, "image/svg+xml");
+    }
+  } catch (err) {
+    parserErrors.push(err.message);
   }
 
-  // 4. Parse and inspect full XML tree
-  parseAndInspectXml(markup, issues);
+  if (parserErrors.length > 0) {
+    issues.push({
+      code: "SVG_XML_SYNTAX_ERROR",
+      severity: "ERROR",
+      message: `Malformed SVG XML: ${parserErrors.join("; ")}`,
+    });
+    return issues;
+  }
+
+  if (!doc || !doc.documentElement) {
+    issues.push({
+      code: "SVG_XML_SYNTAX_ERROR",
+      severity: "ERROR",
+      message: "Malformed SVG XML: root element missing.",
+    });
+    return issues;
+  }
+
+  // 4. Recursive inspection of DOM tree
+  inspectElement(doc.documentElement, issues);
 
   return issues;
 }

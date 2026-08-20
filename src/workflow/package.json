@@ -11,5 +11,8 @@
     "./security": "./security.js",
     "./compiledSchema": "./compiledSchema.js",
     "./schema": "./schema/carton-workflow.v1.schema.json"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.10"
   }
 }

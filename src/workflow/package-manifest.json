@@ -2,8 +2,7 @@
   "packageName": "@cartonbuilder/workflow-v1",
   "packageVersion": "1.0.0",
   "contractVersion": "carton-workflow.v1",
-  "pbdCommit": "26e19d7b3c1f8be5660823d6dd974fd7257f81f3",
-  "generatedAt": "2026-08-20T20:57:52.225Z",
+  "pbdCommit": "c76c2aefd77f0d828b0541e2ca0170b8f3f46d03",
   "files": [
     {
       "path": "builder.js",
@@ -12,8 +11,8 @@
     },
     {
       "path": "compiledSchema.js",
-      "byteLength": 10593,
-      "sha256": "389ea944ea6fb92269ecea0b7173430bc138acd76832958ae667f6849a50b40a"
+      "byteLength": 37917,
+      "sha256": "2df19b6655dc023517249ce38fdcbd4974327f0662ab4964eb5900f6196fca17"
     },
     {
       "path": "crypto.js",
@@ -42,8 +41,8 @@
     },
     {
       "path": "package.json",
-      "byteLength": 392,
-      "sha256": "38539c946868ad31ec0a847ef624b79526ac62695e41607cd2b3028cda7cc7ef"
+      "byteLength": 450,
+      "sha256": "54f78702bb399bccf3c9ef4010dff8188fef3bc1c006412aa3e754c1ce12c5c2"
     },
     {
       "path": "pbd-export/modelJson.js",
@@ -82,8 +81,8 @@
     },
     {
       "path": "security.js",
-      "byteLength": 9395,
-      "sha256": "97dc95e063a9c2b1f863c82fb2052eff108832a836378a33d06a766f00430d30"
+      "byteLength": 10194,
+      "sha256": "78b7b3c173d684ed313a641a36f7f06bcb9de01eacc4abe324d488c974f27d65"
     },
     {
       "path": "validator.js",

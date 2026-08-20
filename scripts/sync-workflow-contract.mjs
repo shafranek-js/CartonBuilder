@@ -2,6 +2,7 @@
  * Strict synchronization command to pull the manifest-backed carton-workflow package
  * into CartonBuilder.
  * Requires explicit --source <path> to a built package directory containing package-manifest.json.
+ * Enforces strict path normalization/traversal checks and atomic staging replacement.
  */
 
 import fs from "node:fs";
@@ -46,10 +47,24 @@ function sha256File(filepath) {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
-// 1. Verify all source package files against manifest
+function isPathSafe(baseDir, relativePath) {
+  if (typeof relativePath !== "string" || path.isAbsolute(relativePath)) return false;
+  const normalized = path.normalize(relativePath);
+  if (normalized.startsWith("..") || normalized.includes(".." + path.sep)) return false;
+  const resolved = path.resolve(baseDir, normalized);
+  const normalizedBase = path.normalize(baseDir);
+  return resolved.startsWith(normalizedBase + path.sep) || resolved === normalizedBase;
+}
+
+// 1. Verify and sanitize all manifest paths and source package files
 console.log(`Verifying ${manifest.files.length} package files in source...`);
 for (const file of manifest.files) {
-  const srcFile = path.join(packageSourceDir, file.path);
+  if (!isPathSafe(packageSourceDir, file.path)) {
+    console.error(`Security Error: Forbidden or traversal path in manifest: "${file.path}"`);
+    process.exit(1);
+  }
+
+  const srcFile = path.resolve(packageSourceDir, file.path);
   if (!fs.existsSync(srcFile)) {
     console.error(`Error: Source file "${file.path}" missing from package.`);
     process.exit(1);
@@ -67,38 +82,69 @@ for (const file of manifest.files) {
 }
 console.log("✓ All source package files verified against manifest.\n");
 
-// 2. Clean destination directory
-if (fs.existsSync(destDir)) {
-  fs.rmSync(destDir, { recursive: true, force: true });
+// 2. Prepare staging directory for atomic replacement
+const stagingDir = path.resolve(rootDir, `src/workflow.tmp-${Date.now()}`);
+if (fs.existsSync(stagingDir)) {
+  fs.rmSync(stagingDir, { recursive: true, force: true });
 }
-fs.mkdirSync(destDir, { recursive: true });
+fs.mkdirSync(stagingDir, { recursive: true });
 
-// 3. Copy files byte-for-byte without any modification
-console.log(`Copying package files into ${destDir}...`);
-for (const file of manifest.files) {
-  const srcFile = path.join(packageSourceDir, file.path);
-  const dstFile = path.join(destDir, file.path);
-  fs.mkdirSync(path.dirname(dstFile), { recursive: true });
-  fs.copyFileSync(srcFile, dstFile);
-  console.log(`✓ Copied: src/workflow/${file.path}`);
-}
-
-// Copy manifest itself
-fs.copyFileSync(manifestPath, path.join(destDir, "package-manifest.json"));
-console.log("✓ Copied: src/workflow/package-manifest.json\n");
-
-// 4. Verify copied files in destination
-console.log("Verifying destination files...");
-for (const file of manifest.files) {
-  const dstFile = path.join(destDir, file.path);
-  const bytes = fs.readFileSync(dstFile);
-  const hash = sha256File(dstFile);
-  if (bytes.length !== file.byteLength || hash !== file.sha256) {
-    console.error(`Error: Destination file corrupted: ${file.path}`);
-    process.exit(1);
+try {
+  // 3. Copy files into staging directory
+  console.log(`Copying package files into staging directory...`);
+  for (const file of manifest.files) {
+    if (!isPathSafe(stagingDir, file.path)) {
+      throw new Error(`Security Error: Staging path traversal: "${file.path}"`);
+    }
+    const srcFile = path.resolve(packageSourceDir, file.path);
+    const dstFile = path.resolve(stagingDir, file.path);
+    fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+    fs.copyFileSync(srcFile, dstFile);
+    console.log(`✓ Copied: ${file.path}`);
   }
-}
 
-console.log("✓ All destination files match package manifest hashes byte-for-byte.");
-console.log(`✓ Synced Package: ${manifest.packageName}@${manifest.packageVersion} (PBD commit ${manifest.pbdCommit})`);
-console.log("\nCarton workflow contract synchronization completed successfully.");
+  // Copy manifest to staging
+  fs.copyFileSync(manifestPath, path.join(stagingDir, "package-manifest.json"));
+  console.log("✓ Copied: package-manifest.json\n");
+
+  // 4. Verify all files in staging directory
+  console.log("Verifying staged files before activation...");
+  for (const file of manifest.files) {
+    const stagedFile = path.resolve(stagingDir, file.path);
+    const bytes = fs.readFileSync(stagedFile);
+    const hash = sha256File(stagedFile);
+    if (bytes.length !== file.byteLength || hash !== file.sha256) {
+      throw new Error(`Integrity Error: Staged file corrupted: ${file.path}`);
+    }
+  }
+  console.log("✓ Staging verification passed.\n");
+
+  // 5. Atomic replacement of destination directory
+  const backupDir = path.resolve(rootDir, `src/workflow.bak-${Date.now()}`);
+  if (fs.existsSync(destDir)) {
+    fs.renameSync(destDir, backupDir);
+  }
+
+  try {
+    fs.renameSync(stagingDir, destDir);
+    if (fs.existsSync(backupDir)) {
+      fs.rmSync(backupDir, { recursive: true, force: true });
+    }
+  } catch (renameErr) {
+    if (fs.existsSync(backupDir)) {
+      fs.renameSync(backupDir, destDir);
+    }
+    throw renameErr;
+  }
+
+  console.log("✓ Destination directory atomically updated.");
+  console.log(`✓ Synced Package: ${manifest.packageName}@${manifest.packageVersion} (PBD commit ${manifest.pbdCommit})`);
+  console.log("\nCarton workflow contract synchronization completed successfully.");
+} catch (err) {
+  if (fs.existsSync(stagingDir)) {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  }
+  console.error(`\nSync Failed: ${err.message}`);
+  console.error("Existing src/workflow was preserved intact.");
+  process.exit(1);
+}

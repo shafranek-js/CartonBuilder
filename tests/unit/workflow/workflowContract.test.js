@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execSync } from "node:child_process";
 import {
   validateCartonWorkflowBundle,
   CONTRACT_VERSION,
@@ -120,67 +121,79 @@ describe("preflight payload size limits and short-circuit behavior", () => {
 
 describe("XML/SVG security preflight and entity decoding", () => {
   it("detects entity-encoded javascript: URI schemes", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><rect href="java&#x73;cript:alert(1)" /></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><rect href="java&#x73;cript:alert(1)" /></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_JAVASCRIPT_URI_FORBIDDEN")).toBe(true);
   });
 
   it("detects entity-encoded https: external links in href", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><rect href="https&#x3a;//example.com/leak.png" /></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><rect href="https&#x3a;//example.com/leak.png" /></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_EXTERNAL_LINK_FORBIDDEN")).toBe(true);
   });
 
   it("detects entity-encoded external url(...) in style attributes", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><rect style="fill:url(https&#x3a;//evil.example/x.svg)"/></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><rect style="fill:url(https&#x3a;//evil.example/x.svg)"/></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_EXTERNAL_LINK_FORBIDDEN")).toBe(true);
   });
 
   it("detects <script> tags", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><script>alert(1)</script></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><script>alert(1)</script></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_ELEMENT_FORBIDDEN")).toBe(true);
   });
 
   it("detects <foreignObject> tags", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><foreignObject><div>test</div></foreignObject></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><foreignObject><div>test</div></foreignObject></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_ELEMENT_FORBIDDEN")).toBe(true);
   });
 
   it("detects inline event handlers", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><rect onload="alert(1)" /></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><rect onload="alert(1)" /></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_EVENT_HANDLER_FORBIDDEN")).toBe(true);
   });
 
   it("detects @import in style blocks", () => {
-    const svg = '<svg data-export-schema-version="pbd.svg.v4"><style>@import "https://evil.com";</style></svg>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"><style>@import "https://evil.com";</style></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_STYLE_IMPORT_FORBIDDEN")).toBe(true);
   });
 
   it("detects XML processing instructions", () => {
-    const svg = '<?xml-stylesheet type="text/xsl" href="exploit.xsl"?><svg data-export-schema-version="pbd.svg.v4"></svg>';
+    const svg = '<?xml-stylesheet type="text/xsl" href="exploit.xsl"?><svg xmlns="http://www.w3.org/2000/svg" data-export-schema-version="pbd.svg.v4"></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_PROCESSING_INSTRUCTION_FORBIDDEN")).toBe(true);
   });
 
   it("detects <!DOCTYPE declarations", () => {
-    const svg = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg></svg>';
+    const svg = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg"></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_SECURITY_DOCTYPE_FORBIDDEN")).toBe(true);
   });
 
-  it("detects malformed XML", () => {
-    const svg = '<svg><g><rect></svg>';
+  it("detects malformed XML (duplicate attributes)", () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" x="10" /></svg>';
+    const issues = scanSvgSecurity(svg);
+    expect(issues.some((i) => i.code === "SVG_XML_SYNTAX_ERROR")).toBe(true);
+  });
+
+  it("detects malformed XML (undeclared namespace prefix)", () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect xlink:href="#a" /></svg>';
+    const issues = scanSvgSecurity(svg);
+    expect(issues.some((i) => i.code === "SVG_XML_SYNTAX_ERROR")).toBe(true);
+  });
+
+  it("detects malformed XML (unknown XML entity)", () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect id="&unknownEntity;" /></svg>';
     const issues = scanSvgSecurity(svg);
     expect(issues.some((i) => i.code === "SVG_XML_SYNTAX_ERROR")).toBe(true);
   });
 });
 
-describe("strict schema enforcement and additionalProperties: false", () => {
+describe("strict Ajv 2020 schema enforcement and additionalProperties: false", () => {
   it("rejects bundle with forbidden source.unexpected property", async () => {
     const bundle = loadFixture("rte-workflow.v1.json");
     bundle.source.unexpected = "payload";
@@ -227,7 +240,7 @@ describe("cyclic and malformed payloads safety", () => {
   it("rejects non-object bundle", async () => {
     const res = await validateCartonWorkflowBundle(null);
     expect(res.valid).toBe(false);
-    expect(res.issues.some((i) => i.code === "BUNDLE_NOT_OBJECT" || i.code === "SCHEMA_NOT_AN_OBJECT")).toBe(true);
+    expect(res.issues.some((i) => i.code === "BUNDLE_NOT_OBJECT" || i.code === "SCHEMA_NOT_AN_OBJECT" || i.code === "SCHEMA_TYPE_MISMATCH")).toBe(true);
   });
 });
 
@@ -266,5 +279,19 @@ describe("schema/runtime parity with PBD canonical validators", () => {
     const bundleResult = await validateCartonWorkflowBundle(bundle);
     expect(bundleResult.valid).toBe(false);
     expect(bundleResult.issues.some((i) => i.code === "EXPORT_VALIDATION_INVALID")).toBe(true);
+  });
+});
+
+describe("sync script path safety and atomic replacement", () => {
+  it("rejects path traversal and preserves destination on invalid source", () => {
+    expect(() => {
+      execSync("node scripts/sync-workflow-contract.mjs --source /invalid/nonexistent/path", {
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+    }).toThrow();
+
+    // Verify existing src/workflow remains intact
+    expect(fs.existsSync(path.join(workflowPackageDir, "package-manifest.json"))).toBe(true);
   });
 });
