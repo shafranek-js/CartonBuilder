@@ -2,7 +2,7 @@
   "packageName": "@cartonbuilder/workflow-v1",
   "packageVersion": "1.0.0",
   "contractVersion": "carton-workflow.v1",
-  "pbdCommit": "fc55cfe82373b0421fd58b12b70e009b2aa1ecb5",
+  "pbdCommit": "538fb7cd96737246c17cfe928442b38da5bb3815",
   "files": [
     {
       "path": "export/modelJson.mjs",
@@ -62,17 +62,17 @@
     {
       "path": "package.json",
       "byteLength": 862,
-      "sha256": "799a41bc49daee57479ea42598bdfaebb2ee1211f0740d31794a5504cb5a512c"
+      "sha256": "7bd5cba7949deeae699ff04219c8e909f149e8f2ba00b6b9ecdc8da0e094a3df"
     },
     {
       "path": "schema/carton-workflow.v1.schema.json",
-      "byteLength": 4130,
-      "sha256": "7fad8c94922f6d52bdf7ee87de2ee545f00253fb556de19ee007306fa0956be7"
+      "byteLength": 4129,
+      "sha256": "019c63b8f06480204a9003afdcf3e24bff40cab25e8cc52a9e76fa0680e2ed50"
     },
     {
       "path": "workflow/builder.js",
-      "byteLength": 2714,
-      "sha256": "906d2c435e7c857a297fdade24ee2a36a0a85bbfa527700b214b6f6ee0a0a6bd"
+      "byteLength": 2713,
+      "sha256": "ec3b9108568c3fdd75b194329ca9e1f3066f83107ffaffe0251fa81ecac2fcc8"
     },
     {
       "path": "workflow/compiledSchema.js",
@@ -81,23 +81,23 @@
     },
     {
       "path": "workflow/crypto.js",
-      "byteLength": 893,
-      "sha256": "087f34e63247fca880520b753824e301315c8508817f665a921d002d1d270329"
+      "byteLength": 892,
+      "sha256": "78a2cb02e1587b54b45d71d3b71cfd4cf744e3c14b501bf06631342f06b0f076"
     },
     {
       "path": "workflow/index.js",
-      "byteLength": 706,
-      "sha256": "94578b54a012980d8b10aedc2156691fcab2b0f32a923cefffd5509a1831dd0b"
+      "byteLength": 705,
+      "sha256": "a6497dc9e667e8211cf40df063f26247cc78415c68beb02eb4c03083dfa27f39"
     },
     {
       "path": "workflow/security.js",
-      "byteLength": 11461,
-      "sha256": "c8d68268c89731ce16583317432907f05fcf08d2858429daf7d9846d6298c202"
+      "byteLength": 11421,
+      "sha256": "fd1da442c91f37cf4139a55a1a34b046ab33d4bd83711ad0b148ad99083ae047"
     },
     {
       "path": "workflow/validator.js",
-      "byteLength": 8237,
-      "sha256": "57619f17056e69c0c1fa1c9a472d44d4fed5d49970c89cccaae507881b4d5040"
+      "byteLength": 8236,
+      "sha256": "c5828f7b04c07a7085218ee0745271fc7d092c32ff730d60f468ce53ba45b7b4"
     }
   ]
 }

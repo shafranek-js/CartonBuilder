@@ -325,14 +325,12 @@ export function scanSvgSecurity(markup, options = {}) {
       }
     } else {
       const parser = new XmldomParser({
-        errorHandler: {
-          error: (msg) => parserErrors.push(msg),
-          fatalError: (msg) => parserErrors.push(msg),
-          warning: (msg) => {
-            if (/unclosed|mismatched|syntax|invalid|redefined/i.test(msg)) {
-              parserErrors.push(msg);
-            }
-          },
+        onError: (level, msg) => {
+          if (level === "error" || level === "fatalError") {
+            parserErrors.push(msg);
+          } else if (/unclosed|mismatched|syntax|invalid|redefined/i.test(msg)) {
+            parserErrors.push(msg);
+          }
         },
       });
       doc = parser.parseFromString(markup, "image/svg+xml");

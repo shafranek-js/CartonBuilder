@@ -37,6 +37,9 @@ export function syncWorkflowContract(sourcePath, customDestDir = destDir) {
   }
 
   const packageSourceDir = path.resolve(sourcePath);
+  const destinationDir = path.resolve(customDestDir);
+  const destinationParent = path.dirname(destinationDir);
+  const destinationName = path.basename(destinationDir);
   console.log(`Syncing carton-workflow package from: ${packageSourceDir}\n`);
 
   if (!fs.existsSync(packageSourceDir)) {
@@ -82,7 +85,10 @@ export function syncWorkflowContract(sourcePath, customDestDir = destDir) {
   console.log("✓ All source package files verified against manifest.\n");
 
   // 2. Prepare staging directory for atomic replacement
-  const stagingDir = path.resolve(path.dirname(customDestDir), `src/workflow.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const stagingDir = path.join(
+    destinationParent,
+    `.${destinationName}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
   if (fs.existsSync(stagingDir)) {
     fs.rmSync(stagingDir, { recursive: true, force: true });
   }
@@ -121,19 +127,22 @@ export function syncWorkflowContract(sourcePath, customDestDir = destDir) {
     console.log("✓ Staging verification passed.\n");
 
     // 5. Atomic activation of destination directory
-    if (fs.existsSync(customDestDir)) {
-      backupDir = path.resolve(path.dirname(customDestDir), `src/workflow.bak-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-      fs.renameSync(customDestDir, backupDir);
+    if (fs.existsSync(destinationDir)) {
+      backupDir = path.join(
+        destinationParent,
+        `.${destinationName}.bak-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      );
+      fs.renameSync(destinationDir, backupDir);
     }
 
-    fs.renameSync(stagingDir, customDestDir);
+    fs.renameSync(stagingDir, destinationDir);
     activated = true;
     console.log("✓ Destination directory atomically activated.");
   } catch (activationErr) {
     // Rollback on activation failure: restore backup if destination does not exist
-    if (!activated && backupDir && fs.existsSync(backupDir) && !fs.existsSync(customDestDir)) {
+    if (!activated && backupDir && fs.existsSync(backupDir) && !fs.existsSync(destinationDir)) {
       try {
-        fs.renameSync(backupDir, customDestDir);
+        fs.renameSync(backupDir, destinationDir);
         console.log("✓ Rollback successful: restored original destination.");
       } catch (rbErr) {
         console.error(`Fatal: Failed to restore backup during rollback: ${rbErr.message}`);

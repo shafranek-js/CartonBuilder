@@ -20,6 +20,6 @@
     "./export/svgBounds": "./export/svgBounds.mjs"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.8.10"
+    "@xmldom/xmldom": "^0.9.11"
   }
 }

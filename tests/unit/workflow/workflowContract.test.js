@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
@@ -14,7 +15,7 @@ import {
   validateModelExport,
   validateSvgV4Export,
 } from "../../../src/workflow/index.js";
-import { isPathSafe } from "../../../scripts/sync-workflow-contract.mjs";
+import { isPathSafe, syncWorkflowContract } from "../../../scripts/sync-workflow-contract.mjs";
 
 const fixturesDir = path.resolve("src/workflow/fixtures");
 const workflowPackageDir = path.resolve("src/workflow");
@@ -26,6 +27,32 @@ function loadFixture(filename) {
 
 function sha256Bytes(content) {
   return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+function createValidSyncPackage() {
+  const packageDir = fs.mkdtempSync(path.join(os.tmpdir(), "carton-workflow-package-"));
+  const payload = Buffer.from("new contract payload", "utf8");
+  fs.writeFileSync(path.join(packageDir, "payload.txt"), payload);
+  fs.writeFileSync(
+    path.join(packageDir, "package-manifest.json"),
+    JSON.stringify({
+      packageName: "@cartonbuilder/workflow-v1",
+      packageVersion: "1.0.0",
+      contractVersion: "carton-workflow.v1",
+      pbdCommit: "test-commit",
+      files: [{ path: "payload.txt", byteLength: payload.length, sha256: sha256Bytes(payload) }],
+    }),
+    "utf8"
+  );
+  return packageDir;
+}
+
+function createExistingSyncDestination() {
+  const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "carton-workflow-destination-"));
+  const destination = path.join(testRoot, "workflow");
+  fs.mkdirSync(destination, { recursive: true });
+  fs.writeFileSync(path.join(destination, "original-marker.txt"), "original", "utf8");
+  return { testRoot, destination };
 }
 
 describe("carton-workflow.v1 package manifest and byte-for-byte integrity", () => {
@@ -372,5 +399,63 @@ describe("sync script path safety, security gates and atomic replacement", () =>
     expect(manifestAfter).toBe(manifestBefore);
 
     fs.rmSync(testTempDir, { recursive: true, force: true });
+  });
+
+  it("restores the original destination when staging activation fails", () => {
+    const packageDir = createValidSyncPackage();
+    const { testRoot, destination } = createExistingSyncDestination();
+    const originalRenameSync = fs.renameSync.bind(fs);
+    let renameCall = 0;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      renameCall++;
+      if (renameCall === 2) {
+        throw new Error("simulated staging activation failure");
+      }
+      return originalRenameSync(source, target);
+    });
+
+    try {
+      expect(() => syncWorkflowContract(packageDir, destination)).toThrow("simulated staging activation failure");
+      expect(fs.readFileSync(path.join(destination, "original-marker.txt"), "utf8")).toBe("original");
+      expect(fs.existsSync(path.join(destination, "payload.txt"))).toBe(false);
+      expect(renameCall).toBe(3);
+    } finally {
+      renameSpy.mockRestore();
+      fs.rmSync(packageDir, { recursive: true, force: true });
+      fs.rmSync(testRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the activated destination and reports a recoverable backup when cleanup fails", () => {
+    const packageDir = createValidSyncPackage();
+    const { testRoot, destination } = createExistingSyncDestination();
+    const originalRmSync = fs.rmSync.bind(fs);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rmSpy = vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
+      if (path.basename(String(target)).startsWith(".workflow.bak-")) {
+        throw new Error("simulated backup cleanup failure");
+      }
+      return originalRmSync(target, options);
+    });
+
+    let backupDir;
+    try {
+      const manifest = syncWorkflowContract(packageDir, destination);
+      expect(manifest.pbdCommit).toBe("test-commit");
+      expect(fs.readFileSync(path.join(destination, "payload.txt"), "utf8")).toBe("new contract payload");
+      expect(fs.existsSync(path.join(destination, "original-marker.txt"))).toBe(false);
+
+      backupDir = fs.readdirSync(testRoot, { withFileTypes: true })
+        .find((entry) => entry.isDirectory() && entry.name.startsWith(".workflow.bak-"));
+      expect(backupDir).toBeDefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(path.join(testRoot, backupDir.name)));
+      expect(warnSpy).toHaveBeenCalledWith("New destination remains active and fully functional.");
+      expect(fs.existsSync(path.join(testRoot, "src"))).toBe(false);
+    } finally {
+      rmSpy.mockRestore();
+      warnSpy.mockRestore();
+      fs.rmSync(packageDir, { recursive: true, force: true });
+      fs.rmSync(testRoot, { recursive: true, force: true });
+    }
   });
 });
