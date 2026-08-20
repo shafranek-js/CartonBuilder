@@ -2,7 +2,7 @@
   "packageName": "@cartonbuilder/workflow-v1",
   "packageVersion": "1.0.0",
   "contractVersion": "carton-workflow.v1",
-  "pbdCommit": "c76c2aefd77f0d828b0541e2ca0170b8f3f46d03",
+  "pbdCommit": "fe514a8b54c465152c1c24e509ed5ab4ea9bc5ff",
   "files": [
     {
       "path": "builder.js",
