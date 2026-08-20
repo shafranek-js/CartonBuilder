@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run plugins:verify",
     "build": "vite build",
+    "plugins:verify": "node scripts/verify-vendored-plugins.mjs",
+    "plugins:sync:pbd": "node scripts/sync-pbd-plugin.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:unit": "vitest run",
@@ -23,6 +26,8 @@
   "devDependencies": {
     "@playwright/test": "^1.50.1",
     "@xmldom/xmldom": "^0.9.11",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "gltf-validator": "^2.0.0-dev.3.10",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"

@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cartonbuilder.dev/schemas/carton-workflow.v1.json",
+  "title": "CartonWorkflowBundle",
+  "description": "Deterministic exchange bundle for the dual workflow plugin integration (v1)",
+  "type": "object",
+  "required": [
+    "contractVersion",
+    "workflowMode",
+    "source",
+    "modelJson",
+    "semanticSvg",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "carton-workflow.v1"
+    },
+    "workflowMode": {
+      "type": "string",
+      "const": "technical"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "producer",
+        "producerVersion",
+        "modelEngineVersion",
+        "contractPackageVersion",
+        "artifactVersion",
+        "artifactSha256",
+        "modelSchemaVersion",
+        "svgSchemaVersion",
+        "cartonType",
+        "profileIds",
+        "referenceOnly",
+        "productionCertified"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "producer": {
+          "type": "string",
+          "const": "packaging-box-designer"
+        },
+        "producerVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelEngineVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contractPackageVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "modelSchemaVersion": {
+          "type": "string",
+          "const": "pbd.model.v1"
+        },
+        "svgSchemaVersion": {
+          "type": "string",
+          "const": "pbd.svg.v4"
+        },
+        "cartonType": {
+          "type": "string",
+          "enum": ["RTE", "STE", "TT_SL123"]
+        },
+        "profileIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "referenceOnly": {
+          "type": "boolean",
+          "const": true
+        },
+        "productionCertified": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "modelJson": {
+      "type": "object",
+      "required": [
+        "mediaType",
+        "byteLength",
+        "sha256",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mediaType": {
+          "type": "string",
+          "const": "application/json"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "semanticSvg": {
+      "type": "object",
+      "required": [
+        "assetId",
+        "mediaType",
+        "byteLength",
+        "sha256",
+        "units",
+        "markup"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "type": "string",
+          "pattern": "^svg-[a-f0-9]{16}$"
+        },
+        "mediaType": {
+          "type": "string",
+          "const": "image/svg+xml"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "units": {
+          "type": "string",
+          "const": "mm"
+        },
+        "markup": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": [
+        "artwork2d",
+        "flatExport",
+        "foldPreview",
+        "technicalRender"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "artwork2d": { "type": "boolean" },
+        "flatExport": { "type": "boolean" },
+        "foldPreview": { "type": "boolean" },
+        "technicalRender": { "type": "boolean" }
+      }
+    }
+  }
+}
