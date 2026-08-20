@@ -1,74 +1,104 @@
 /**
- * Deterministic synchronization command to pull the versioned carton-workflow contract package
- * and golden fixtures from Packaging Box Designer into CartonBuilder.
+ * Strict synchronization command to pull the manifest-backed carton-workflow package
+ * into CartonBuilder.
+ * Requires explicit --source <path> to a built package directory containing package-manifest.json.
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
+const destDir = path.resolve(rootDir, "src/workflow");
 
 const args = process.argv.slice(2);
 const sourceArgIndex = args.indexOf("--source");
-const pbdSourceDir = sourceArgIndex >= 0 && args[sourceArgIndex + 1]
-  ? path.resolve(args[sourceArgIndex + 1])
-  : path.resolve(rootDir, "../Packaging Box Designer-stage1");
-
-console.log(`Syncing carton-workflow.v1 contract from: ${pbdSourceDir}`);
-
-if (!fs.existsSync(pbdSourceDir)) {
-  console.error(`Error: Source directory "${pbdSourceDir}" does not exist.`);
+if (sourceArgIndex === -1 || !args[sourceArgIndex + 1]) {
+  console.error("Error: --source <path-to-package-directory> is required.");
+  console.error("Example: node scripts/sync-workflow-contract.mjs --source ../Packaging\\ Box\\ Designer-stage1/dist/packages/carton-workflow-v1");
   process.exit(1);
 }
 
-// 1. Sync Schema
-const schemaSource = path.join(pbdSourceDir, "schemas/carton-workflow.v1.schema.json");
-const schemaTargetDir = path.join(rootDir, "src/workflow");
-fs.mkdirSync(schemaTargetDir, { recursive: true });
-fs.copyFileSync(schemaSource, path.join(schemaTargetDir, "cartonWorkflowSchema.json"));
-console.log("✓ Copied schema: src/workflow/cartonWorkflowSchema.json");
+const packageSourceDir = path.resolve(args[sourceArgIndex + 1]);
+console.log(`Syncing carton-workflow package from: ${packageSourceDir}\n`);
 
-// 2. Sync Export validators needed for standalone execution
-const exportSourceDir = path.join(pbdSourceDir, "src/export");
-const exportTargetDir = path.join(rootDir, "src/workflow/pbd-export");
-fs.mkdirSync(exportTargetDir, { recursive: true });
-for (const file of ["modelJson.mjs", "svgMetadata.mjs", "svgGeometry.mjs", "svgAnnotations.mjs", "svgDiagnostics.mjs", "svgBounds.mjs"]) {
-  const src = path.join(exportSourceDir, file);
-  if (fs.existsSync(src)) {
-    const dst = path.join(exportTargetDir, file.replace(/\.mjs$/, ".js"));
-    let content = fs.readFileSync(src, "utf8");
-    content = content.replace(/\.mjs/g, ".js");
-    fs.writeFileSync(dst, content, "utf8");
-    console.log(`✓ Synced authoritative PBD export validator: src/workflow/pbd-export/${path.basename(dst)}`);
+if (!fs.existsSync(packageSourceDir)) {
+  console.error(`Error: Source package directory "${packageSourceDir}" does not exist.`);
+  process.exit(1);
+}
+
+const manifestPath = path.join(packageSourceDir, "package-manifest.json");
+if (!fs.existsSync(manifestPath)) {
+  console.error(`Error: Package manifest "${manifestPath}" not found.`);
+  process.exit(1);
+}
+
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+if (!manifest.packageName || !Array.isArray(manifest.files) || manifest.files.length === 0) {
+  console.error("Error: Invalid or empty package manifest.");
+  process.exit(1);
+}
+
+function sha256File(filepath) {
+  const content = fs.readFileSync(filepath);
+  return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+// 1. Verify all source package files against manifest
+console.log(`Verifying ${manifest.files.length} package files in source...`);
+for (const file of manifest.files) {
+  const srcFile = path.join(packageSourceDir, file.path);
+  if (!fs.existsSync(srcFile)) {
+    console.error(`Error: Source file "${file.path}" missing from package.`);
+    process.exit(1);
+  }
+  const bytes = fs.readFileSync(srcFile);
+  if (bytes.length !== file.byteLength) {
+    console.error(`Error: Byte length mismatch for "${file.path}": expected ${file.byteLength}, got ${bytes.length}.`);
+    process.exit(1);
+  }
+  const hash = sha256File(srcFile);
+  if (hash !== file.sha256) {
+    console.error(`Error: SHA-256 mismatch for "${file.path}": expected ${file.sha256}, got ${hash}.`);
+    process.exit(1);
+  }
+}
+console.log("✓ All source package files verified against manifest.\n");
+
+// 2. Clean destination directory
+if (fs.existsSync(destDir)) {
+  fs.rmSync(destDir, { recursive: true, force: true });
+}
+fs.mkdirSync(destDir, { recursive: true });
+
+// 3. Copy files byte-for-byte without any modification
+console.log(`Copying package files into ${destDir}...`);
+for (const file of manifest.files) {
+  const srcFile = path.join(packageSourceDir, file.path);
+  const dstFile = path.join(destDir, file.path);
+  fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+  fs.copyFileSync(srcFile, dstFile);
+  console.log(`✓ Copied: src/workflow/${file.path}`);
+}
+
+// Copy manifest itself
+fs.copyFileSync(manifestPath, path.join(destDir, "package-manifest.json"));
+console.log("✓ Copied: src/workflow/package-manifest.json\n");
+
+// 4. Verify copied files in destination
+console.log("Verifying destination files...");
+for (const file of manifest.files) {
+  const dstFile = path.join(destDir, file.path);
+  const bytes = fs.readFileSync(dstFile);
+  const hash = sha256File(dstFile);
+  if (bytes.length !== file.byteLength || hash !== file.sha256) {
+    console.error(`Error: Destination file corrupted: ${file.path}`);
+    process.exit(1);
   }
 }
 
-// 3. Sync Contract Package files
-const contractSourceDir = path.join(pbdSourceDir, "src/workflow");
-const contractFiles = ["validator.mjs", "builder.mjs", "crypto.mjs", "security.mjs", "index.mjs"];
-for (const file of contractFiles) {
-  const src = path.join(contractSourceDir, file);
-  const dst = path.join(schemaTargetDir, file.replace(/\.mjs$/, ".js"));
-  let content = fs.readFileSync(src, "utf8");
-  content = content.replace(/\.mjs/g, ".js");
-  content = content.replace('../export/modelJson.js', './pbd-export/modelJson.js');
-  content = content.replace('../export/svgMetadata.js', './pbd-export/svgMetadata.js');
-  fs.writeFileSync(dst, content, "utf8");
-  console.log(`✓ Synced contract module: src/workflow/${path.basename(dst)}`);
-}
-
-// 4. Sync Golden Fixtures
-const fixturesSourceDir = path.join(pbdSourceDir, "tests/fixtures/workflow");
-const fixturesTargetDir = path.join(rootDir, "src/workflow/fixtures");
-fs.mkdirSync(fixturesTargetDir, { recursive: true });
-
-for (const fixtureName of ["rte-workflow.v1.json", "ste-workflow.v1.json", "tt_sl123-workflow.v1.json"]) {
-  const src = path.join(fixturesSourceDir, fixtureName);
-  const dst = path.join(fixturesTargetDir, fixtureName);
-  fs.copyFileSync(src, dst);
-  console.log(`✓ Synced golden fixture: src/workflow/fixtures/${fixtureName}`);
-}
-
+console.log("✓ All destination files match package manifest hashes byte-for-byte.");
+console.log(`✓ Synced Package: ${manifest.packageName}@${manifest.packageVersion} (PBD commit ${manifest.pbdCommit})`);
 console.log("\nCarton workflow contract synchronization completed successfully.");

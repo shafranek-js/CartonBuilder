@@ -26,10 +26,13 @@
       "type": "object",
       "required": [
         "producer",
-        "engineVersion",
+        "producerVersion",
+        "modelEngineVersion",
+        "contractPackageVersion",
+        "artifactVersion",
+        "artifactSha256",
         "modelSchemaVersion",
         "svgSchemaVersion",
-        "artifactSha256",
         "cartonType",
         "profileIds",
         "referenceOnly",
@@ -39,11 +42,27 @@
       "properties": {
         "producer": {
           "type": "string",
-          "minLength": 1
+          "const": "packaging-box-designer"
         },
-        "engineVersion": {
+        "producerVersion": {
           "type": "string",
           "minLength": 1
+        },
+        "modelEngineVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contractPackageVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         },
         "modelSchemaVersion": {
           "type": "string",
@@ -52,10 +71,6 @@
         "svgSchemaVersion": {
           "type": "string",
           "const": "pbd.svg.v4"
-        },
-        "artifactSha256": {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
         },
         "cartonType": {
           "type": "string",
@@ -83,7 +98,7 @@
         "sha256",
         "text"
       ],
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "mediaType": {
           "type": "string",
@@ -117,7 +132,7 @@
       "properties": {
         "assetId": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^svg-[a-f0-9]{16}$"
         },
         "mediaType": {
           "type": "string",

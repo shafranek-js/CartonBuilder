@@ -1,0 +1,15 @@
+{
+  "name": "@cartonbuilder/workflow-v1",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./validator": "./validator.js",
+    "./builder": "./builder.js",
+    "./crypto": "./crypto.js",
+    "./security": "./security.js",
+    "./compiledSchema": "./compiledSchema.js",
+    "./schema": "./schema/carton-workflow.v1.schema.json"
+  }
+}
