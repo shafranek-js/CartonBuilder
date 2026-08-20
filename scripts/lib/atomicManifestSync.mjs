@@ -1,5 +1,5 @@
 /**
- * Reusable helper for secure, path-traversal-safe, and atomic manifest-backed package synchronization.
+ * Reusable helpers for verified, traversal-safe and transactional package replacement.
  */
 
 import fs from "node:fs";
@@ -7,170 +7,280 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 export function sha256File(filepath) {
-  const content = fs.readFileSync(filepath);
-  return crypto.createHash("sha256").update(content).digest("hex");
+  return crypto.createHash("sha256").update(fs.readFileSync(filepath)).digest("hex");
+}
+export function isPathWithin(baseDir, candidatePath, { allowBase = true } = {}) {
+  const base = path.resolve(baseDir);
+  const candidate = path.resolve(candidatePath);
+  return (allowBase && candidate === base) || candidate.startsWith(base + path.sep);
 }
 
 export function isPathSafe(baseDir, relativePath) {
-  if (typeof relativePath !== "string" || path.isAbsolute(relativePath)) return false;
-  if (/^[a-zA-Z]:/.test(relativePath) || relativePath.startsWith("/") || relativePath.startsWith("\\")) return false;
-  const normalized = path.normalize(relativePath);
   if (
-    normalized.startsWith("..") ||
-    normalized.includes(".." + path.sep) ||
-    normalized.includes("../") ||
-    normalized.includes("..\\")
+    typeof relativePath !== "string" ||
+    relativePath.length === 0 ||
+    path.isAbsolute(relativePath) ||
+    /^[A-Za-z]:/.test(relativePath) ||
+    relativePath.startsWith("/") ||
+    relativePath.startsWith("\\")
   ) {
     return false;
   }
-  const resolved = path.resolve(baseDir, normalized);
-  const normalizedBase = path.normalize(baseDir);
-  return resolved.startsWith(normalizedBase + path.sep) || resolved === normalizedBase;
+  return isPathWithin(baseDir, path.resolve(baseDir, relativePath), { allowBase: false });
 }
 
-/**
- * Synchronize a manifest-backed directory atomically into a destination directory.
- *
- * @param {object} options
- * @param {string} options.sourceDir
- * @param {string} options.destDir
- * @param {string} [options.manifestFilename="package-manifest.json"]
- * @returns {object} The parsed manifest
- */
-export function atomicSyncManifestPackage({
+export function isSafePathSegment(value) {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !path.isAbsolute(value) &&
+    !/^[A-Za-z]:/.test(value)
+  );
+}
+
+function assertDestinationAllowed(destDir, allowedDestinationRoot) {
+  if (
+    allowedDestinationRoot &&
+    !isPathWithin(allowedDestinationRoot, destDir, { allowBase: false })
+  ) {
+    throw new Error(
+      `Security Error: Destination "${path.resolve(destDir)}" escapes allowed root "${path.resolve(allowedDestinationRoot)}".`
+    );
+  }
+}
+
+function getAllRelativeFiles(dir, baseDir = dir) {
+  let files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) files = files.concat(getAllRelativeFiles(fullPath, baseDir));
+    else files.push(path.relative(baseDir, fullPath).replace(/\\/g, "/"));
+  }
+  return files.sort();
+}
+
+export function verifyManifestPackage({
   sourceDir,
-  destDir,
   manifestFilename = "package-manifest.json",
+  rejectUndeclared = false,
 }) {
   const packageSourceDir = path.resolve(sourceDir);
-  const targetDestDir = path.resolve(destDir);
-
   if (!fs.existsSync(packageSourceDir)) {
     throw new Error(`Source directory "${packageSourceDir}" does not exist.`);
   }
 
-  const manifestPath = path.join(packageSourceDir, manifestFilename);
-  if (!fs.existsSync(manifestPath)) {
-    throw new Error(`Manifest "${manifestPath}" not found.`);
+  if (!isPathSafe(packageSourceDir, manifestFilename)) {
+    throw new Error(`Security Error: Unsafe manifest filename "${manifestFilename}".`);
   }
+  const manifestPath = path.resolve(packageSourceDir, manifestFilename);
+  if (!fs.existsSync(manifestPath)) throw new Error(`Manifest "${manifestPath}" not found.`);
 
   let manifest;
   try {
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  } catch (err) {
-    throw new Error(`Failed to parse manifest at "${manifestPath}": ${err.message}`);
+  } catch (error) {
+    throw new Error(`Failed to parse manifest at "${manifestPath}": ${error.message}`);
   }
 
-  const filesList = manifest.files;
-  if (!Array.isArray(filesList) || filesList.length === 0) {
+  if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
     throw new Error(`Invalid manifest at "${manifestPath}": missing or empty "files" array.`);
   }
 
-  // 1. Verify and sanitize all manifest paths and source package files BEFORE touching destination
-  for (const file of filesList) {
-    if (!isPathSafe(packageSourceDir, file.path)) {
-      throw new Error(`Security Error: Forbidden or traversal path in manifest: "${file.path}"`);
+  const declared = new Set();
+  for (const file of manifest.files) {
+    if (!file || !isPathSafe(packageSourceDir, file.path)) {
+      throw new Error(`Security Error: Forbidden or traversal path in manifest: "${file?.path}".`);
     }
+    if (declared.has(file.path)) throw new Error(`Duplicate manifest file path: "${file.path}".`);
+    declared.add(file.path);
 
-    const srcFile = path.resolve(packageSourceDir, file.path);
-    if (!fs.existsSync(srcFile)) {
-      throw new Error(`Source file "${file.path}" missing from package.`);
+    const sourceFile = path.resolve(packageSourceDir, file.path);
+    if (!fs.existsSync(sourceFile)) throw new Error(`Source file "${file.path}" missing from package.`);
+    if (fs.lstatSync(sourceFile).isSymbolicLink()) {
+      throw new Error(`Security Error: Symbolic links are forbidden in manifest packages: "${file.path}".`);
     }
-    const bytes = fs.readFileSync(srcFile);
+    const bytes = fs.readFileSync(sourceFile);
     if (bytes.length !== file.byteLength) {
       throw new Error(
         `Byte length mismatch for "${file.path}": expected ${file.byteLength}, got ${bytes.length}.`
       );
     }
-    const hash = sha256File(srcFile);
+    const hash = sha256File(sourceFile);
     if (hash !== file.sha256) {
       throw new Error(`SHA-256 mismatch for "${file.path}": expected ${file.sha256}, got ${hash}.`);
     }
   }
 
-  // 2. Prepare staging directory as a sibling of target destination
-  const destParent = path.dirname(targetDestDir);
-  const destBase = path.basename(targetDestDir);
-  fs.mkdirSync(destParent, { recursive: true });
-
-  const stagingDir = path.resolve(
-    destParent,
-    `.${destBase}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  );
-  if (fs.existsSync(stagingDir)) {
-    fs.rmSync(stagingDir, { recursive: true, force: true });
+  if (rejectUndeclared) {
+    const allowed = new Set([...declared, manifestFilename.replace(/\\/g, "/")]);
+    for (const diskFile of getAllRelativeFiles(packageSourceDir)) {
+      if (!allowed.has(diskFile)) throw new Error(`Undeclared source package file: "${diskFile}".`);
+    }
   }
-  fs.mkdirSync(stagingDir, { recursive: true });
 
-  let activated = false;
-  let backupDir = null;
+  return { manifest, manifestPath, sourceDir: packageSourceDir };
+}
+
+function siblingTemporaryPath(targetPath, marker) {
+  const parent = path.dirname(targetPath);
+  const base = path.basename(targetPath);
+  return path.resolve(
+    parent,
+    `.${base}.${marker}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
+}
+
+export function prepareManifestPackageReplacement({
+  sourceDir,
+  destDir,
+  manifestFilename = "package-manifest.json",
+  allowedDestinationRoot,
+  rejectUndeclared = false,
+}) {
+  const targetPath = path.resolve(destDir);
+  assertDestinationAllowed(targetPath, allowedDestinationRoot);
+  const verified = verifyManifestPackage({ sourceDir, manifestFilename, rejectUndeclared });
+
+  const stagingPath = siblingTemporaryPath(targetPath, "tmp");
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.mkdirSync(stagingPath, { recursive: true });
 
   try {
-    // 3. Copy files into staging directory
-    for (const file of filesList) {
-      if (!isPathSafe(stagingDir, file.path)) {
-        throw new Error(`Security Error: Staging path traversal: "${file.path}"`);
+    for (const file of verified.manifest.files) {
+      const sourceFile = path.resolve(verified.sourceDir, file.path);
+      const stagedFile = path.resolve(stagingPath, file.path);
+      if (!isPathWithin(stagingPath, stagedFile, { allowBase: false })) {
+        throw new Error(`Security Error: Staging path traversal: "${file.path}".`);
       }
-      const srcFile = path.resolve(packageSourceDir, file.path);
-      const dstFile = path.resolve(stagingDir, file.path);
-      fs.mkdirSync(path.dirname(dstFile), { recursive: true });
-      fs.copyFileSync(srcFile, dstFile);
+      fs.mkdirSync(path.dirname(stagedFile), { recursive: true });
+      fs.copyFileSync(sourceFile, stagedFile);
     }
+    fs.copyFileSync(verified.manifestPath, path.resolve(stagingPath, manifestFilename));
+    verifyManifestPackage({
+      sourceDir: stagingPath,
+      manifestFilename,
+      rejectUndeclared: true,
+    });
+  } catch (error) {
+    if (fs.existsSync(stagingPath)) fs.rmSync(stagingPath, { recursive: true, force: true });
+    throw error;
+  }
 
-    // Copy manifest into staging
-    fs.copyFileSync(manifestPath, path.join(stagingDir, manifestFilename));
+  return {
+    kind: "directory",
+    targetPath,
+    stagingPath,
+    backupPath: null,
+    activated: false,
+    manifest: verified.manifest,
+  };
+}
 
-    // 4. Verify all files in staging directory
-    for (const file of filesList) {
-      const stagedFile = path.resolve(stagingDir, file.path);
-      const bytes = fs.readFileSync(stagedFile);
-      const hash = sha256File(stagedFile);
-      if (bytes.length !== file.byteLength || hash !== file.sha256) {
-        throw new Error(`Integrity Error: Staged file corrupted: ${file.path}`);
+export function prepareFileReplacement({
+  destFile,
+  content,
+  allowedDestinationRoot,
+}) {
+  const targetPath = path.resolve(destFile);
+  assertDestinationAllowed(targetPath, allowedDestinationRoot);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const stagingPath = siblingTemporaryPath(targetPath, "tmp");
+  const descriptor = fs.openSync(stagingPath, "wx");
+  try {
+    fs.writeFileSync(descriptor, content);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return {
+    kind: "file",
+    targetPath,
+    stagingPath,
+    backupPath: null,
+    activated: false,
+  };
+}
+
+function removePath(targetPath) {
+  if (!fs.existsSync(targetPath)) return;
+  const stats = fs.statSync(targetPath);
+  if (stats.isDirectory()) fs.rmSync(targetPath, { recursive: true, force: true });
+  else fs.rmSync(targetPath, { force: true });
+}
+
+export function activatePreparedReplacements(replacements) {
+  const targetKeys = new Set();
+  for (const replacement of replacements) {
+    const key = path.resolve(replacement.targetPath).toLowerCase();
+    if (targetKeys.has(key)) throw new Error(`Duplicate transaction target: ${replacement.targetPath}`);
+    targetKeys.add(key);
+    if (!fs.existsSync(replacement.stagingPath)) {
+      throw new Error(`Prepared staging path is missing: ${replacement.stagingPath}`);
+    }
+  }
+
+  try {
+    for (const replacement of replacements) {
+      if (fs.existsSync(replacement.targetPath)) {
+        replacement.backupPath = siblingTemporaryPath(replacement.targetPath, "bak");
+        fs.renameSync(replacement.targetPath, replacement.backupPath);
       }
+      fs.renameSync(replacement.stagingPath, replacement.targetPath);
+      replacement.activated = true;
     }
-
-    // 5. Atomic activation of destination directory
-    if (fs.existsSync(targetDestDir)) {
-      backupDir = path.resolve(
-        destParent,
-        `.${destBase}.bak-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      );
-      fs.renameSync(targetDestDir, backupDir);
-    }
-
-    fs.renameSync(stagingDir, targetDestDir);
-    activated = true;
-  } catch (activationErr) {
-    // Rollback on activation failure: restore backup if targetDestDir does not exist
-    if (!activated && backupDir && fs.existsSync(backupDir) && !fs.existsSync(targetDestDir)) {
+  } catch (activationError) {
+    const rollbackErrors = [];
+    for (const replacement of [...replacements].reverse()) {
       try {
-        fs.renameSync(backupDir, targetDestDir);
-      } catch (rbErr) {
-        console.error(`Fatal: Failed to restore backup during rollback: ${rbErr.message}`);
+        if (replacement.activated && fs.existsSync(replacement.targetPath)) {
+          removePath(replacement.targetPath);
+        }
+        if (
+          replacement.backupPath &&
+          fs.existsSync(replacement.backupPath) &&
+          !fs.existsSync(replacement.targetPath)
+        ) {
+          fs.renameSync(replacement.backupPath, replacement.targetPath);
+        }
+        if (fs.existsSync(replacement.stagingPath)) removePath(replacement.stagingPath);
+      } catch (rollbackError) {
+        rollbackErrors.push(`${replacement.targetPath}: ${rollbackError.message}`);
       }
     }
+    const suffix = rollbackErrors.length ? ` Rollback errors: ${rollbackErrors.join("; ")}` : "";
+    throw new Error(`Atomic transaction failed: ${activationError.message}.${suffix}`);
+  }
 
-    if (fs.existsSync(stagingDir)) {
+  for (const replacement of replacements) {
+    if (replacement.backupPath && fs.existsSync(replacement.backupPath)) {
       try {
-        fs.rmSync(stagingDir, { recursive: true, force: true });
+        removePath(replacement.backupPath);
+      } catch (cleanupError) {
+        console.warn(
+          `Warning: Could not remove temporary backup directory at "${replacement.backupPath}": ${cleanupError.message}`
+        );
+        console.warn("New destination remains active and fully functional.");
+      }
+    }
+  }
+}
+
+export function cleanupPreparedReplacements(replacements) {
+  for (const replacement of replacements) {
+    if (replacement?.stagingPath && fs.existsSync(replacement.stagingPath)) {
+      try {
+        removePath(replacement.stagingPath);
       } catch {}
     }
-
-    throw new Error(`Atomic sync failed: ${activationErr.message}`);
   }
+}
 
-  // 6. Post-activation backup cleanup (outside activation rollback)
-  if (activated && backupDir && fs.existsSync(backupDir)) {
-    try {
-      fs.rmSync(backupDir, { recursive: true, force: true });
-    } catch (cleanupErr) {
-      console.warn(
-        `Warning: Could not remove temporary backup directory at "${backupDir}": ${cleanupErr.message}`
-      );
-      console.warn("New destination remains active and fully functional.");
-    }
-  }
-
-  return manifest;
+export function atomicSyncManifestPackage(options) {
+  const replacement = prepareManifestPackageReplacement(options);
+  activatePreparedReplacements([replacement]);
+  return replacement.manifest;
 }

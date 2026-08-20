@@ -1,112 +1,176 @@
 /**
- * Synchronization script for Packaging Box Designer plugin artifact into CartonBuilder.
+ * Transactionally vendors one validated Packaging Box Designer plugin package.
  * Usage: node scripts/sync-pbd-plugin.mjs --source <path-to-pbd-plugin-dist>
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import Ajv2020 from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
-import { atomicSyncManifestPackage } from "./lib/atomicManifestSync.mjs";
+import {
+  activatePreparedReplacements,
+  cleanupPreparedReplacements,
+  isPathWithin,
+  isSafePathSegment,
+  prepareFileReplacement,
+  prepareManifestPackageReplacement,
+  verifyManifestPackage,
+} from "./lib/atomicManifestSync.mjs";
+import {
+  assertValidPluginManifest,
+  assertValidPluginsCatalog,
+  buildCatalogEntry,
+  createPluginManifestValidators,
+} from "./lib/pluginManifests.mjs";
+import { inspectPluginPackage } from "./lib/pluginPackageVerification.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, "..");
-const vendorPluginsDir = path.resolve(rootDir, "vendor/plugins");
-const schemaPath = path.resolve(rootDir, "schemas/plugins.manifest.v1.schema.json");
+const defaultRootDir = path.resolve(__dirname, "..");
 
-const ajv = new Ajv2020({ allErrors: true });
-addFormats(ajv);
-
-const catalogSchema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
-const validateCatalog = ajv.compile(catalogSchema);
-
-export function syncPbdPlugin(sourcePath) {
-  if (!sourcePath) {
-    throw new Error("Error: --source <path-to-plugin-directory> is required.");
+function readJsonStrict(filepath, label) {
+  try {
+    return JSON.parse(fs.readFileSync(filepath, "utf8"));
+  } catch (error) {
+    throw new Error(`${label} parse failed at "${filepath}": ${error.message}`);
   }
+}
+export function syncPbdPlugin(sourcePath, { rootDir = defaultRootDir } = {}) {
+  if (!sourcePath) throw new Error("Error: --source <path-to-plugin-directory> is required.");
+
+  const hostRoot = path.resolve(rootDir);
+  const vendorPluginsDir = path.resolve(hostRoot, "vendor/plugins");
+  const workflowDestDir = path.resolve(hostRoot, "src/workflow");
   const pluginSourceDir = path.resolve(sourcePath);
-  console.log(`=== Syncing Packaging Box Designer plugin from ${pluginSourceDir} ===\n`);
-
   const manifestPath = path.join(pluginSourceDir, "plugin-manifest.json");
-  if (!fs.existsSync(manifestPath)) {
-    throw new Error(`Plugin manifest not found at ${manifestPath}`);
-  }
+  const catalogPath = path.join(vendorPluginsDir, "plugins.manifest.json");
+  const { validatePlugin, validateCatalog } = createPluginManifestValidators(hostRoot);
 
-  const pluginManifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  if (!fs.existsSync(manifestPath)) throw new Error(`Plugin manifest not found at ${manifestPath}`);
+  const pluginManifest = readJsonStrict(manifestPath, "Plugin manifest");
+  assertValidPluginManifest(pluginManifest, validatePlugin);
+
   if (pluginManifest.id !== "packaging-box-designer") {
-    throw new Error(`Invalid plugin ID: expected "packaging-box-designer", got "${pluginManifest.id}"`);
+    throw new Error(
+      `Invalid plugin ID: expected "packaging-box-designer", got "${pluginManifest.id}"`
+    );
+  }
+  if (!isSafePathSegment(pluginManifest.id) || !isSafePathSegment(pluginManifest.version)) {
+    throw new Error("Security Error: Plugin id and version must each be one safe path segment.");
   }
 
-  const targetPluginDir = path.join(vendorPluginsDir, pluginManifest.id, pluginManifest.version);
+  const targetPluginDir = path.resolve(
+    vendorPluginsDir,
+    pluginManifest.id,
+    pluginManifest.version
+  );
+  if (!isPathWithin(vendorPluginsDir, targetPluginDir, { allowBase: false })) {
+    throw new Error("Security Error: Computed plugin destination escapes vendor/plugins.");
+  }
 
-  // 1. Sync plugin files atomically
-  atomicSyncManifestPackage({
+  verifyManifestPackage({
     sourceDir: pluginSourceDir,
-    destDir: targetPluginDir,
     manifestFilename: "plugin-manifest.json",
+    rejectUndeclared: true,
+  });
+  const inspection = inspectPluginPackage({
+    pluginDir: pluginSourceDir,
+    validatePlugin,
+    scanNetwork: true,
+  });
+  if (!inspection.valid) {
+    throw new Error(`Plugin package preflight failed:\n- ${inspection.issues.join("\n- ")}`);
+  }
+
+  const contractSourceDir = path.join(pluginSourceDir, "contract");
+  verifyManifestPackage({
+    sourceDir: contractSourceDir,
+    manifestFilename: "package-manifest.json",
+    rejectUndeclared: true,
   });
 
-  console.log(`✓ Plugin files atomically synced to: ${targetPluginDir}`);
-
-  // 2. Update vendor/plugins/plugins.manifest.json catalog
-  const catalogPath = path.join(vendorPluginsDir, "plugins.manifest.json");
   let catalog = {
     manifestVersion: "plugins.manifest.v1",
     description: "Vendored plugin catalog for CartonBuilder",
     plugins: [],
   };
+  if (fs.existsSync(catalogPath)) catalog = readJsonStrict(catalogPath, "Plugins catalog");
 
-  if (fs.existsSync(catalogPath)) {
-    try {
-      catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
-    } catch {}
+  if (!Array.isArray(catalog.plugins)) {
+    throw new Error("Plugins catalog must contain a plugins array.");
+  }
+  const legacyEntries = catalog.plugins.filter((entry) => !entry.plugin);
+  if (legacyEntries.length) {
+    for (const entry of legacyEntries) {
+      if (entry.id !== pluginManifest.id || entry.version !== pluginManifest.version) {
+        throw new Error(
+          `Legacy catalog entry ${entry.id}@${entry.version} requires an explicit migration before sync.`
+        );
+      }
+    }
+    catalog.plugins = catalog.plugins.filter((entry) => entry.plugin);
+  } else if (catalog.plugins.length) {
+    assertValidPluginsCatalog(catalog, validateCatalog);
   }
 
-  // Upsert this plugin entry in the catalog
-  const existingIdx = catalog.plugins.findIndex(
-    (p) => p.id === pluginManifest.id && p.version === pluginManifest.version
+  const catalogEntry = buildCatalogEntry(pluginManifest, inspection.manifestBytes);
+  const identity = `${pluginManifest.id}@${pluginManifest.version}`;
+  const matchingIndexes = catalog.plugins
+    .map((entry, index) => ({ identity: `${entry.plugin.id}@${entry.plugin.version}`, index }))
+    .filter((entry) => entry.identity === identity)
+    .map((entry) => entry.index);
+  if (matchingIndexes.length > 1) throw new Error(`Duplicate plugin identity in catalog: ${identity}`);
+  if (matchingIndexes.length === 1) catalog.plugins[matchingIndexes[0]] = catalogEntry;
+  else catalog.plugins.push(catalogEntry);
+  catalog.plugins.sort((a, b) =>
+    `${a.plugin.id}@${a.plugin.version}`.localeCompare(
+      `${b.plugin.id}@${b.plugin.version}`
+    )
   );
-
-  if (existingIdx >= 0) {
-    catalog.plugins[existingIdx] = pluginManifest;
-  } else {
-    catalog.plugins.push(pluginManifest);
-  }
-
-  // Sort plugins by id and version
-  catalog.plugins.sort((a, b) => `${a.id}@${a.version}`.localeCompare(`${b.id}@${b.version}`));
-
-  // Validate catalog against schema
-  const valid = validateCatalog(catalog);
-  if (!valid) {
-    throw new Error(
-      `Catalog validation failed: ${JSON.stringify(validateCatalog.errors, null, 2)}`
-    );
-  }
-
-  fs.writeFileSync(
-    catalogPath,
+  assertValidPluginsCatalog(catalog, validateCatalog);
+  const catalogBytes = Buffer.from(
     (JSON.stringify(catalog, null, 2) + "\n").replace(/\r\n/g, "\n"),
     "utf8"
   );
-  console.log(`✓ Updated plugins catalog at: ${catalogPath}`);
 
-  // 3. Sync contract package into src/workflow for host code
-  const contractSrc = path.join(targetPluginDir, "contract");
-  if (fs.existsSync(contractSrc)) {
-    atomicSyncManifestPackage({
-      sourceDir: contractSrc,
-      destDir: path.resolve(rootDir, "src/workflow"),
-      manifestFilename: "package-manifest.json",
-    });
-    console.log("✓ Contract package synced into src/workflow/");
+  const replacements = [];
+  try {
+    replacements.push(
+      prepareManifestPackageReplacement({
+        sourceDir: pluginSourceDir,
+        destDir: targetPluginDir,
+        manifestFilename: "plugin-manifest.json",
+        allowedDestinationRoot: vendorPluginsDir,
+        rejectUndeclared: true,
+      })
+    );
+    replacements.push(
+      prepareManifestPackageReplacement({
+        sourceDir: contractSourceDir,
+        destDir: workflowDestDir,
+        manifestFilename: "package-manifest.json",
+        allowedDestinationRoot: hostRoot,
+        rejectUndeclared: true,
+      })
+    );
+    replacements.push(
+      prepareFileReplacement({
+        destFile: catalogPath,
+        content: catalogBytes,
+        allowedDestinationRoot: vendorPluginsDir,
+      })
+    );
+    activatePreparedReplacements(replacements);
+  } catch (error) {
+    cleanupPreparedReplacements(replacements);
+    throw error;
   }
 
-  console.log("\nPlugin synchronization completed successfully.");
+  console.log(`Plugin files synced to: ${targetPluginDir}`);
+  console.log(`Workflow contract synced to: ${workflowDestDir}`);
+  console.log(`Plugins catalog updated at: ${catalogPath}`);
+  console.log("Plugin synchronization completed transactionally.");
+  return { pluginManifest, catalogEntry };
 }
 
-// CLI execution
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
   const args = process.argv.slice(2);
@@ -115,11 +179,10 @@ if (isMain) {
     console.error("Error: --source <path-to-plugin-directory> is required.");
     process.exit(1);
   }
-
   try {
     syncPbdPlugin(args[sourceArgIndex + 1]);
-  } catch (err) {
-    console.error(err.message);
+  } catch (error) {
+    console.error(error.message);
     process.exit(1);
   }
 }

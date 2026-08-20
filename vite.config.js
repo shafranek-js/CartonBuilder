@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
+  publicDir: 'vendor',
   server: {
     host: '127.0.0.1',
     watch: {

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cartonbuilder.dev/schemas/plugin.manifest.v1.json",
+  "title": "PluginManifestV1",
+  "description": "Standalone manifest for one deterministic CartonBuilder plugin package",
+  "type": "object",
+  "required": ["manifestVersion", "id", "version", "name", "description", "entrypoint", "sourceCommit", "artifact", "contracts", "capabilities", "referenceOnly", "productionCertified", "runtime", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "manifestVersion": { "type": "string", "const": "plugin.manifest.v1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "entrypoint": { "$ref": "#/$defs/safeRelativePath" },
+    "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "artifact": { "$ref": "#/$defs/fileIntegrity" },
+    "contracts": {
+      "type": "object",
+      "required": ["workflow", "modelSchema", "svgSchema"],
+      "additionalProperties": false,
+      "properties": {
+        "workflow": { "type": "string", "const": "carton-workflow.v1" },
+        "modelSchema": { "type": "string", "const": "pbd.model.v1" },
+        "svgSchema": { "type": "string", "const": "pbd.svg.v4" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["artwork2d", "flatExport", "foldPreview", "technicalRender"],
+      "additionalProperties": false,
+      "properties": {
+        "artwork2d": { "type": "boolean" },
+        "flatExport": { "type": "boolean" },
+        "foldPreview": { "type": "boolean" },
+        "technicalRender": { "type": "boolean" }
+      }
+    },
+    "referenceOnly": { "type": "boolean", "const": true },
+    "productionCertified": { "type": "boolean", "const": false },
+    "runtime": {
+      "type": "object",
+      "required": ["sandboxing", "csp", "noExternalNetwork"],
+      "additionalProperties": false,
+      "properties": {
+        "sandboxing": {
+          "type": "array",
+          "prefixItems": [{ "const": "allow-scripts" }],
+          "items": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "csp": { "type": "string", "minLength": 1 },
+        "noExternalNetwork": { "type": "boolean", "const": true }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "byteLength", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "$ref": "#/$defs/safeRelativePath" },
+          "byteLength": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![\\\\/])(?![A-Za-z]:)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+    },
+    "fileIntegrity": {
+      "type": "object",
+      "required": ["byteLength", "sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}
