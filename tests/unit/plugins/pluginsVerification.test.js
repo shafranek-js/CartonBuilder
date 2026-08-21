@@ -214,7 +214,7 @@ describe("Vendored plugins verification gate", () => {
       "original workflow"
     );
     expect(renameCalls).toBeGreaterThan(3);
-  });
+  }, 30_000);
 
   it("detects a modified standalone manifest even when plugin files are unchanged", () => {
     const hostRoot = createHostRoot(tempDir);

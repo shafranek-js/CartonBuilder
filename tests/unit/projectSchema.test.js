@@ -80,7 +80,7 @@ describe('project schema', () => {
     const { snapshot } = await createBundle();
     const v2 = migrateProjectSnapshot(snapshot);
     const canonical = {
-      box: structuredClone(v2.box),
+      box: structuredClone(v2.cartonSource.box),
       artworks: structuredClone(v2.artworks),
       history: structuredClone(v2.history),
       view: structuredClone(v2.view),
@@ -93,7 +93,7 @@ describe('project schema', () => {
     expect(migrated.render).toMatchObject({ presetId: 'clean-studio', longEdge: 2048 });
     expect(migrated.render.effects).toMatchObject({ gtao: { enabled: true }, dof: { enabled: false } });
     expect(migrated.render.boardAppearance).toBeUndefined();
-    expect(migrated.box).toEqual(canonical.box);
+    expect(migrated.cartonSource.box).toEqual(canonical.box);
     expect(migrated.artworks).toEqual(canonical.artworks);
     expect(migrated.history).toEqual(canonical.history);
     expect(migrated.view).toEqual(canonical.view);
@@ -175,11 +175,11 @@ describe('project schema', () => {
     const { snapshot } = await createBundle();
     const v12 = migrateProjectSnapshot(snapshot);
     v12.schemaVersion = 12;
-    delete v12.box.board;
+    delete v12.cartonSource.box.board;
     v12.renderAppearance = { thicknessMm: 0.82, bevelRadiusMm: 0.1, interiorColor: '#f4f2ec', edgeColor: '#c8c1b5' };
     const migrated = migrateProjectSnapshot(v12);
     expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
-    expect(migrated.box.board).toEqual({ caliperMm: 0.82 });
+    expect(migrated.cartonSource.box.board).toEqual({ caliperMm: 0.82 });
     expect(migrated.renderAppearance.thicknessMm).toBeCloseTo(0.82);
   });
 
@@ -329,7 +329,7 @@ describe('project schema', () => {
     };
 
     const valid = await validateProjectBundle({ snapshot, originalBlob: null, previewBlob: null });
-    expect(valid.snapshot.box.dimensions).toEqual({ width: 220, height: 110, depth: 55 });
+    expect(valid.snapshot.cartonSource.box.dimensions).toEqual({ width: 220, height: 110, depth: 55 });
     expect(valid.snapshot.artworks).toEqual([]);
     expect(valid.snapshot.activeArtworkIndex).toBe(-1);
     expect(valid.artworkBlobs).toEqual([]);

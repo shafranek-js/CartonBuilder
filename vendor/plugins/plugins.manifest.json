@@ -123,7 +123,7 @@
       "manifestPath": "packaging-box-designer/1.2.0/plugin-manifest.json",
       "manifestArtifact": {
         "byteLength": 4716,
-        "sha256": "3e4452053576ed80edfebc4ae3b8947fce1ba2eec9217d8cba507b23e2eae154"
+        "sha256": "b3fd595590566b6933950280cba7323e551ac9e04076cf9d42a3b99193e24ae9"
       },
       "plugin": {
         "manifestVersion": "plugin.manifest.v1",
@@ -132,10 +132,10 @@
         "name": "Packaging Box Designer",
         "description": "Parametric packaging box designer engine and canonical 2D/3D dieline generator",
         "entrypoint": "index.html",
-        "sourceCommit": "6293cc98d743369275a42049fbc359a0d9a8bb6d",
+        "sourceCommit": "67444de2a0fcf65857974ad6ba35f9b699d69e59",
         "artifact": {
-          "byteLength": 583947,
-          "sha256": "6087faed708b4e3f8edd3ff0eb67fce74a2cd0c9ae5856e19166748b2d5dc78e"
+          "byteLength": 598034,
+          "sha256": "d798b23784c800c625d9ad42e31878f824567f9df43c47f60fb6fa5c2d9c3715"
         },
         "contracts": {
           "workflow": "carton-workflow.v1",
@@ -216,7 +216,7 @@
           {
             "path": "contract/package-manifest.json",
             "byteLength": 3275,
-            "sha256": "5a707d9a44776390fa1cd22dc482ac9c7dd80c9fbc73b152e503dc30bded7af1"
+            "sha256": "35698265680bc44dfdd7b4c5bcbd8e543e2f8e3f7bbf7e835459c2afe1e510b0"
           },
           {
             "path": "contract/package.json",
@@ -260,8 +260,8 @@
           },
           {
             "path": "index.html",
-            "byteLength": 583947,
-            "sha256": "6087faed708b4e3f8edd3ff0eb67fce74a2cd0c9ae5856e19166748b2d5dc78e"
+            "byteLength": 598034,
+            "sha256": "d798b23784c800c625d9ad42e31878f824567f9df43c47f60fb6fa5c2d9c3715"
           }
         ]
       }

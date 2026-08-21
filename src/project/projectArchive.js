@@ -14,10 +14,12 @@ import { AppError } from '../errors.js';
 import { CURRENT_PROJECT_SCHEMA_VERSION, validateProjectBundle } from './projectSchema.js';
 
 const FORMAT = 'carton-builder-project';
-const FORMAT_VERSION = 4;
+const FORMAT_VERSION = 5;
 const LEGACY_FORMAT_VERSION = 1;
 const MAX_ARCHIVE_BYTES = 120 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
+const MAX_TECHNICAL_MODEL_BYTES = 10 * 1024 * 1024;
+const MAX_TECHNICAL_SVG_BYTES = 15 * 1024 * 1024;
 
 function assertNotAborted(signal) {
   if (signal?.aborted) throw new DOMException('Project archive operation aborted.', 'AbortError');
@@ -43,11 +45,12 @@ export async function createProjectArchive({
   snapshot,
   artworkBlobs,
   renderAssets = [],
+  technicalAssets = null,
   signal,
   onProgress,
 }) {
   assertNotAborted(signal);
-  const validated = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
+  const validated = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets, technicalAssets });
   assertNotAborted(signal);
   // Always write the current schema after migration. Older archives remain
   // readable through the normal v1-v3 compatibility path below.
@@ -72,6 +75,34 @@ export async function createProjectArchive({
       height: asset.height,
     })),
   };
+  const technicalBundle = validated.technicalAssets?.bundle;
+  const technicalManifest = technicalBundle ? {
+    format: 'carton-builder-technical-assets',
+    version: 1,
+    source: technicalBundle.source,
+    capabilities: technicalBundle.capabilities,
+    model: {
+      path: 'technical/model.json',
+      mediaType: technicalBundle.modelJson.mediaType,
+      byteLength: technicalBundle.modelJson.byteLength,
+      sha256: technicalBundle.modelJson.sha256,
+    },
+    semanticSvg: {
+      path: 'technical/dieline.svg',
+      assetId: technicalBundle.semanticSvg.assetId,
+      mediaType: technicalBundle.semanticSvg.mediaType,
+      units: technicalBundle.semanticSvg.units,
+      byteLength: technicalBundle.semanticSvg.byteLength,
+      sha256: technicalBundle.semanticSvg.sha256,
+    },
+  } : null;
+  if (technicalManifest) {
+    manifest.technical = {
+      manifestPath: 'technical/manifest.json',
+      modelPath: technicalManifest.model.path,
+      svgPath: technicalManifest.semanticSvg.path,
+    };
+  }
 
   const manifestText = JSON.stringify(manifest, null, 2);
   const snapshotText = JSON.stringify(validated.snapshot, null, 2);
@@ -79,6 +110,24 @@ export async function createProjectArchive({
     { path: 'manifest.json', reader: new TextReader(manifestText), size: textSize(manifestText) },
     { path: 'project.json', reader: new TextReader(snapshotText), size: textSize(snapshotText) },
   ];
+  if (technicalManifest) {
+    const technicalManifestText = JSON.stringify(technicalManifest, null, 2);
+    entries.push({
+      path: 'technical/manifest.json',
+      reader: new TextReader(technicalManifestText),
+      size: textSize(technicalManifestText),
+    });
+    entries.push({
+      path: technicalManifest.model.path,
+      reader: new BlobReader(validated.technicalAssets.modelBlob),
+      size: validated.technicalAssets.modelBlob.size,
+    });
+    entries.push({
+      path: technicalManifest.semanticSvg.path,
+      reader: new BlobReader(validated.technicalAssets.svgBlob),
+      size: validated.technicalAssets.svgBlob.size,
+    });
+  }
   for (let index = 0; index < validated.artworkBlobs.length; index += 1) {
     const artwork = validated.artworkBlobs[index];
     entries.push({
@@ -144,6 +193,10 @@ export async function readProjectArchive(blob, { signal, onProgress } = {}) {
       signal,
       onprogress: (index, total) => reportProgress(onProgress, total ? (index / total) * 0.1 : 0.05, 'projectReading'),
     });
+    const entryNames = entries.map((entry) => entry.filename);
+    if (new Set(entryNames).size !== entryNames.length) {
+      throw new AppError('projectArchiveDuplicateEntry');
+    }
     const byName = new Map(entries.map((entry) => [entry.filename, entry]));
     const manifestEntry = byName.get('manifest.json');
     const projectEntry = byName.get('project.json');
@@ -180,7 +233,7 @@ export async function readProjectArchive(blob, { signal, onProgress } = {}) {
       return result;
     }
 
-    if (![2, 3, FORMAT_VERSION].includes(manifest.version)) throw new AppError('projectVersionUnsupported');
+    if (![2, 3, 4, FORMAT_VERSION].includes(manifest.version)) throw new AppError('projectVersionUnsupported');
     if (!Array.isArray(manifest.assets) || !Array.isArray(manifest.previews)) {
       throw new AppError('projectIncomplete');
     }
@@ -192,7 +245,16 @@ export async function readProjectArchive(blob, { signal, onProgress } = {}) {
     }
 
     const artworkBlobs = [];
-    const totalAssets = manifest.assets.length * 2 + (manifest.version >= 3 ? manifest.renderAssets?.length || 0 : 0);
+    const hasTechnical = manifest.version >= 5 && snapshot.cartonSource?.mode === 'technical';
+    if (snapshot.cartonSource?.mode === 'technical' && manifest.version < 5) {
+      throw new AppError('projectTechnicalAssetMissing');
+    }
+    if (manifest.version >= 5 && manifest.technical && snapshot.cartonSource?.mode !== 'technical') {
+      throw new AppError('projectTechnicalUnexpected');
+    }
+    const totalAssets = manifest.assets.length * 2
+      + (manifest.version >= 3 ? manifest.renderAssets?.length || 0 : 0)
+      + (hasTechnical ? 3 : 0);
     let completedAssets = 0;
     const readBlob = async (entry, stageParams) => {
       assertNotAborted(signal);
@@ -206,6 +268,44 @@ export async function readProjectArchive(blob, { signal, onProgress } = {}) {
       completedAssets += 1;
       return result;
     };
+    let technicalAssets = null;
+    if (hasTechnical) {
+      const descriptor = manifest.technical;
+      if (!descriptor || descriptor.manifestPath !== 'technical/manifest.json'
+        || descriptor.modelPath !== 'technical/model.json'
+        || descriptor.svgPath !== 'technical/dieline.svg') {
+        throw new AppError('projectTechnicalManifestMissing');
+      }
+      const technicalManifestEntry = byName.get(descriptor.manifestPath);
+      const modelEntry = byName.get(descriptor.modelPath);
+      const svgEntry = byName.get(descriptor.svgPath);
+      if (!technicalManifestEntry || !modelEntry || !svgEntry) {
+        throw new AppError('projectTechnicalAssetMissing');
+      }
+      if (technicalManifestEntry.uncompressedSize > 64 * 1024) {
+        throw new AppError('projectMetadataTooLarge');
+      }
+      if (modelEntry.uncompressedSize > MAX_TECHNICAL_MODEL_BYTES) {
+        throw new AppError('projectTechnicalModelTooLarge');
+      }
+      if (svgEntry.uncompressedSize > MAX_TECHNICAL_SVG_BYTES) {
+        throw new AppError('projectTechnicalSvgTooLarge');
+      }
+      const technicalManifest = JSON.parse(await technicalManifestEntry.getData(new TextWriter(), { signal }));
+      if (technicalManifest.format !== 'carton-builder-technical-assets' || technicalManifest.version !== 1) {
+        throw new AppError('projectTechnicalManifestInvalid');
+      }
+      if (
+        technicalManifest.model?.path !== descriptor.modelPath
+        || technicalManifest.semanticSvg?.path !== descriptor.svgPath
+      ) {
+        throw new AppError('projectTechnicalManifestInvalid');
+      }
+      technicalAssets = {
+        modelBlob: await readBlob(modelEntry, { fileName: descriptor.modelPath }),
+        svgBlob: await readBlob(svgEntry, { fileName: descriptor.svgPath }),
+      };
+    }
     for (let index = 0; index < manifest.assets.length; index += 1) {
       const assetEntry = byName.get(manifest.assets[index].path);
       const previewEntry = byName.get(manifest.previews[index]);
@@ -243,7 +343,7 @@ export async function readProjectArchive(blob, { signal, onProgress } = {}) {
         });
       }
     }
-    const result = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets });
+    const result = await validateProjectBundle({ snapshot, artworkBlobs, renderAssets, technicalAssets });
     if (Number(snapshot.schemaVersion) === 6) result.snapshot.schemaVersion = 7;
     else if (Number(snapshot.schemaVersion) < 8) result.snapshot.schemaVersion = snapshot.schemaVersion;
     reportProgress(onProgress, 1, 'projectReady');

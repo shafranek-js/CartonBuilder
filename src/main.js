@@ -26,6 +26,11 @@ import { createRenderApp } from './render/RenderApp.js';
 import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
 import { readRenderSettings, writeRenderSettings } from './render/renderSettingsStorage.js';
 import { restoreStartupProject } from './project/firstRunExample.js';
+import { TechnicalCartonDocument } from './carton/TechnicalCartonDocument.js';
+import { createCartonDocument } from './carton/createCartonDocument.js';
+import { createTechnicalBoxModelAdapter } from './carton/technicalBoxModelAdapter.js';
+import { createPbdHost } from './host/pbdHostProtocol.js';
+import { FROZEN_PBD_ARTIFACT_SHA256 } from './workflow/index.js';
 
 initializeI18n();
 applyTheme(getSavedTheme());
@@ -309,9 +314,246 @@ let currentStep = 'box';
 let artworkApp;
 let preview3dFacade;
 let renderApp;
+const WORKFLOW_MODE_STORAGE_KEY = 'cartonBuilder.workflowMode.default';
+function readWorkflowMode() {
+  try {
+    const storage = window.localStorage;
+    const stored = storage?.getItem(WORKFLOW_MODE_STORAGE_KEY)
+      || storage?.getItem('cartonBuilder.workflowMode');
+    return stored === 'technical' ? 'technical' : 'quick';
+  } catch {
+    return 'quick';
+  }
+}
+let workflowMode = readWorkflowMode();
+let technicalDocument = null;
+let technicalAssets = null;
+let activeCartonModel = model;
+let technicalValidation = {
+  structural: 'NOT_GENERATED',
+  geometry: 'NOT_GENERATED',
+  contract: 'NOT_GENERATED',
+};
+
+const cartonModelBridge = {
+  get dimensions() { return activeCartonModel.dimensions; },
+  get board() { return activeCartonModel.board; },
+  get construction() { return activeCartonModel.construction; },
+  get isComplete() { return Boolean(activeCartonModel.isComplete); },
+  get rootId() { return activeCartonModel.rootId || null; },
+  getElements: () => activeCartonModel.getElements(),
+  getPanels: () => activeCartonModel.getPanels(),
+  getPanel: (id) => activeCartonModel.getPanel?.(id) || null,
+  getChildren: (id) => activeCartonModel.getChildren?.(id) || [],
+  getFeatures: () => activeCartonModel.getFeatures?.() || [],
+  getBounds: () => activeCartonModel.getBounds(),
+  getDielinePrimitives: () => activeCartonModel.getDielinePrimitives?.() || [],
+  getArtworkSurfaces: () => activeCartonModel.getArtworkSurfaces?.() || [],
+  getArtworkMaskPaths: () => activeCartonModel.getArtworkMaskPaths?.() || [],
+  toJSON: () => activeCartonModel.toJSON(),
+  updateDimensions: (...args) => activeCartonModel.updateDimensions(...args),
+  setBoardCaliper: (...args) => activeCartonModel.setBoardCaliper?.(...args),
+  setBoardConstruction: (...args) => activeCartonModel.setBoardConstruction?.(...args),
+};
+
+const workflowModeInputs = [...document.querySelectorAll('input[name="cartonWorkflowMode"]')];
+const quickWorkflowEditor = document.getElementById('quickWorkflowEditor');
+const technicalWorkflowEditor = document.getElementById('technicalWorkflowEditor');
+const technicalHostFrame = document.getElementById('technicalHostFrame');
+const technicalHostStatus = document.getElementById('technicalHostStatus');
+const technicalHostValidation = document.getElementById('technicalHostValidation');
+
+function technicalSourceSnapshot() {
+  if (!technicalDocument) return null;
+  const serialized = technicalDocument.serialize();
+  const { text: _modelText, ...modelJson } = serialized.modelJson || {};
+  const { markup: _svgMarkup, ...semanticSvg } = serialized.semanticSvg || {};
+  return {
+    mode: 'technical',
+    source: structuredClone(serialized.source),
+    capabilities: structuredClone(serialized.capabilities),
+    modelJson,
+    semanticSvg,
+    modelSha256: serialized.modelSha256,
+    svgSha256: serialized.svgSha256,
+    semanticSvgAssetId: serialized.semanticSvgAssetId,
+  };
+}
+
+function technicalAssetBlobs(documentRef = technicalDocument) {
+  if (!documentRef) return null;
+  const serialized = documentRef.serialize();
+  return {
+    modelBlob: new Blob([serialized.modelJson.text], { type: serialized.modelJson.mediaType || 'application/json' }),
+    svgBlob: new Blob([serialized.semanticSvg.markup], { type: serialized.semanticSvg.mediaType || 'image/svg+xml' }),
+  };
+}
+
+function setActiveCartonModel(nextModel, nextDocument = null) {
+  activeCartonModel = nextModel || model;
+  technicalDocument = nextDocument;
+  cartonModelBridge.mode = workflowMode;
+}
+
+let pbdHost;
+
+function updateTechnicalHostStatus(message, level = '') {
+  if (!technicalHostStatus) return;
+  technicalHostStatus.textContent = message;
+  technicalHostStatus.dataset.level = level;
+}
+
+function updateTechnicalValidation(state = {}) {
+  technicalValidation = {
+    structural: state.structural || 'NOT_GENERATED',
+    geometry: state.geometry || 'NOT_GENERATED',
+    contract: state.contract || 'NOT_GENERATED',
+  };
+  if (technicalHostValidation) {
+    const { structural, geometry, contract } = technicalValidation;
+    technicalHostValidation.textContent = `Structural ${structural} · Geometry ${geometry} · Contract ${contract}`;
+    technicalHostValidation.dataset.valid = String(structural === 'VALID' && geometry === 'VALID' && contract === 'VALID');
+  }
+  updateStepNavigationStates();
+}
+
+function ensurePbdHost() {
+  if (pbdHost || !technicalHostFrame) return pbdHost;
+  pbdHost = createPbdHost({
+    iframe: technicalHostFrame,
+    locale: document.documentElement.lang || 'en',
+    onReady: () => updateTechnicalHostStatus(t('technicalPluginReady')),
+    onValidation: updateTechnicalValidation,
+    onError: (error) => updateTechnicalHostStatus(error?.message || error?.code || t('technicalPluginError'), 'error'),
+  });
+  return pbdHost;
+}
+
+function technicalValidationIsReady() {
+  return technicalValidation.structural === 'VALID'
+    && technicalValidation.geometry === 'VALID'
+    && technicalValidation.contract === 'VALID';
+}
+
+async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAssets }) {
+  const document = await createCartonDocument(
+    snapshot.cartonSource,
+    restoredAssets,
+    {
+      expectedProducer: 'packaging-box-designer',
+      expectedArtifactSha256: FROZEN_PBD_ARTIFACT_SHA256,
+      expectedArtifactVersion: '1.2.0',
+    },
+  );
+  workflowMode = 'technical';
+  setActiveCartonModel(createTechnicalBoxModelAdapter(document), document);
+  technicalAssets = {
+    modelBlob: restoredAssets.modelBlob,
+    svgBlob: restoredAssets.svgBlob,
+  };
+  updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
+  const host = ensurePbdHost();
+  host?.start();
+  updateTechnicalHostStatus(t('technicalPluginLoading'));
+  try {
+    const rebuilt = await host?.loadCarton?.(document.getBundle());
+    if (rebuilt?.modelJson?.sha256 !== snapshot.cartonSource.modelSha256
+      || rebuilt?.semanticSvg?.sha256 !== snapshot.cartonSource.svgSha256) {
+      throw new Error('PBD_CARTON_RESTORE_HASH_MISMATCH');
+    }
+    updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
+  } catch (error) {
+    // The validated technical document remains active in CartonBuilder. The
+    // plugin is expected to expose its own explicit read-only fallback rather
+    // than silently showing its default RTE model.
+    updateTechnicalHostStatus(`${t('technicalPluginRestoreFailed')} ${error?.message || ''}`.trim(), 'error');
+  }
+}
+
+function applyWorkflowModeUi() {
+  for (const input of workflowModeInputs) input.checked = input.value === workflowMode;
+  if (quickWorkflowEditor) quickWorkflowEditor.hidden = workflowMode !== 'quick';
+  if (technicalWorkflowEditor) technicalWorkflowEditor.hidden = workflowMode !== 'technical';
+  if (workflowMode === 'technical') ensurePbdHost()?.start();
+  updateStepNavigationStates();
+}
+
+async function acceptTechnicalCarton() {
+  const host = ensurePbdHost();
+  if (!host?.getState().initialized) {
+    updateTechnicalHostStatus(t('technicalPluginNotReady'), 'error');
+    return false;
+  }
+  updateTechnicalHostStatus(t('technicalBundleRequesting'));
+  try {
+    const bundle = await host.requestCarton();
+    const nextDocument = await TechnicalCartonDocument.create(bundle, {
+      expectedProducer: 'packaging-box-designer',
+      expectedArtifactSha256: FROZEN_PBD_ARTIFACT_SHA256,
+      expectedArtifactVersion: '1.2.0',
+    });
+    const currentIdentity = technicalDocument?.getSourceIdentity?.();
+    const nextIdentity = nextDocument.getSourceIdentity();
+    const changed = !currentIdentity
+      || currentIdentity.modelSha256 !== nextIdentity.modelSha256
+      || currentIdentity.svgSha256 !== nextIdentity.svgSha256;
+
+    if (!changed) {
+      updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
+      updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
+      return true;
+    }
+
+    try {
+      await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-model-replacement' });
+    } catch (error) {
+      updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
+      return false;
+    }
+
+    if (technicalDocument && artworkApp?.artwork?.hasArtwork
+      && !window.confirm(t('workflowChangeClearsArtwork'))) {
+      updateTechnicalHostStatus(t('technicalBundleRejected'), 'error');
+      return false;
+    }
+
+    if (technicalDocument && artworkApp?.artwork?.hasArtwork) {
+      artworkApp.clearArtworkForCartonChange?.();
+    }
+    setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
+    technicalAssets = technicalAssetBlobs(nextDocument);
+    preview3dFacade?.resetForProject?.();
+    renderApp?.resetForProject?.();
+    updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
+    updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
+    updateStepNavigationStates();
+    artworkApp?.scheduleSave?.();
+    return true;
+  } catch (error) {
+    updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
+    return false;
+  }
+}
+
+async function transitionToStep(step) {
+  if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
+  if (step === 'box' && workflowMode === 'technical' && technicalDocument) {
+    try {
+      await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-editor-open' });
+    } catch (error) {
+      updateTechnicalHostStatus(error?.message || t('technicalPluginError'), 'error');
+      return false;
+    }
+  }
+  if (step === 'artwork' && workflowMode === 'technical' && !(await acceptTechnicalCarton())) return false;
+  showStep(step);
+  return true;
+}
 
 function updateStepNavigationStates() {
-  const isBoxComplete = model.isComplete;
+  const isBoxComplete = workflowMode === 'technical'
+    ? Boolean(technicalDocument?.isComplete || technicalValidationIsReady())
+    : model.isComplete;
   const hasArtwork = Boolean(artworkApp?.artwork?.hasArtwork);
 
   const boxBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'box');
@@ -321,15 +563,17 @@ function updateStepNavigationStates() {
 
   if (boxBtn) boxBtn.disabled = false;
   if (artworkBtn) artworkBtn.disabled = !isBoxComplete;
-  if (previewBtn) previewBtn.disabled = !isBoxComplete || !hasArtwork;
-  if (renderBtn) renderBtn.disabled = !isBoxComplete || !hasArtwork;
+  const technicalPreviewReady = workflowMode !== 'technical';
+  if (previewBtn) previewBtn.disabled = !isBoxComplete || !hasArtwork || !technicalPreviewReady;
+  if (renderBtn) renderBtn.disabled = !isBoxComplete || !hasArtwork || !technicalPreviewReady;
 
   if (artworkBtn) artworkBtn.classList.toggle('unlocked', isBoxComplete);
-  if (previewBtn) previewBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork);
-  if (renderBtn) renderBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork);
+  if (previewBtn) previewBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork && technicalPreviewReady);
+  if (renderBtn) renderBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork && technicalPreviewReady);
 }
 
 function showStep(step) {
+  if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
   currentStep = step;
   boxStep.hidden = step !== 'box';
   artworkStep.hidden = step !== 'artwork';
@@ -347,7 +591,9 @@ function showStep(step) {
     const isActive = target === step;
     const isCompletedPreviousStep = targetIndex < currentIndex && (
       target === 'box'
-        ? model.isComplete
+        ? (workflowMode === 'technical'
+          ? Boolean(technicalDocument?.isComplete || technicalValidationIsReady())
+          : model.isComplete)
         : target === 'artwork'
           ? Boolean(artworkApp?.artwork?.hasArtwork)
           : target === 'preview' || target === 'render'
@@ -394,7 +640,7 @@ const boxApp = createBoxNetApp({
   model,
   onContinue: () => {
     updateStepNavigationStates();
-    showStep('artwork');
+    void transitionToStep('artwork');
   },
   onDimensionReset: () => {
     preview3dFacade?.resetForProject();
@@ -426,26 +672,35 @@ const boxApp = createBoxNetApp({
 });
 
 artworkApp = createArtworkApp({
-  boxModel: model,
+  boxModel: cartonModelBridge,
   boxApp,
   onBack: () => showStep('box'),
   onPreview: (warnings) => {
     previewWarning.textContent = warnings.join(' ');
     updateStepNavigationStates();
-    showStep('preview');
+    void transitionToStep('preview');
   },
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot, project = null) => {
+    workflowMode = snapshot.workflowSelection === 'technical' ? 'technical' : 'quick';
+    if (snapshot.cartonSource?.mode !== 'technical') {
+      technicalDocument = null;
+      technicalAssets = null;
+      updateTechnicalValidation({});
+      setActiveCartonModel(model, null);
+    }
+    applyWorkflowModeUi();
     preview3dFacade?.resetForProject();
     renderApp?.restoreRenderAssets?.(project?.renderAssets || []);
     renderApp?.restoreState(snapshot.render, snapshot.renderAppearance);
     const hasArtwork = Boolean(snapshot.artworks?.length);
     let targetStep = 'box';
-    if (snapshot.workflowStep === 'render' && hasArtwork && model.isComplete) {
+    const cartonComplete = workflowMode === 'technical' ? Boolean(technicalDocument?.isComplete) : model.isComplete;
+    if (snapshot.workflowStep === 'render' && hasArtwork && cartonComplete && workflowMode !== 'technical') {
       targetStep = 'render';
-    } else if (snapshot.workflowStep === 'preview' && hasArtwork) {
+    } else if (snapshot.workflowStep === 'preview' && hasArtwork && workflowMode !== 'technical') {
       targetStep = 'preview';
-    } else if (snapshot.workflowStep === 'artwork' && (model.isComplete || hasArtwork)) {
+    } else if (snapshot.workflowStep === 'artwork' && (cartonComplete || hasArtwork)) {
       targetStep = 'artwork';
     } else if (snapshot.workflowStep === 'box') {
       targetStep = 'box';
@@ -459,6 +714,11 @@ artworkApp = createArtworkApp({
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
+  getCartonSource: () => technicalSourceSnapshot() || { mode: 'quick', box: model.toJSON() },
+  getWorkflowSelection: () => workflowMode,
+  getTechnicalAssets: () => technicalAssets,
+  canPersistProject: () => true,
+  restoreCartonDocument: restoreTechnicalCarton,
   getPreview3dState: () => preview3dFacade?.getState?.() || null,
   operationProgress,
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
@@ -477,7 +737,7 @@ artworkApp = createArtworkApp({
 
 preview3dFacade = createLazyPreview3DFacade({
   getOptions: () => ({
-    boxModel: model,
+    boxModel: cartonModelBridge,
     artwork: artworkApp.artwork,
     getArtworks: () => artworkApp.getArtworks(),
     getArtworksJson: () => artworkApp.getArtworksJson(),
@@ -488,7 +748,7 @@ preview3dFacade = createLazyPreview3DFacade({
 });
 
 renderApp = createRenderApp({
-  boxModel: model,
+  boxModel: cartonModelBridge,
   getArtworks: () => artworkApp.getArtworks(),
   getArtworksJson: () => artworkApp.getArtworksJson(),
   initialState: storedRenderSettings?.renderSettings || DEFAULT_RENDER_SETTINGS,
@@ -504,7 +764,7 @@ renderApp = createRenderApp({
   setArtworkQuality: (...args) => artworkApp?.setArtworkQuality?.(...args),
   updateArtworkFinish: (...args) => artworkApp?.updateArtworkFinish?.(...args),
   operationProgress,
-  onBackToPreview: () => showStep('preview'),
+  onBackToPreview: () => void transitionToStep('preview'),
 });
 
 window.BoxNet = {
@@ -524,19 +784,53 @@ window.cartonBuilderApp = {
   getState() {
     return artworkApp.createSnapshot(currentStep);
   },
-  showStep,
+  showStep: transitionToStep,
   artwork: artworkApp,
   preview3d: preview3dFacade,
   render: renderApp,
 };
 
+async function handleWorkflowModeChange(input) {
+    if (!input.checked) return;
+    if (input.value === workflowMode) return;
+    if (artworkApp?.artwork?.hasArtwork && !window.confirm(t('workflowChangeClearsArtwork'))) {
+      applyWorkflowModeUi();
+      return;
+    }
+    if (artworkApp?.artwork?.hasArtwork) {
+      try {
+        await artworkApp.createProjectCheckpoint({ reason: 'workflow-switch' });
+      } catch (error) {
+        applyWorkflowModeUi();
+        updateTechnicalHostStatus(error?.message || t('projectSaveFailed'), 'error');
+        return;
+      }
+    }
+    artworkApp?.clearArtworkForCartonChange?.();
+    workflowMode = input.value === 'technical' ? 'technical' : 'quick';
+    technicalDocument = null;
+    technicalAssets = null;
+    technicalValidation = { structural: 'NOT_GENERATED', geometry: 'NOT_GENERATED', contract: 'NOT_GENERATED' };
+    setActiveCartonModel(model, null);
+    preview3dFacade?.resetForProject?.();
+    renderApp?.resetForProject?.();
+    applyWorkflowModeUi();
+    artworkApp?.scheduleSave?.();
+}
+
+for (const input of workflowModeInputs) {
+  input.addEventListener('change', () => { void handleWorkflowModeChange(input); });
+}
+
+applyWorkflowModeUi();
+
 for (const button of stepButtons) {
   button.addEventListener('click', () => {
-    if (!button.disabled) showStep(button.dataset.stepTarget);
+    if (!button.disabled) void transitionToStep(button.dataset.stepTarget);
   });
 }
 
-document.getElementById('openRenderButton')?.addEventListener('click', () => showStep('render'));
+document.getElementById('openRenderButton')?.addEventListener('click', () => void transitionToStep('render'));
 
 restoreStartupProject({
   restoreAutosave: () => artworkApp.restoreAutosave(),
@@ -548,6 +842,7 @@ restoreStartupProject({
 window.addEventListener('beforeunload', () => {
   preview3dFacade.dispose();
   renderApp.dispose();
+  pbdHost?.dispose?.();
 });
 
 export { model };

@@ -88,6 +88,46 @@
       </div>
 
       <section class="workflow-step box-step" id="boxStep">
+        <section class="workflow-mode-picker" id="workflowModePicker" aria-labelledby="workflowModeTitle">
+          <div class="workflow-mode-picker-heading">
+            <div>
+              <span class="eyebrow" data-i18n="workflowModeEyebrow">Choose a box workflow</span>
+              <h1 id="workflowModeTitle" data-i18n="workflowModeTitle">How do you want to build the dieline?</h1>
+            </div>
+            <span class="workflow-mode-note" data-i18n="workflowModeNote">You can switch before placing artwork.</span>
+          </div>
+          <div class="workflow-mode-cards" role="radiogroup" aria-label="Box workflow">
+            <label class="workflow-mode-card">
+              <input type="radio" name="cartonWorkflowMode" value="quick" checked>
+              <span class="workflow-mode-card-body">
+                <strong data-i18n="workflowQuickTitle">Quick Layout</strong>
+                <span data-i18n="workflowQuickDescription">Legacy Custom Net for a fast, flexible layout.</span>
+                <small data-i18n="workflowQuickBadge">Fast start</small>
+              </span>
+            </label>
+            <label class="workflow-mode-card workflow-mode-card-technical">
+              <input type="radio" name="cartonWorkflowMode" value="technical">
+              <span class="workflow-mode-card-body">
+                <strong data-i18n="workflowTechnicalTitle">Technical Dieline</strong>
+                <span data-i18n="workflowTechnicalDescription">Build a reference-calibrated dieline in Packaging Box Designer.</span>
+                <small data-i18n="workflowTechnicalBadge">Reference-only · not production certified</small>
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section class="technical-workflow-editor" id="technicalWorkflowEditor" hidden aria-label="Packaging Box Designer host">
+          <header class="technical-workflow-toolbar">
+            <div>
+              <strong data-i18n="technicalWorkflowTitle">Technical Dieline</strong>
+              <span id="technicalHostStatus" class="technical-host-status" role="status" aria-live="polite" data-i18n="technicalPluginLoading">Loading Packaging Box Designer…</span>
+            </div>
+            <span id="technicalHostValidation" class="technical-host-validation" role="status" aria-live="polite" data-i18n="technicalValidationWaiting">Structural — · Geometry — · Contract —</span>
+          </header>
+          <iframe id="technicalHostFrame" class="technical-host-frame" title="Packaging Box Designer" sandbox="allow-scripts" data-src="./plugins/packaging-box-designer/1.2.0/index.html"></iframe>
+        </section>
+
+        <div id="quickWorkflowEditor">
         <header class="box-controls-bar">
           <span class="design-hint" data-i18n="designBox">Design your box by adding or removing box panels</span>
 
@@ -164,6 +204,7 @@
             <svg id="workspace" role="img" aria-label="Interactive box net" data-i18n-aria-label="interactiveBoxNetLabel"></svg>
           </div>
         </section>
+        </div>
       </section>
 
       <section class="workflow-step artwork-step" id="artworkStep" hidden>

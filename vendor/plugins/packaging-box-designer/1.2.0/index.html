@@ -7015,6 +7015,30 @@ var PBD;
         $('modelMeta').innerHTML = meta.join('');
         renderProfileResolution(m);
     }
+    PBD.getCurrentModel = () => currentModel;
+    PBD.restoreCartonInput = (rawInput = {}) => {
+        const input = rawInput && typeof rawInput === 'object' ? rawInput : {};
+        const setControlValue = (id, value) => {
+            const control = $(id);
+            if (!control) throw new Error('PBD_CARTON_CONTROL_MISSING:' + id);
+            control.value = String(value ?? '');
+        };
+        setControlValue('widthInput', input.width);
+        setControlValue('heightInput', input.height);
+        setControlValue('depthInput', input.depth);
+        setControlValue('thicknessInput', input.thickness);
+        setControlValue('cartonType', input.cartonType);
+        setControlValue('snapProfile', input.snapLockProfile || '');
+        setControlValue('materialProfile', input.materialProfileId || '');
+        setControlValue('converterProfile', input.converterProfileId || '');
+        dimensionReference = input.dimensionReference === 'OUTER' ? 'OUTER' : 'INNER';
+        designMode = input.designMode === 'ENGINEERING' ? 'ENGINEERING' : 'AUTOMATIC';
+        engineeringOverrides = input.engineeringOverrides && typeof input.engineeringOverrides === 'object'
+            ? { ...input.engineeringOverrides }
+            : {};
+        render();
+        return currentModel;
+    };
     function getSvg() { return $('canvas').querySelector('svg'); }
     function parseVB(raw) { const n = raw.trim().split(/\s+/).map(Number); return { x: n[0], y: n[1], w: n[2], h: n[3] }; }
     function setView(n) { view = n; const svg = getSvg(); if (svg)
@@ -7644,5 +7668,294 @@ pbdOverlayGlobal.PBD_REFERENCE_OVERLAY = Object.freeze({
   overlayStatus,
   createReferenceOverlayGroup,
 });
+const PBD_HOST_PROTOCOL_VERSION = "carton-host.v1";
+const PBD_HOST_MAX_MESSAGE_BYTES = 32 * 1024 * 1024;
+const PBD_HOST_ARTIFACT_SHA256 = "0c5560eff56147dc17fc268639cd346c59bdea6d35d510cc2d581e0c9fd5c1fc";
+const PBD_HOST_CONTRACT_PACKAGE_VERSION = "1.0.0";
+
+function pbdHostUtf8ByteLength(value) {
+  return new TextEncoder().encode(String(value)).byteLength;
+}
+
+async function pbdHostSha256(value) {
+  const bytes = new TextEncoder().encode(String(value));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function pbdHostIssue(code, message, details = {}) {
+  return { code, severity: "ERROR", message, ...details };
+}
+
+function applyHostModeUi() {
+  for (const id of ["flipHorizontalBtn", "flipVerticalBtn", "rotateCcwBtn", "rotateCwBtn"]) {
+    const control = document.getElementById(id);
+    if (!control) continue;
+    control.hidden = true;
+    control.style.display = "none";
+    control.setAttribute("aria-hidden", "true");
+  }
+}
+
+function installPbdHostProtocol() {
+  const parentWindow = window.parent;
+  if (!parentWindow || parentWindow === window) return;
+
+  let sessionId = null;
+  let hostOrigin = null;
+  let initialized = false;
+  let readySent = false;
+  let readOnlyFallback = false;
+
+  const post = (type, payload = {}, options = {}) => {
+    if (!parentWindow || parentWindow === window) return;
+    const message = {
+      protocolVersion: PBD_HOST_PROTOCOL_VERSION,
+      type,
+      ...(sessionId ? { sessionId } : {}),
+      payload,
+    };
+    const serialized = JSON.stringify(message);
+    if (pbdHostUtf8ByteLength(serialized) > PBD_HOST_MAX_MESSAGE_BYTES) return;
+    parentWindow.postMessage(message, options.targetOrigin || hostOrigin || "*");
+  };
+
+  const currentValidation = () => {
+    const model = typeof PBD.getCurrentModel === "function" ? PBD.getCurrentModel() : null;
+    const structural = model?.validation?.structural || "NOT_GENERATED";
+    const geometry = model?.validation?.geometry || "NOT_GENERATED";
+    let contract = "NOT_GENERATED";
+    let issues = [];
+    if (model && typeof PBD.getModelExportEligibility === "function") {
+      const eligibility = PBD.getModelExportEligibility(model, {
+        layers: { regions: true, boundaries: true, folds: true, features: true, anchors: false, sequence: false, labels: true, dimensions: true },
+        sequenceStage: 0,
+      });
+      contract = eligibility.allowed ? "VALID" : "INVALID";
+      issues = Array.isArray(eligibility.issues) ? eligibility.issues : [];
+    }
+    return { structural, geometry, contract, issues };
+  };
+
+  const setReadOnlyFallback = (enabled, reason = "") => {
+    readOnlyFallback = Boolean(enabled);
+    const ids = ["widthInput", "heightInput", "depthInput", "thicknessInput", "cartonType", "snapProfile", "materialProfile", "converterProfile", "exportSvg", "exportJson"];
+    for (const id of ids) {
+      const control = document.getElementById(id);
+      if (control) control.disabled = readOnlyFallback;
+    }
+    let node = document.getElementById("pbdHostRestoreFallback");
+    if (!node) {
+      node = document.createElement("div");
+      node.id = "pbdHostRestoreFallback";
+      node.style.cssText = "margin:10px 0;padding:9px;border:1px solid #e6aaaa;border-radius:6px;background:#fff4f4;color:#9b3838;font:11px system-ui;";
+      document.getElementById("statusGrid")?.before(node);
+    }
+    node.hidden = !readOnlyFallback;
+    if (readOnlyFallback) {
+      node.innerHTML = `<strong>Saved technical dieline could not be restored exactly.</strong><br><span>${String(reason || "The saved model and rebuilt model hashes differ.")}</span><br><button type="button" id="pbdHostStartNew" style="margin-top:7px">Start a new technical dieline</button>`;
+      node.querySelector("#pbdHostStartNew")?.addEventListener("click", () => {
+        setReadOnlyFallback(false);
+        render();
+      }, { once: true });
+    }
+  };
+
+  const emitValidationState = () => {
+    if (!initialized) return;
+    post("pbd:validation-state", currentValidation());
+  };
+
+  const reject = (code, message, details = {}) => {
+    post("plugin:error", { error: pbdHostIssue(code, message, details) });
+  };
+
+  async function buildCartonBundle() {
+    if (readOnlyFallback) throw new Error("PBD_READ_ONLY_RESTORE_FALLBACK");
+    const model = typeof PBD.getCurrentModel === "function" ? PBD.getCurrentModel() : null;
+    if (!model) throw new Error("PBD_MODEL_NOT_READY");
+    const validation = currentValidation();
+    if (validation.structural !== "VALID" || validation.geometry !== "VALID" || validation.contract !== "VALID") {
+      const error = new Error("PBD_MODEL_NOT_EXPORTABLE");
+      error.validation = validation;
+      throw error;
+    }
+
+    const layers = { regions: true, boundaries: true, folds: true, features: true, anchors: false, sequence: false, labels: true, dimensions: true };
+    const modelExport = PBD.buildModelExport(model, { layers, sequenceStage: 0 });
+    const modelCheck = PBD.validateModelExport(modelExport);
+    if (!modelCheck.valid) throw new Error(modelCheck.issues.map((issue) => issue.message || issue.code).join(" "));
+
+    const svgResult = PBD.renderSvgMarkupV4(model, {
+      includeDimensions: false,
+      presentationTransform: PBD.IDENTITY_PRESENTATION_TRANSFORM,
+      bleed: { enabled: false },
+      safeZones: { enabled: false },
+    });
+    const svgMarkup = svgResult?.markup;
+    if (typeof svgMarkup !== "string" || !svgMarkup) throw new Error("PBD_SVG_EMPTY");
+    const svgCheck = PBD.validateSvgV4Export(svgMarkup);
+    if (!svgCheck.valid) throw new Error(svgCheck.issues.map((issue) => issue.message || issue.code).join(" "));
+
+    const modelText = JSON.stringify(modelExport, null, 2);
+    const modelSha256 = await pbdHostSha256(modelText);
+    const svgSha256 = await pbdHostSha256(svgMarkup);
+    const profileIds = Array.isArray(model.ruleResolution?.activeProfiles)
+      ? model.ruleResolution.activeProfiles.map((profile) => profile?.profile?.id || profile?.id || profile?.name).filter(Boolean)
+      : [];
+
+    return {
+      contractVersion: "carton-workflow.v1",
+      workflowMode: "technical",
+      source: {
+        producer: "packaging-box-designer",
+        producerVersion: PBD.APP_VERSION || "1.2.0",
+        modelEngineVersion: model.engineVersion || PBD.APP_VERSION || "1.2.0",
+        contractPackageVersion: PBD_HOST_CONTRACT_PACKAGE_VERSION,
+        artifactVersion: PBD.APP_VERSION || "1.2.0",
+        artifactSha256: PBD_HOST_ARTIFACT_SHA256,
+        modelSchemaVersion: "pbd.model.v1",
+        svgSchemaVersion: "pbd.svg.v4",
+        cartonType: model.input?.cartonType,
+        profileIds,
+        referenceOnly: true,
+        productionCertified: false,
+      },
+      modelJson: {
+        mediaType: "application/json",
+        byteLength: pbdHostUtf8ByteLength(modelText),
+        sha256: modelSha256,
+        text: modelText,
+      },
+      semanticSvg: {
+        assetId: `svg-${svgSha256.slice(0, 16)}`,
+        mediaType: "image/svg+xml",
+        byteLength: pbdHostUtf8ByteLength(svgMarkup),
+        sha256: svgSha256,
+        units: "mm",
+        markup: svgMarkup,
+      },
+      capabilities: {
+        artwork2d: true,
+        flatExport: true,
+        foldPreview: true,
+        technicalRender: false,
+      },
+    };
+  }
+
+  async function restoreCartonBundle(bundle) {
+    if (!bundle || typeof bundle !== "object") throw new Error("PBD_CARTON_BUNDLE_INVALID");
+    if (bundle.workflowMode !== "technical") throw new Error("PBD_TECHNICAL_BUNDLE_REQUIRED");
+    const modelText = bundle.modelJson?.text;
+    const svgMarkup = bundle.semanticSvg?.markup;
+    if (typeof modelText !== "string" || typeof svgMarkup !== "string") throw new Error("PBD_CARTON_ASSETS_MISSING");
+    const [modelSha256, svgSha256] = await Promise.all([pbdHostSha256(modelText), pbdHostSha256(svgMarkup)]);
+    if (modelSha256 !== bundle.modelJson?.sha256 || svgSha256 !== bundle.semanticSvg?.sha256) throw new Error("PBD_CARTON_HASH_INVALID");
+    const modelExport = JSON.parse(modelText);
+    const input = modelExport?.input;
+    if (!input || !["RTE", "STE", "TT_SL123"].includes(input.cartonType)) throw new Error("PBD_CARTON_INPUT_INVALID");
+
+    if (typeof PBD.restoreCartonInput !== "function") throw new Error("PBD_CARTON_RESTORE_API_UNAVAILABLE");
+    setReadOnlyFallback(false);
+    const restoredModel = PBD.restoreCartonInput(input);
+    if (!restoredModel || typeof PBD.getCurrentModel !== "function" || !PBD.getCurrentModel()) {
+      throw new Error("PBD_CARTON_RESTORE_GENERATION_FAILED");
+    }
+    const rebuilt = await buildCartonBundle();
+    if (rebuilt.modelJson.sha256 !== bundle.modelJson.sha256 || rebuilt.semanticSvg.sha256 !== bundle.semanticSvg.sha256) {
+      const error = new Error("PBD_CARTON_RESTORE_HASH_MISMATCH");
+      error.expected = { modelSha256: bundle.modelJson.sha256, svgSha256: bundle.semanticSvg.sha256 };
+      error.actual = { modelSha256: rebuilt.modelJson.sha256, svgSha256: rebuilt.semanticSvg.sha256 };
+      throw error;
+    }
+    return rebuilt;
+  }
+
+  const handleMessage = async (event) => {
+    if (event.source !== parentWindow) return;
+    const data = event.data;
+    if (!data || typeof data !== "object" || typeof data.type !== "string") return;
+    let serializedSize;
+    try { serializedSize = pbdHostUtf8ByteLength(JSON.stringify(data)); } catch { serializedSize = PBD_HOST_MAX_MESSAGE_BYTES + 1; }
+    if (serializedSize > PBD_HOST_MAX_MESSAGE_BYTES) {
+      reject("HOST_MESSAGE_TOO_LARGE", "Host message exceeds the maximum allowed size.");
+      return;
+    }
+    if (data.protocolVersion !== PBD_HOST_PROTOCOL_VERSION) {
+      reject("HOST_PROTOCOL_VERSION_UNSUPPORTED", "Host protocol version is unsupported.");
+      return;
+    }
+
+    if (data.type === "host:init") {
+      if (!/^[A-Za-z0-9._:-]{8,128}$/.test(String(data.sessionId || ""))) {
+        reject("HOST_SESSION_INVALID", "Host session ID is invalid.");
+        return;
+      }
+      if (data.allowedOrigin && data.allowedOrigin !== "*" && data.allowedOrigin !== event.origin) {
+        reject("HOST_ORIGIN_MISMATCH", "Host origin does not match the declared origin.");
+        return;
+      }
+      sessionId = String(data.sessionId);
+      hostOrigin = event.origin === "null" ? "*" : event.origin;
+      initialized = true;
+      applyHostModeUi();
+      // This is an acknowledgement of host:init, not a second bootstrap
+      // event. The host must not answer it with another host:init.
+      post("plugin:ready", { pluginId: "packaging-box-designer", pluginVersion: PBD.APP_VERSION || "1.2.0" });
+      emitValidationState();
+      return;
+    }
+
+    if (!initialized || data.sessionId !== sessionId) return;
+    if (hostOrigin && hostOrigin !== "*" && event.origin !== hostOrigin) {
+      reject("HOST_ORIGIN_MISMATCH", "Host message origin does not match the established session.");
+      return;
+    }
+    if (data.type === "host:load-carton") {
+      try {
+        const rebuilt = await restoreCartonBundle(data.payload?.bundle);
+        post("pbd:carton-loaded", {
+          bundle: rebuilt,
+          modelSha256: rebuilt.modelJson.sha256,
+          svgSha256: rebuilt.semanticSvg.sha256,
+        });
+      } catch (error) {
+        setReadOnlyFallback(true, error?.message || String(error));
+        post("pbd:carton-load-failed", {
+          error: pbdHostIssue(error?.code || "PBD_CARTON_RESTORE_FAILED", error?.message || String(error), {
+            expected: error?.expected || null,
+            actual: error?.actual || null,
+          }),
+        });
+      }
+      return;
+    }
+    if (data.type === "host:request-carton") {
+      try {
+        post("pbd:carton-ready", { bundle: await buildCartonBundle() });
+      } catch (error) {
+        reject(error?.validation ? "PBD_VALIDATION_BLOCKED" : "PBD_CARTON_EXPORT_FAILED", error?.message || String(error), { validation: error?.validation || null });
+      }
+      return;
+    }
+    if (data.type === "host:cancel") {
+      post("plugin:cancelled", {});
+    }
+  };
+
+  window.addEventListener("message", handleMessage);
+  const notifyReady = () => {
+    if (readySent) return;
+    readySent = true;
+    post("plugin:ready", { pluginId: "packaging-box-designer", pluginVersion: PBD.APP_VERSION || "1.2.0" }, { targetOrigin: "*" });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", notifyReady, { once: true });
+  else notifyReady();
+  const observerTarget = document.getElementById("statusGrid") || document.body;
+  new MutationObserver(emitValidationState).observe(observerTarget, { childList: true, subtree: true, characterData: true });
+  PBD.notifyHostValidationState = emitValidationState;
+}
+installPbdHostProtocol();
 </script>
 </body></html>

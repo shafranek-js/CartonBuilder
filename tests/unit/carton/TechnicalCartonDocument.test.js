@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { TechnicalCartonDocument } from '../../../src/carton/TechnicalCartonDocument.js';
@@ -65,6 +66,7 @@ describe('TechnicalCartonDocument multi-fixture validation & contracts', () => {
 
       // Dieline Primitives & ARC preservation
       const primitives = doc.getDielinePrimitives();
+      const rawModel = JSON.parse(bundle.modelJson.text);
       expect(primitives.length).toBeGreaterThan(0);
 
       const folds = primitives.filter((p) => p.classification === 'fold');
@@ -77,6 +79,11 @@ describe('TechnicalCartonDocument multi-fixture validation & contracts', () => {
       expect(lines.length).toBeGreaterThan(0);
       expect(arcs.length).toBeGreaterThan(0); // All 3 fixtures have ARCs in flap corners
 
+      const openCutFeatures = (rawModel.features || [])
+        .filter((feature) => feature.operation === 'OPEN_CUT')
+        .flatMap((feature) => feature.geometry || []);
+      expect(primitives.filter((p) => p.role === 'OPEN_CUT').length).toBe(openCutFeatures.length);
+
       for (const arc of arcs) {
         expect(Number.isFinite(arc.radius)).toBe(true);
         expect(arc.radius).toBeGreaterThan(0);
@@ -86,7 +93,6 @@ describe('TechnicalCartonDocument multi-fixture validation & contracts', () => {
       }
 
       // Check exclusion of render: false edges
-      const rawModel = JSON.parse(bundle.modelJson.text);
       const hiddenRawEdges = (rawModel.edges || []).filter((e) => e.render === false || e.referenceAccountingOnly === true);
       for (const hidden of hiddenRawEdges) {
         expect(primitives.some((p) => p.id === hidden.id)).toBe(false);
@@ -129,6 +135,13 @@ describe('TechnicalCartonDocument multi-fixture validation & contracts', () => {
     bundle.source.cartonType = 'MUTATED';
 
     expect(doc.getModel().exportMetadata.format).toBe('CartonBuilder Model JSON');
+    expect(doc.getSourceIdentity().cartonType).toBe('RTE');
+
+    const exposedModel = doc.getModel();
+    exposedModel.input.width = 999;
+    const exposedBundle = doc.getBundle();
+    exposedBundle.source.cartonType = 'MUTATED_AGAIN';
+    expect(doc.dimensions.width).not.toBe(999);
     expect(doc.getSourceIdentity().cartonType).toBe('RTE');
   });
 
@@ -226,5 +239,21 @@ describe('TechnicalCartonDocument negative security & integrity tests', () => {
     const bundle = loadFixture('rte');
 
     await expect(TechnicalCartonDocument.create(bundle, { expectedArtifactSha256: 'deadbeef' })).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('rejects a bundle whose model validation status is not structurally and geometrically valid', async () => {
+    const bundle = loadFixture('rte');
+    const model = JSON.parse(bundle.modelJson.text);
+    model.validation.structural = 'INVALID';
+    model.validation.geometry = 'INVALID';
+    model.validation.domains.STRUCTURAL.status = 'INVALID';
+    model.validation.domains.GEOMETRY.status = 'INVALID';
+    bundle.modelJson.text = JSON.stringify(model);
+    bundle.modelJson.byteLength = new Blob([bundle.modelJson.text]).size;
+    bundle.modelJson.sha256 = createHash('sha256').update(bundle.modelJson.text).digest('hex');
+
+    await expect(TechnicalCartonDocument.create(bundle)).rejects.toMatchObject({
+      code: 'cartonWorkflowGeometryInvalid',
+    });
   });
 });

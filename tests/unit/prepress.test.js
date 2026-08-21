@@ -16,13 +16,13 @@ describe('Wave 9A prepress foundations', () => {
     expect(DEFAULT_PREPRESS_SETTINGS.technicalLines.cutSpotName).toBe('CutContour');
   });
 
-  it('migrates v14 to v15 without changing the archive-facing box', () => {
+  it('migrates v14 to v17 without changing the archive-facing quick box', () => {
     const model = new BoxNetModel();
     const snapshot = { schemaVersion: 14, workflowStep: 'artwork', box: model.toJSON(), artworks: [], activeArtworkIndex: -1 };
     const migrated = migrateProjectSnapshot(snapshot);
-    expect(migrated.schemaVersion).toBe(15);
+    expect(migrated.schemaVersion).toBe(17);
     expect(migrated.prepress.mode).toBe('technical-proof');
-    expect(migrated.box).toEqual(snapshot.box);
+    expect(migrated.cartonSource.box).toEqual(snapshot.box);
   });
 
   it.each(['legacy-six-panel', 'ste', 'rte'])('derives trim/bleed/safe geometry for %s without mutating model', (templateId) => {

@@ -15,8 +15,9 @@ import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 import { sanitizePrepressSettings } from '../prepress/prepressState.js';
+import { validateCartonWorkflowBundle } from '../workflow/index.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 15;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 17;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -295,12 +296,26 @@ MIGRATIONS.set(11, (snapshot) => ({
 MIGRATIONS.set(12, (snapshot) => ({
   ...snapshot,
   schemaVersion: 13,
-  box: {
-    ...snapshot.box,
-    board: sanitizeBoardConstruction({
-      caliperMm: snapshot.box?.board?.caliperMm ?? snapshot.renderAppearance?.thicknessMm,
-    }, snapshot.box?.dimensions),
-  },
+  ...(snapshot.cartonSource?.mode === 'quick'
+    ? {
+        cartonSource: {
+          ...snapshot.cartonSource,
+          box: {
+            ...snapshot.cartonSource.box,
+            board: sanitizeBoardConstruction({
+              caliperMm: snapshot.cartonSource.box?.board?.caliperMm ?? snapshot.renderAppearance?.thicknessMm,
+            }, snapshot.cartonSource.box?.dimensions),
+          },
+        },
+      }
+    : {
+        box: {
+          ...snapshot.box,
+          board: sanitizeBoardConstruction({
+            caliperMm: snapshot.box?.board?.caliperMm ?? snapshot.renderAppearance?.thicknessMm,
+          }, snapshot.box?.dimensions),
+        },
+      }),
 }));
 
 // Wave 8B keeps legacy six-panel projects byte-for-byte compatible while
@@ -308,15 +323,19 @@ MIGRATIONS.set(12, (snapshot) => ({
 // derived from the canonical dimensions/board/parameters on restore.
 MIGRATIONS.set(13, (snapshot) => {
   const migrated = { ...snapshot };
-  const dimensions = snapshot.box?.dimensions;
-  const board = sanitizeBoardConstruction(snapshot.box?.board, dimensions);
-  const construction = sanitizeConstruction(snapshot.box?.construction, dimensions, board);
+  const sourceBox = snapshot.cartonSource?.mode === 'quick' ? snapshot.cartonSource.box : snapshot.box;
+  const dimensions = sourceBox?.dimensions;
+  const board = sanitizeBoardConstruction(sourceBox?.board, dimensions);
+  const construction = sanitizeConstruction(sourceBox?.construction, dimensions, board);
   migrated.schemaVersion = 14;
-  migrated.box = {
-    ...snapshot.box,
-    board,
-    construction,
-  };
+  if (snapshot.cartonSource?.mode === 'quick') {
+    migrated.cartonSource = {
+      ...snapshot.cartonSource,
+      box: { ...sourceBox, board, construction },
+    };
+  } else {
+    migrated.box = { ...sourceBox, board, construction };
+  }
   return migrated;
 });
 
@@ -329,6 +348,29 @@ MIGRATIONS.set(14, (snapshot) => ({
   }),
 }));
 
+MIGRATIONS.set(15, (snapshot) => {
+  const migrated = { ...snapshot };
+  migrated.schemaVersion = 16;
+  if (snapshot.box && !snapshot.cartonSource) {
+    migrated.cartonSource = {
+      mode: 'quick',
+      box: { ...snapshot.box },
+    };
+  }
+  delete migrated.box;
+  return migrated;
+});
+
+MIGRATIONS.set(16, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 17,
+  workflowSelection: snapshot.cartonSource?.mode === 'technical'
+    ? 'technical'
+    : snapshot.workflowSelection === 'technical' || snapshot.workflowSelection === 'quick'
+      ? snapshot.workflowSelection
+      : 'quick',
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -338,6 +380,13 @@ function normalizeWorkflowStep(value) {
   if (value === 'render') return 'render';
   if (value === 'artwork') return 'artwork';
   return 'box';
+}
+
+function normalizeWorkflowSelection(value, cartonSource) {
+  if (cartonSource?.mode === 'technical') return 'technical';
+  if (value === 'technical') return 'technical';
+  if (value === 'quick') return 'quick';
+  return cartonSource?.mode === 'technical' ? 'technical' : 'quick';
 }
 
 export function migrateProjectSnapshot(input) {
@@ -361,21 +410,61 @@ export function migrateProjectSnapshot(input) {
     version = Number(snapshot.schemaVersion);
   }
 
-  if (!snapshot.box) {
-    throw new AppError('projectIncomplete');
+  if (!snapshot.cartonSource || typeof snapshot.cartonSource !== 'object') {
+    if (snapshot.box) {
+      snapshot.cartonSource = {
+        mode: 'quick',
+        box: snapshot.box,
+      };
+      delete snapshot.box;
+    } else {
+      throw new AppError('projectIncomplete');
+    }
   }
 
-  snapshot.box = {
-    ...snapshot.box,
-    board: sanitizeBoardConstruction(snapshot.box.board, snapshot.box.dimensions),
-  };
-  snapshot.box.construction = sanitizeConstruction(
-    snapshot.box.construction,
-    snapshot.box.dimensions,
-    snapshot.box.board,
-  );
+  const cartonSource = snapshot.cartonSource;
+  if (cartonSource.mode === 'quick') {
+    if (!cartonSource.box || typeof cartonSource.box !== 'object') {
+      throw new AppError('projectIncomplete');
+    }
+    cartonSource.box = {
+      ...cartonSource.box,
+      board: sanitizeBoardConstruction(cartonSource.box.board, cartonSource.box.dimensions),
+    };
+    cartonSource.box.construction = sanitizeConstruction(
+      cartonSource.box.construction,
+      cartonSource.box.dimensions,
+      cartonSource.box.board,
+    );
+
+    // Validate domain state before any live model is mutated.
+    try {
+      BoxNetModel.fromJSON(cartonSource.box);
+    } catch (error) {
+      throw new AppError('projectIncomplete', {}, { cause: error });
+    }
+  } else if (cartonSource.mode === 'technical') {
+    const src = cartonSource.source;
+    if (!src || typeof src !== 'object') {
+      throw new AppError('projectIncomplete');
+    }
+    if (src.modelSchemaVersion !== 'pbd.model.v1' || src.svgSchemaVersion !== 'pbd.svg.v4') {
+      throw new AppError('projectVersionUnsupported');
+    }
+    if (
+      typeof cartonSource.modelSha256 !== 'string'
+      || !/^[a-f0-9]{64}$/i.test(cartonSource.modelSha256)
+      || typeof cartonSource.svgSha256 !== 'string'
+      || !/^[a-f0-9]{64}$/i.test(cartonSource.svgSha256)
+    ) {
+      throw new AppError('projectIncomplete');
+    }
+  } else {
+    throw new AppError('projectVersionUnsupported');
+  }
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
+  snapshot.workflowSelection = normalizeWorkflowSelection(snapshot.workflowSelection, cartonSource);
   snapshot.render = sanitizeRenderSettings(snapshot.render);
   snapshot.prepress = sanitizePrepressSettings(snapshot.prepress);
   if (Object.hasOwn(snapshot, 'renderAppearance')) {
@@ -399,9 +488,7 @@ export function migrateProjectSnapshot(input) {
     snapshot.activeArtworkIndex = snapshot.artworks.length > 0 ? 0 : -1;
   }
 
-  // Validate domain state before any live model is mutated.
   try {
-    BoxNetModel.fromJSON(snapshot.box);
     for (const entry of snapshot.artworks) {
       new ArtworkModel(entry.artwork);
     }
@@ -416,12 +503,83 @@ async function detectBlobType(blob) {
   return detectArtworkType(bytes);
 }
 
+async function validateTechnicalAssets(snapshot, technicalAssets) {
+  if (snapshot.cartonSource?.mode !== 'technical') return technicalAssets;
+
+  const source = snapshot.cartonSource.source;
+  const modelMeta = snapshot.cartonSource.modelJson;
+  const svgMeta = snapshot.cartonSource.semanticSvg;
+  const modelBlob = technicalAssets?.modelBlob || technicalAssets?.modelJsonBlob;
+  const svgBlob = technicalAssets?.svgBlob || technicalAssets?.semanticSvgBlob;
+
+  if (!(modelBlob instanceof Blob) || !(svgBlob instanceof Blob)) {
+    throw new AppError('projectTechnicalAssetMissing');
+  }
+  if (!modelMeta || !svgMeta) {
+    throw new AppError('projectTechnicalMetadataMissing');
+  }
+
+  const [modelSha256, svgSha256] = await Promise.all([sha256(modelBlob), sha256(svgBlob)]);
+  const modelExpectedSha = modelMeta.sha256 || snapshot.cartonSource.modelSha256;
+  const svgExpectedSha = svgMeta.sha256 || snapshot.cartonSource.svgSha256;
+  if (
+    modelBlob.size !== Number(modelMeta.byteLength)
+    || modelSha256.toLowerCase() !== String(modelExpectedSha).toLowerCase()
+    || modelSha256.toLowerCase() !== String(snapshot.cartonSource.modelSha256).toLowerCase()
+  ) {
+    throw new AppError('projectTechnicalModelChecksumMismatch');
+  }
+  if (
+    svgBlob.size !== Number(svgMeta.byteLength)
+    || svgSha256.toLowerCase() !== String(svgExpectedSha).toLowerCase()
+    || svgSha256.toLowerCase() !== String(snapshot.cartonSource.svgSha256).toLowerCase()
+  ) {
+    throw new AppError('projectTechnicalSvgChecksumMismatch');
+  }
+
+  const [modelText, svgMarkup] = await Promise.all([modelBlob.text(), svgBlob.text()]);
+  const bundle = {
+    contractVersion: 'carton-workflow.v1',
+    workflowMode: 'technical',
+    source,
+    modelJson: {
+      mediaType: modelMeta.mediaType,
+      byteLength: modelBlob.size,
+      sha256: modelSha256,
+      text: modelText,
+    },
+    semanticSvg: {
+      assetId: svgMeta.assetId,
+      mediaType: svgMeta.mediaType,
+      byteLength: svgBlob.size,
+      sha256: svgSha256,
+      units: svgMeta.units || 'mm',
+      markup: svgMarkup,
+    },
+    capabilities: snapshot.cartonSource.capabilities || {
+      artwork2d: true,
+      flatExport: true,
+      foldPreview: true,
+      technicalRender: false,
+    },
+  };
+  const validation = await validateCartonWorkflowBundle(bundle);
+  if (!validation.valid) {
+    throw new AppError('cartonWorkflowInvalid', {
+      errors: validation.errors,
+      issues: validation.issues,
+    });
+  }
+  return { modelBlob, svgBlob, bundle };
+}
+
 export async function validateProjectBundle({
   snapshot: inputSnapshot,
   artworkBlobs,
   originalBlob,
   previewBlob,
   renderAssets = [],
+  technicalAssets = null,
 }) {
   const snapshot = migrateProjectSnapshot(inputSnapshot);
   const validatedRenderAssets = await validateRenderAssets(renderAssets);
@@ -433,8 +591,11 @@ export async function validateProjectBundle({
   if (environmentAssetId && !validatedRenderAssets.some((asset) => asset.assetId === environmentAssetId && asset.kind === 'environment')) {
     throw new AppError('projectRenderAssetMissing');
   }
+
+  const validatedTechnicalAssets = await validateTechnicalAssets(snapshot, technicalAssets);
+
   if (!snapshot.artworks.length) {
-    return { snapshot, artworkBlobs: [], renderAssets: validatedRenderAssets };
+    return { snapshot, artworkBlobs: [], renderAssets: validatedRenderAssets, technicalAssets: validatedTechnicalAssets };
   }
 
   let blobs;
@@ -498,7 +659,7 @@ export async function validateProjectBundle({
     });
   }
 
-  return { snapshot, artworkBlobs: validated, renderAssets: validatedRenderAssets };
+  return { snapshot, artworkBlobs: validated, renderAssets: validatedRenderAssets, technicalAssets: validatedTechnicalAssets };
 }
 
 export const PROJECT_PREVIEW_LIMITS = Object.freeze({

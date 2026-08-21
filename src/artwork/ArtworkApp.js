@@ -10,6 +10,7 @@ import {
 } from '../project/ProjectStore.js';
 import { createProjectArchive, readProjectArchive } from '../project/projectArchive.js';
 import { CURRENT_PROJECT_SCHEMA_VERSION, validateProjectBundle } from '../project/projectSchema.js';
+import { ProjectCheckpointStore } from '../project/ProjectCheckpoint.js';
 import { ArtworkModel } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
@@ -189,6 +190,7 @@ export function createArtworkApp({
   getRenderAssets = () => [],
   getPreview3dState = () => null,
   getCartonSource = () => ({ mode: 'quick', box: boxModel.toJSON() }),
+  getWorkflowSelection = () => 'quick',
   getTechnicalAssets = () => null,
   canPersistProject = () => true,
   restoreCartonDocument = async () => null,
@@ -389,6 +391,7 @@ export function createArtworkApp({
   let artworkGroupCollapsed = false;
   let selectedArtworkIndices = new Set();
   const thumbnailUrlCache = new Map();
+  const projectCheckpoint = new ProjectCheckpointStore();
 
   function showToast(message) {
     windowRef.clearTimeout(toastTimer);
@@ -706,6 +709,7 @@ export function createArtworkApp({
         locale: documentRef.documentElement.lang || 'en',
       },
       workflowStep,
+      workflowSelection: getWorkflowSelection() === 'technical' ? 'technical' : 'quick',
       cartonSource: structuredClone(cartonSource),
       artworks: artworks.map((entry) => ({
         artwork: entry.model.toJSON(),
@@ -724,6 +728,46 @@ export function createArtworkApp({
       },
       history: history.toJSON(),
     };
+  }
+
+  function createCheckpointPayload() {
+    return {
+      snapshot: createSnapshot(),
+      artworkBlobs: artworks.map((entry) => ({
+        originalBlob: entry.originalBlob,
+        previewBlob: entry.previewBlob,
+      })),
+      renderAssets: getRenderAssets() || [],
+      technicalAssets: getTechnicalAssets() || null,
+    };
+  }
+
+  async function verifyCheckpointPayload(payload) {
+    await validateProjectBundle({
+      snapshot: payload.snapshot,
+      artworkBlobs: payload.artworkBlobs,
+      renderAssets: payload.renderAssets,
+      technicalAssets: payload.technicalAssets,
+    });
+  }
+
+  async function createProjectCheckpoint(options = {}) {
+    const payload = createCheckpointPayload();
+    return projectCheckpoint.createProjectCheckpoint(payload, {
+      verify: verifyCheckpointPayload,
+      write: options.writeCheckpoint || options.faultInjector || (async () => {}),
+    });
+  }
+
+  async function restoreProjectCheckpoint() {
+    const payload = await projectCheckpoint.restoreProjectCheckpoint({ verify: verifyCheckpointPayload });
+    if (!payload) return false;
+    await restoreProject(payload);
+    return true;
+  }
+
+  function discardProjectCheckpoint() {
+    projectCheckpoint.discardProjectCheckpoint();
   }
 
   function enqueueSave(workflowStep = persistedWorkflowStep()) {
@@ -4103,6 +4147,10 @@ export function createArtworkApp({
       return refreshPreviewResources();
     },
     createSnapshot,
+    createProjectCheckpoint,
+    restoreProjectCheckpoint,
+    discardProjectCheckpoint,
+    hasProjectCheckpoint: () => projectCheckpoint.hasProjectCheckpoint(),
     saveProjectArchive,
     persistWorkflowStep,
     scheduleSave,

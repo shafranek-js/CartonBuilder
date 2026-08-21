@@ -2,7 +2,7 @@
   "packageName": "@cartonbuilder/workflow-v1",
   "packageVersion": "1.0.0",
   "contractVersion": "carton-workflow.v1",
-  "pbdCommit": "6293cc98d743369275a42049fbc359a0d9a8bb6d",
+  "pbdCommit": "67444de2a0fcf65857974ad6ba35f9b699d69e59",
   "files": [
     {
       "path": "export/modelJson.mjs",

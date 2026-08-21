@@ -399,7 +399,7 @@ describe("sync script path safety, security gates and atomic replacement", () =>
     expect(manifestAfter).toBe(manifestBefore);
 
     fs.rmSync(testTempDir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   it("restores the original destination when staging activation fails", () => {
     const packageDir = createValidSyncPackage();

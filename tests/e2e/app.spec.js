@@ -78,6 +78,59 @@ async function loadGeneratedPng(page, fileName = 'sample-artwork.png') {
   await expect(page.locator('#processingOverlay')).toBeHidden();
 }
 
+async function assertTechnicalRestoreRoundTrip(page, cartonType) {
+  await page.locator('label.workflow-mode-card-technical').click();
+  const frame = page.frameLocator('#technicalHostFrame');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+    { timeout: 20_000 },
+  );
+  if (cartonType !== 'RTE') {
+    await frame.locator('#cartonType').selectOption(cartonType);
+    await expect(page.locator('#technicalHostValidation')).toHaveText(
+      'Structural VALID · Geometry VALID · Contract VALID',
+    );
+  }
+  await expect(frame.locator('#cartonType')).toHaveValue(cartonType);
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await loadGeneratedPng(page, `technical-${cartonType}.png`);
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  const committed = await page.evaluate(() => {
+    const state = window.cartonBuilderApp.getState();
+    return {
+      workflowSelection: state.workflowSelection,
+      modelSha256: state.cartonSource?.modelSha256,
+      svgSha256: state.cartonSource?.svgSha256,
+    };
+  });
+
+  await page.reload();
+  await expect(page.locator('#artworkStep')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('input[name="cartonWorkflowMode"][value="technical"]')).toBeChecked();
+  await expect(frame.locator('#cartonType')).toHaveValue(cartonType, { timeout: 20_000 });
+  await expect(page.locator('#artworkFileName')).toHaveText(`technical-${cartonType}.png`);
+  await expect.poll(() => page.evaluate(() => {
+    const state = window.cartonBuilderApp.getState();
+    return {
+      workflowSelection: state.workflowSelection,
+      modelSha256: state.cartonSource?.modelSha256,
+      svgSha256: state.cartonSource?.svgSha256,
+    };
+  })).toEqual(committed);
+
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+  await page.locator('.step[data-step-target="box"]').click();
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  expect(dialogs).toEqual([]);
+}
+
 test.beforeEach(async ({ page }) => {
   // Headless Chromium exposes the native picker API, which does not emit a
   // Playwright download event. The browser fallback is the deterministic
@@ -142,7 +195,144 @@ test('shows clickable contact links in the top menu', async ({ page }) => {
   await expect(popover.locator('a').nth(2)).toHaveAttribute('rel', 'noopener noreferrer');
 });
 
+test('completes the technical workflow for RTE, STE and TT_SL123 and restores technical autosave', async ({ page }) => {
+  test.setTimeout(90_000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.locator('label.workflow-mode-card-technical').click();
+  const frame = page.frameLocator('#technicalHostFrame');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+    { timeout: 20_000 },
+  );
+  await expect(frame.locator('#flipHorizontalBtn')).toBeHidden();
+  await expect(frame.locator('#flipVerticalBtn')).toBeHidden();
+  await expect(frame.locator('#rotateCcwBtn')).toBeHidden();
+  await expect(frame.locator('#rotateCwBtn')).toBeHidden();
+
+  const types = ['RTE', 'STE', 'TT_SL123'];
+  for (const [index, cartonType] of types.entries()) {
+    if (index > 0) {
+      await page.locator('.step[data-step-target="box"]').click();
+      await expect(frame.locator('#cartonType')).toBeVisible();
+      await frame.locator('#cartonType').selectOption(cartonType);
+      await expect(page.locator('#technicalHostValidation')).toHaveText(
+        'Structural VALID · Geometry VALID · Contract VALID',
+      );
+    }
+
+    const step2 = page.locator('.step[data-step-target="artwork"]');
+    await expect(step2).toBeEnabled();
+    await step2.click();
+    await expect(page.locator('#artworkStep')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => (
+      window.cartonBuilderApp.getState().cartonSource?.source?.cartonType
+    ))).toBe(cartonType);
+  }
+
+  await loadGeneratedPng(page, 'technical-autosave.png');
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await expect.poll(async () => page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('carton-builder');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const value = await new Promise((resolve, reject) => {
+      const transaction = database.transaction('projects', 'readonly');
+      const request = transaction.objectStore('projects').get('current');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return value?.snapshot?.cartonSource?.mode === 'technical'
+      && value?.technicalAssets?.modelBlob instanceof Blob;
+  })).toBe(true);
+
+  const committedBeforeReload = await page.evaluate(() => {
+    const source = window.cartonBuilderApp.getState().cartonSource;
+    return {
+      workflowSelection: window.cartonBuilderApp.getState().workflowSelection,
+      modelSha256: source.modelSha256,
+      svgSha256: source.svgSha256,
+    };
+  });
+  await page.reload();
+  await expect(page.locator('#artworkStep')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('input[name="cartonWorkflowMode"][value="technical"]')).toBeChecked();
+  await expect(frame.locator('#cartonType')).toHaveValue('TT_SL123', { timeout: 20_000 });
+  await expect(page.locator('#artworkFileName')).toHaveText('technical-autosave.png');
+  await expect.poll(() => page.evaluate(() => {
+    const state = window.cartonBuilderApp.getState();
+    return {
+      workflowSelection: state.workflowSelection,
+      modelSha256: state.cartonSource?.modelSha256,
+      svgSha256: state.cartonSource?.svgSha256,
+    };
+  })).toEqual(committedBeforeReload);
+
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+  await page.locator('.step[data-step-target="box"]').click();
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  expect(dialogs).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+for (const cartonType of ['RTE', 'STE']) {
+  test(`restores ${cartonType} technical workflow without replacing artwork`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await assertTechnicalRestoreRoundTrip(page, cartonType);
+  });
+}
+
+test('persists workflow selection independently and lets an opened Quick project override it', async ({ page }) => {
+  await page.locator('label.workflow-mode-card-technical').click();
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await page.reload();
+  await expect(page.locator('input[name="cartonWorkflowMode"][value="technical"]')).toBeChecked();
+
+  const quickBox = new BoxNetModel({ width: 200, height: 100, depth: 50 });
+  quickBox.addPanel('Front', 'bottom', 'Base');
+  quickBox.addPanel('Front', 'top', 'Top');
+  quickBox.addPanel('Top', 'top', 'Back');
+  quickBox.addPanel('Front', 'left', 'Left');
+  quickBox.addPanel('Back', 'right', 'Right');
+  const quickArchive = await createProjectArchive({
+    snapshot: {
+      schemaVersion: 17,
+      meta: { name: 'Quick project override' },
+      workflowStep: 'box',
+      workflowSelection: 'quick',
+      cartonSource: { mode: 'quick', box: quickBox.toJSON() },
+      artworks: [],
+      activeArtworkIndex: -1,
+      render: {},
+      renderAppearance: {},
+      prepress: {},
+      view: {},
+      history: { undo: [], redo: [] },
+    },
+    artworkBlobs: [],
+  });
+  await (await openFileAction(page, '#menuOpenProjectBtn')).click();
+  await page.locator('#projectFileInput').setInputFiles({
+    name: 'quick-override.carton',
+    mimeType: 'application/zip',
+    buffer: Buffer.from(await quickArchive.arrayBuffer()),
+  });
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await expect(page.locator('input[name="cartonWorkflowMode"][value="quick"]')).toBeChecked();
+});
+
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 1920, height: 1080 });
   const shellBounds = await page.locator('.app-shell').evaluate((element) => {
     const { x, y, width, height } = element.getBoundingClientRect();
