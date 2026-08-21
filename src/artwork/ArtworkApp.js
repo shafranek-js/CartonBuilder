@@ -183,7 +183,7 @@ export function createArtworkApp({
   onBack,
   onPreview,
   onBackToEditor,
-  onProjectLoaded,
+  onProjectLoaded = async () => {},
   getWorkflowStep = () => 'artwork',
   getRenderState = () => DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance = () => null,
@@ -762,7 +762,9 @@ export function createArtworkApp({
   async function restoreProjectCheckpoint() {
     const payload = await projectCheckpoint.restoreProjectCheckpoint({ verify: verifyCheckpointPayload });
     if (!payload) return false;
-    await restoreProject(payload);
+    await restoreProject(payload, { schedule: false });
+    await onProjectLoaded(payload.snapshot, payload);
+    scheduleSave();
     return true;
   }
 
@@ -3938,7 +3940,7 @@ export function createArtworkApp({
     onStateChanged();
   }
 
-  async function restoreProject({ snapshot, artworkBlobs = [], technicalAssets = null }) {
+  async function restoreProject({ snapshot, artworkBlobs = [], technicalAssets = null }, { schedule = true } = {}) {
     const quickBox = snapshot.cartonSource?.mode === 'quick'
       ? snapshot.cartonSource.box
       : snapshot.box;
@@ -3985,7 +3987,7 @@ export function createArtworkApp({
     renderPdfLayers();
     render();
     refreshPreviewResources({ force: true });
-    scheduleSave();
+    if (schedule) scheduleSave();
   }
 
   windowRef.addEventListener('keydown', (event) => {

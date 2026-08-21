@@ -331,6 +331,90 @@ test('persists workflow selection independently and lets an opened Quick project
   await expect(page.locator('input[name="cartonWorkflowMode"][value="quick"]')).toBeChecked();
 });
 
+test('restores a complete project checkpoint including artwork and Render assets', async ({ page }) => {
+  test.setTimeout(60_000);
+  await openArtworkStep(page);
+  await loadGeneratedPng(page, 'checkpoint-artwork.png');
+
+  const backgroundBytes = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 8;
+    canvas.height = 8;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#2b5cff';
+    context.fillRect(0, 0, 8, 8);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  await page.locator('#renderBackgroundFile').setInputFiles({
+    name: 'checkpoint-background.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(backgroundBytes),
+  });
+  await expect(page.locator('#renderBackgroundFileName')).toHaveText('checkpoint-background.png');
+
+  const before = await page.evaluate(async () => {
+    const digest = async (blob) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))]
+      .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const app = window.cartonBuilderApp;
+    const renderState = app.render.getState();
+    renderState.background.mode = 'image';
+    renderState.background.image.fit = 'contain';
+    renderState.background.image.positionX = 0.21;
+    renderState.background.image.positionY = 0.72;
+    app.render.applySettings({
+      renderSettings: renderState,
+      boardAppearance: { ...app.render.getBoardAppearance(), thicknessMm: 0.73 },
+    });
+    const checkpoint = await app.artwork.createProjectCheckpoint();
+    if (checkpoint.snapshot.render.background.mode !== 'image') {
+      throw new Error(`Checkpoint did not capture Render image mode: ${checkpoint.snapshot.render.background.mode}`);
+    }
+    return {
+      artworkSha: await digest(app.artwork.originalBlob),
+      artworkFileName: app.artwork.createSnapshot().artworks[0].artwork.source.fileName,
+      renderState: app.render.getState(),
+      boardAppearance: app.render.getBoardAppearance(),
+      renderAssets: await Promise.all(app.render.getRenderAssets().map(async (asset) => ({
+        assetId: asset.assetId,
+        sha256: await digest(asset.blob),
+      }))),
+    };
+  });
+  expect(before.renderAssets).toHaveLength(1);
+
+  await page.evaluate(() => {
+    const app = window.cartonBuilderApp;
+    app.artwork.clearArtworkForCartonChange();
+    app.render.applySettings({
+      renderSettings: { ...app.render.getState(), background: { ...app.render.getState().background, mode: 'solid' } },
+      boardAppearance: { ...app.render.getBoardAppearance(), thicknessMm: 1.4 },
+    });
+  });
+  await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
+
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.restoreProjectCheckpoint())).toBe(true);
+  await expect(page.locator('#artworkFileName')).toHaveText('checkpoint-artwork.png');
+
+  const after = await page.evaluate(async () => {
+    const digest = async (blob) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))]
+      .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const app = window.cartonBuilderApp;
+    return {
+      artworkSha: await digest(app.artwork.originalBlob),
+      artworkFileName: app.artwork.createSnapshot().artworks[0].artwork.source.fileName,
+      renderState: app.render.getState(),
+      boardAppearance: app.render.getBoardAppearance(),
+      renderAssets: await Promise.all(app.render.getRenderAssets().map(async (asset) => ({
+        assetId: asset.assetId,
+        sha256: await digest(asset.blob),
+      }))),
+    };
+  });
+
+  expect(after).toEqual(before);
+});
+
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1920, height: 1080 });
