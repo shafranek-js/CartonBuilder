@@ -1,18 +1,66 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   PDFArray,
   PDFDict,
   PDFDocument,
   PDFName,
   PDFNumber,
+  PDFRawStream,
+  decodePDFRawStream,
   rgb,
 } from 'pdf-lib';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ArtworkModel } from '../../src/artwork/ArtworkModel.js';
-import { createPdfExport, createPrepressPdfExport } from '../../src/export/artworkExport.js';
+import { createPdfExport, createPrepressPdfExport, createPreviewBlob } from '../../src/export/artworkExport.js';
 import { getExportWarnings } from '../../src/export/exportChecks.js';
+import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
+import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
+import { getDielineSegments } from '../../src/model/dieline.js';
 import { runPrepressPreflight } from '../../src/prepress/prepressPreflight.js';
+import { createExportSvg } from '../../src/export/svgExport.js';
+
+const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/workflow/fixtures');
+
+function loadTechnicalFixture(name) {
+  return JSON.parse(fs.readFileSync(path.join(fixturesDir, `${name}-workflow.v1.json`), 'utf8'));
+}
+
+async function createTechnicalModel(name) {
+  const document = await TechnicalCartonDocument.create(loadTechnicalFixture(name));
+  return { document, model: createTechnicalBoxModelAdapter(document) };
+}
+
+function createTechnicalArtwork(bounds, sourceBlob, overrides = {}) {
+  const artwork = new ArtworkModel().load({
+    id: 'technical-raster',
+    fileName: overrides.fileName || 'technical.png',
+    mimeType: overrides.mimeType || 'image/png',
+    byteLength: sourceBlob.size,
+    widthPx: 600,
+    heightPx: 400,
+    ...overrides,
+  }, bounds);
+  return { model: artwork, visible: true, originalBlob: sourceBlob, previewBlob: sourceBlob };
+}
+
+async function readPdfPageContents(bytes) {
+  const document = await PDFDocument.load(bytes);
+  const page = document.getPage(0);
+  const contents = page.node.lookup(PDFName.of('Contents'), PDFArray);
+  let text = '';
+  for (let index = 0; index < contents.size(); index += 1) {
+    const stream = document.context.lookup(contents.get(index));
+    text += stream instanceof PDFRawStream
+      ? new TextDecoder().decode(decodePDFRawStream(stream).decode())
+      : stream.getUnencodedContentsString();
+  }
+  return text;
+}
 
 function completeBox() {
   const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
@@ -96,6 +144,101 @@ describe('artwork export', () => {
     const separation = colorSpaces.lookup(PDFName.of('CutContourCS'), PDFArray);
     expect(separation.lookup(0, PDFName).asString()).toBe('/Separation');
     expect(separation.lookup(1, PDFName).asString()).toBe('/CutContour');
+  });
+
+  it.each(['rte', 'ste', 'tt_sl123'])('preserves technical ARC and OPEN_CUT geometry in SVG and PDF for %s', async (name) => {
+    const { document, model } = await createTechnicalModel(name);
+    const sourceBytes = await createSourcePdf();
+    const sourceBlob = new Blob([sourceBytes], { type: 'application/pdf' });
+    const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob, {
+      fileName: `technical-${name}.pdf`,
+      mimeType: 'application/pdf',
+      pageIndex: 0,
+      pageCount: 1,
+      vector: true,
+    });
+    const dieline = getDielineSegments(model);
+    const allPrimitives = [...dieline.cut, ...dieline.fold];
+    const sourceArcs = document.getDielinePrimitives().filter((primitive) => primitive.kind === 'ARC').length;
+    const openCuts = document.getDielinePrimitives().filter((primitive) => primitive.role === 'OPEN_CUT');
+
+    const svg = createExportSvg(model);
+    const cutMarkup = svg.match(/<g fill="none" stroke="#111"[^>]*>([\s\S]*?)<\/g>/)?.[1] || '';
+    expect(cutMarkup.match(/<(?:path|line) /g) || []).toHaveLength(dieline.cut.length);
+    expect((cutMarkup.match(/<path /g) || []).length).toBe(sourceArcs);
+    expect(openCuts.length).toBeGreaterThan(0);
+
+    const pdf = await createPdfExport({ boxModel: model, artworks: [artwork] });
+    const contents = await readPdfPageContents(new Uint8Array(await pdf.arrayBuffer()));
+    const panelArcs = model.getElements().flatMap((panel) => panel.contour.segments || [])
+      .filter((segment) => segment.kind === 'ARC').length;
+    expect((contents.match(/\bc\b/g) || []).length).toBeGreaterThanOrEqual(panelArcs + sourceArcs);
+    for (const primitive of openCuts.slice(0, 3)) {
+      const bounds = model.getBounds();
+      const x = (primitive.start.x - bounds.minX) * (72 / 25.4);
+      const y = (bounds.maxY - primitive.start.y) * (72 / 25.4);
+      expect(contents).toContain(`${x} ${y} m`);
+    }
+    expect(allPrimitives.filter((primitive) => primitive.kind === 'ARC')).toHaveLength(sourceArcs);
+  });
+
+  it.each(['rte', 'ste', 'tt_sl123'])('traces every technical ARC in raster export for %s', async (name) => {
+    const { model } = await createTechnicalModel(name);
+    const sourceBlob = new Blob(['technical-raster'], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob);
+    const calls = [];
+    const context = new Proxy({
+      arc: (...args) => calls.push(['arc', ...args]),
+      beginPath: () => {},
+      clip: () => {},
+      closePath: () => {},
+      drawImage: () => {},
+      fillRect: () => {},
+      lineTo: () => {},
+      moveTo: () => {},
+      restore: () => {},
+      save: () => {},
+      scale: () => {},
+      setLineDash: () => {},
+      stroke: () => {},
+      translate: () => {},
+    }, { get(target, property) {
+      if (!(property in target)) target[property] = () => {};
+      return target[property];
+    } });
+    class FakeOffscreenCanvas {
+      constructor(width, height) {
+        this.width = width;
+        this.height = height;
+      }
+
+      getContext() {
+        return context;
+      }
+
+      convertToBlob() {
+        return Promise.resolve(new Blob(['result'], { type: 'image/png' }));
+      }
+    }
+
+    vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ close() {} })));
+    try {
+      await createPreviewBlob({
+        boxModel: model,
+        artworks: [artwork],
+        dpi: 10,
+        rasterize: async () => ({ blob: sourceBlob }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const panelArcs = model.getElements().flatMap((panel) => panel.contour.segments || [])
+      .filter((segment) => segment.kind === 'ARC').length;
+    const dielineArcs = getDielineSegments(model).cut.concat(getDielineSegments(model).fold)
+      .filter((segment) => segment.kind === 'ARC').length;
+    expect(calls.filter(([type]) => type === 'arc')).toHaveLength(panelArcs + dielineArcs);
   });
 
   it('creates a production-assist PDF with distinct trim/bleed/media boxes and OCGs', async () => {
