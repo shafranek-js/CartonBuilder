@@ -251,7 +251,7 @@ export function findForbiddenNetworkReferences(text) {
   const matches = [];
   const patterns = [
     /\b(?:https?|wss?):\/\/[^\s"'<>\`\\)]+/gi,
-    /(?<![:\w/])\/\/(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#][^\s"'<>\`]*)?/g,
+    /(?<![:\w/\\])\/\/(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#][^\s"'<>\`]*)?/g,
   ];
 
   for (const pattern of patterns) {
