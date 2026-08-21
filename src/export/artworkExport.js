@@ -5,6 +5,7 @@ import {
   PDFNumber,
   PDFOperator,
   clip,
+  closePath,
   degrees,
   endPath,
   lineTo,
@@ -19,7 +20,7 @@ import {
 } from 'pdf-lib';
 
 import { AppError } from '../errors.js';
-import { getDielineSegments } from '../model/dieline.js';
+import { arcToCubicSegments, getArcAngles, getDielineSegments, getPanelContourSegments } from '../model/dieline.js';
 import { rasterizeArtwork, resolveArtworkDpi } from '../artwork/artworkRasterizer.js';
 import { buildProductionDieline } from '../prepress/productionDieline.js';
 
@@ -40,10 +41,31 @@ function panelPoints(panel) {
 }
 
 function tracePanelPath(context, panel) {
-  const points = panelPoints(panel);
-  context.moveTo(points[0].x, points[0].y);
-  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  const segments = getPanelContourSegments(panel);
+  if (!segments.length) return;
+  context.moveTo(segments[0].start.x, segments[0].start.y);
+  for (const segment of segments) {
+    if (segment.kind === 'ARC') {
+      const { center, radius, startAngle, delta, clockwise } = getArcAngles(segment);
+      context.arc(center.x, center.y, radius, startAngle, startAngle + (clockwise ? 1 : -1) * delta, !clockwise);
+    } else {
+      context.lineTo(segment.end.x, segment.end.y);
+    }
+  }
   context.closePath();
+}
+
+function traceDieline(context, segments) {
+  for (const segment of segments || []) {
+    if (segment.kind === 'ARC') {
+      const { center, radius, startAngle, delta, clockwise } = getArcAngles(segment);
+      context.moveTo(segment.start.x, segment.start.y);
+      context.arc(center.x, center.y, radius, startAngle, startAngle + (clockwise ? 1 : -1) * delta, !clockwise);
+    } else {
+      context.moveTo(segment.start.x, segment.start.y);
+      context.lineTo(segment.end.x, segment.end.y);
+    }
+  }
 }
 
 function createCanvas(width, height) {
@@ -153,18 +175,12 @@ export async function createPreviewBlob({
     context.lineWidth = 0.25;
     context.strokeStyle = '#111111';
     context.beginPath();
-    for (const segment of cut) {
-      context.moveTo(segment.start.x, segment.start.y);
-      context.lineTo(segment.end.x, segment.end.y);
-    }
+    traceDieline(context, cut);
     context.stroke();
     context.strokeStyle = '#3157d5';
     context.setLineDash([2, 1.5]);
     context.beginPath();
-    for (const segment of fold) {
-      context.moveTo(segment.start.x, segment.start.y);
-      context.lineTo(segment.end.x, segment.end.y);
-    }
+    traceDieline(context, fold);
     context.stroke();
     context.restore();
   }
@@ -175,23 +191,60 @@ export async function createPreviewBlob({
 function addPanelClip(page, boxModel, bounds) {
   page.pushOperators(pushGraphicsState());
   for (const panel of boxModel.getElements?.() || boxModel.getPanels()) {
-    const points = panelPoints(panel);
-    page.pushOperators(moveTo(
-      (points[0].x - bounds.minX) * POINTS_PER_MM,
-      (bounds.maxY - points[0].y) * POINTS_PER_MM,
-    ));
-    for (const point of points.slice(1)) {
-      page.pushOperators(lineTo(
-        (point.x - bounds.minX) * POINTS_PER_MM,
-        (bounds.maxY - point.y) * POINTS_PER_MM,
-      ));
-    }
-    page.pushOperators(lineTo(
-      (points[0].x - bounds.minX) * POINTS_PER_MM,
-      (bounds.maxY - points[0].y) * POINTS_PER_MM,
-    ));
+    appendPdfContour(page, getPanelContourSegments(panel), bounds);
   }
   page.pushOperators(clip(), endPath());
+}
+
+function pdfPoint(point, bounds) {
+  return {
+    x: (point.x - bounds.minX) * POINTS_PER_MM,
+    y: (bounds.maxY - point.y) * POINTS_PER_MM,
+  };
+}
+
+function pdfCurveTo(control1, control2, end) {
+  return PDFOperator.of('c', [
+    PDFNumber.of(control1.x), PDFNumber.of(control1.y),
+    PDFNumber.of(control2.x), PDFNumber.of(control2.y),
+    PDFNumber.of(end.x), PDFNumber.of(end.y),
+  ]);
+}
+
+function appendPdfContour(page, segments, bounds) {
+  if (!segments?.length) return;
+  const first = pdfPoint(segments[0].start, bounds);
+  page.pushOperators(moveTo(first.x, first.y));
+  for (const segment of segments) {
+    if (segment.kind === 'ARC') {
+      for (const piece of arcToCubicSegments(segment)) {
+        const c1 = pdfPoint(piece.control1, bounds);
+        const c2 = pdfPoint(piece.control2, bounds);
+        const end = pdfPoint(piece.end, bounds);
+        page.pushOperators(pdfCurveTo(c1, c2, end));
+      }
+    } else {
+      const end = pdfPoint(segment.end, bounds);
+      page.pushOperators(lineTo(end.x, end.y));
+    }
+  }
+  page.pushOperators(closePath());
+}
+
+function appendPdfSegment(page, segment, bounds) {
+  const start = pdfPoint(segment.start, bounds);
+  page.pushOperators(moveTo(start.x, start.y));
+  if (segment.kind === 'ARC') {
+    for (const piece of arcToCubicSegments(segment)) {
+      const c1 = pdfPoint(piece.control1, bounds);
+      const c2 = pdfPoint(piece.control2, bounds);
+      const end = pdfPoint(piece.end, bounds);
+      page.pushOperators(pdfCurveTo(c1, c2, end));
+    }
+  } else {
+    const end = pdfPoint(segment.end, bounds);
+    page.pushOperators(lineTo(end.x, end.y));
+  }
 }
 
 function addPolygonClip(page, polygons, bounds) {
@@ -260,11 +313,8 @@ function addPrepressLayer(pdfDocument, page, name, segments, bounds, {
   if (dash) operators.push(setDashPattern(dash.map((value) => value * POINTS_PER_MM), 0));
   page.pushOperators(...operators);
   for (const segment of segments || []) {
-    page.pushOperators(
-      moveTo((segment.start.x - bounds.minX) * POINTS_PER_MM, (bounds.maxY - segment.start.y) * POINTS_PER_MM),
-      lineTo((segment.end.x - bounds.minX) * POINTS_PER_MM, (bounds.maxY - segment.end.y) * POINTS_PER_MM),
-      stroke(),
-    );
+    appendPdfSegment(page, segment, bounds);
+    page.pushOperators(stroke());
   }
   page.pushOperators(PDFOperator.of('EMC'), popGraphicsState());
 }
@@ -394,34 +444,16 @@ function addDielineLayer(pdfDocument, page, boxModel, bounds) {
     PDFOperator.of('SCN', [PDFNumber.of(1)]),
   );
   for (const segment of cut) {
-    page.pushOperators(
-      moveTo(
-        (segment.start.x - bounds.minX) * POINTS_PER_MM,
-        (bounds.maxY - segment.start.y) * POINTS_PER_MM,
-      ),
-      lineTo(
-        (segment.end.x - bounds.minX) * POINTS_PER_MM,
-        (bounds.maxY - segment.end.y) * POINTS_PER_MM,
-      ),
-      stroke(),
-    );
+    appendPdfSegment(page, segment, bounds);
+    page.pushOperators(stroke());
   }
   page.pushOperators(
     setStrokingRgbColor(0.19, 0.34, 0.84),
     setDashPattern([2 * POINTS_PER_MM, 1.5 * POINTS_PER_MM], 0),
   );
   for (const segment of fold) {
-    page.pushOperators(
-      moveTo(
-        (segment.start.x - bounds.minX) * POINTS_PER_MM,
-        (bounds.maxY - segment.start.y) * POINTS_PER_MM,
-      ),
-      lineTo(
-        (segment.end.x - bounds.minX) * POINTS_PER_MM,
-        (bounds.maxY - segment.end.y) * POINTS_PER_MM,
-      ),
-      stroke(),
-    );
+    appendPdfSegment(page, segment, bounds);
+    page.pushOperators(stroke());
   }
   page.pushOperators(
     PDFOperator.of('EMC'),
@@ -528,6 +560,7 @@ export async function createPrepressPdfExport({
   const entries = (artworks || [])
     .filter((entry) => entry?.model?.hasArtwork && entry.visible !== false && entry.originalBlob);
   if (!entries.length) throw new AppError('artworkRequired');
+  if (boxModel?.mode === 'technical') throw new AppError('technicalPrepressUnavailable');
   const production = buildProductionDieline(boxModel, settings);
   if (!production.diagnostics.valid) throw new AppError('prepressInvalidGeometry');
   if (preflight?.blocking?.length) throw new AppError('prepressBlocked');

@@ -6,6 +6,39 @@
 import { CartonDocument } from './CartonDocument.js';
 import { validateCartonWorkflowBundle } from '../workflow/index.js';
 import { AppError } from '../errors.js';
+import { contourPathData } from '../model/dieline.js';
+
+function deepFreeze(value, seen = new WeakSet()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value)) deepFreeze(child, seen);
+  return Object.freeze(value);
+}
+
+function clone(value) {
+  return structuredClone(value);
+}
+
+function primitiveFromGeometry({ geometry, id, role, semanticRole, classification, owners = [] }) {
+  const geo = geometry || {};
+  const kind = geo.kind;
+  const primitive = {
+    id,
+    kind,
+    role,
+    semanticRole: semanticRole || role,
+    classification,
+    start: { x: Number(geo.start?.x), y: Number(geo.start?.y) },
+    end: { x: Number(geo.end?.x), y: Number(geo.end?.y) },
+    owners: owners.slice(),
+  };
+  if (kind === 'ARC') {
+    primitive.center = { x: Number(geo.center?.x), y: Number(geo.center?.y) };
+    primitive.radius = Number(geo.radius);
+    primitive.clockwise = Boolean(geo.clockwise);
+  }
+  return primitive;
+}
 
 export class TechnicalCartonDocument extends CartonDocument {
   /**
@@ -28,6 +61,14 @@ export class TechnicalCartonDocument extends CartonDocument {
       });
     }
 
+    const modelValidation = validation.model?.validation;
+    if (modelValidation?.structural !== 'VALID' || modelValidation?.geometry !== 'VALID') {
+      throw new AppError('cartonWorkflowGeometryInvalid', {
+        structural: modelValidation?.structural || 'UNKNOWN',
+        geometry: modelValidation?.geometry || 'UNKNOWN',
+      });
+    }
+
     // Use verified model returned directly from validateCartonWorkflowBundle
     return new TechnicalCartonDocument(bundle, validation.model);
   }
@@ -38,8 +79,8 @@ export class TechnicalCartonDocument extends CartonDocument {
    */
   constructor(bundle, validatedModel) {
     super();
-    this._bundle = Object.freeze(structuredClone(bundle));
-    this._model = Object.freeze(structuredClone(validatedModel));
+    this._bundle = deepFreeze(clone(bundle));
+    this._model = deepFreeze(clone(validatedModel));
   }
 
   get mode() {
@@ -77,14 +118,14 @@ export class TechnicalCartonDocument extends CartonDocument {
    * Get raw validated pbd.model.v1 object.
    */
   getModel() {
-    return this._model;
+    return clone(this._model);
   }
 
   /**
    * Get raw validated workflow bundle.
    */
   getBundle() {
-    return this._bundle;
+    return clone(this._bundle);
   }
 
   getBounds() {
@@ -178,26 +219,30 @@ export class TechnicalCartonDocument extends CartonDocument {
 
       const geo = edge.geometry || {};
       const kind = geo.kind || (edge.radius ? 'ARC' : 'LINE');
-      const isFold = edge.role === 'FOLD_BOUNDARY';
-
-      const primitive = {
+      primitives.push(primitiveFromGeometry({
+        geometry: { ...geo, kind },
         id: edge.id,
-        kind,
         role: edge.role,
         semanticRole: edge.semanticRole || edge.role,
-        classification: isFold ? 'fold' : 'cut',
-        start: { x: Number(geo.start?.x ?? edge.a?.x), y: Number(geo.start?.y ?? edge.a?.y) },
-        end: { x: Number(geo.end?.x ?? edge.b?.x), y: Number(geo.end?.y ?? edge.b?.y) },
-        owners: Array.isArray(edge.owners) ? edge.owners.slice() : [],
-      };
+        classification: edge.role === 'FOLD_BOUNDARY' ? 'fold' : 'cut',
+        owners: Array.isArray(edge.owners) ? edge.owners : [],
+      }));
+    }
 
-      if (kind === 'ARC') {
-        primitive.center = { x: Number(geo.center?.x), y: Number(geo.center?.y) };
-        primitive.radius = Number(geo.radius);
-        primitive.clockwise = Boolean(geo.clockwise);
-      }
-
-      primitives.push(primitive);
+    const features = Array.isArray(this._model.features) ? this._model.features : [];
+    for (const feature of features) {
+      if (feature.render === false || feature.referenceAccountingOnly === true) continue;
+      if (feature.operation !== 'OPEN_CUT' || !Array.isArray(feature.geometry)) continue;
+      feature.geometry.forEach((geometry, index) => {
+        primitives.push(primitiveFromGeometry({
+          geometry,
+          id: `${feature.id}.${index}`,
+          role: feature.operation,
+          semanticRole: feature.role || feature.operation,
+          classification: 'cut',
+          owners: feature.hostRegionId ? [feature.hostRegionId] : [],
+        }));
+      });
     }
 
     return primitives;
@@ -208,18 +253,7 @@ export class TechnicalCartonDocument extends CartonDocument {
     return surfaces.map((surface) => {
       let d = '';
       if (surface.contour?.segments?.length > 0) {
-        const segs = surface.contour.segments;
-        d = `M${segs[0].start.x} ${segs[0].start.y}`;
-        for (const seg of segs) {
-          if (seg.kind === 'ARC') {
-            const r = seg.radius;
-            const sweepFlag = seg.clockwise ? 1 : 0;
-            d += ` A${r} ${r} 0 0 ${sweepFlag} ${seg.end.x} ${seg.end.y}`;
-          } else {
-            d += ` L${seg.end.x} ${seg.end.y}`;
-          }
-        }
-        d += 'Z';
+        d = contourPathData(surface.contour.segments);
       } else if (surface.polygon?.length > 0) {
         d = surface.polygon.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join('') + 'Z';
       }
@@ -256,7 +290,9 @@ export class TechnicalCartonDocument extends CartonDocument {
   serialize() {
     return {
       mode: 'technical',
-      source: this.getSourceIdentity(),
+      // Keep the contract source object free of CartonDocument-only derived
+      // fields so it remains valid against carton-workflow.v1 additionalProperties.
+      source: clone(this._bundle.source),
       capabilities: structuredClone(this._bundle.capabilities || {
         artwork2d: true,
         flatExport: true,

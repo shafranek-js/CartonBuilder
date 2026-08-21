@@ -1,5 +1,6 @@
 import { getDielineSegments } from '../model/dieline.js';
 import { sanitizePrepressSettings } from './prepressState.js';
+import { AppError } from '../errors.js';
 
 const EPSILON = 1e-7;
 
@@ -428,6 +429,9 @@ function applySegmentOverrides(segments, fallback, overrides, prefix, templateId
 
 export function buildProductionDieline(model, settings = null) {
   if (!model) throw new Error('A valid box model is required for a production dieline.');
+  if (model.mode === 'technical') {
+    throw new AppError('technicalPrepressUnavailable');
+  }
   const prepress = sanitizePrepressSettings(settings);
   const baseElements = getElements(model).map((element) => ({
     ...clone(element),

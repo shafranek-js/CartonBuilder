@@ -19,6 +19,21 @@ function effectiveDpi(entry) {
 
 export function runPrepressPreflight({ boxModel, artworks = [], settings = null, pageBox = 'trim' } = {}) {
   const prepress = sanitizePrepressSettings(settings);
+  if (boxModel?.mode === 'technical') {
+    return {
+      valid: false,
+      blocking: [issue('Blocking', 'technical-prepress-unavailable', 'Technical production-assist export is unavailable until exact curved-contour allowance support is implemented.')],
+      warnings: [],
+      manualReview: [],
+      pageBox,
+      settings: prepress,
+      diagnostics: {
+        valid: false,
+        templateId: 'technical-pbd',
+        elementCount: boxModel.getElements?.().length || 0,
+      },
+    };
+  }
   const production = buildProductionDieline(boxModel, prepress);
   const blocking = [];
   const warnings = [];

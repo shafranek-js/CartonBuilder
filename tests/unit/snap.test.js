@@ -73,6 +73,30 @@ describe('getSnapOffset', () => {
     expect(offset.dx).toBeCloseTo(-3, 7);
     expect(offset.dy).toBeCloseTo(3, 7);
   });
+
+  it('snaps to the nearest point on an ARC without snapping outside its range', () => {
+    const arc = {
+      kind: 'ARC',
+      start: { x: 10, y: 0 },
+      end: { x: 0, y: 10 },
+      center: { x: 0, y: 0 },
+      radius: 10,
+      clockwise: true,
+    };
+    const arcTargets = {
+      lines: { x: [], y: [] },
+      centers: { x: [], y: [] },
+      segments: { x: [], y: [] },
+      arcs: [{ ...arc, id: 'cut-arc-1', kind: 'cut', geometryKind: 'ARC' }],
+    };
+
+    expect(getSnapOffset({ x: 10.6, y: 0 }, { x: 0, y: 0 }, arcTargets, 1)).toMatchObject({
+      dx: expect.closeTo(-0.6, 5),
+      dy: expect.closeTo(0, 5),
+    });
+    expect(getSnapOffset({ x: 0, y: -10.5 }, { x: 0, y: 0 }, arcTargets, 1).dx).toBe(0);
+    expect(getSnapOffset({ x: 0, y: -10.5 }, { x: 0, y: 0 }, arcTargets, 1).dy).toBe(0);
+  });
 });
 
 describe('getResizeSnapScale', () => {

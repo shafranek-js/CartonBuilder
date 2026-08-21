@@ -188,6 +188,10 @@ export function createArtworkApp({
   getRenderBoardAppearance = () => null,
   getRenderAssets = () => [],
   getPreview3dState = () => null,
+  getCartonSource = () => ({ mode: 'quick', box: boxModel.toJSON() }),
+  getTechnicalAssets = () => null,
+  canPersistProject = () => true,
+  restoreCartonDocument = async () => null,
   onRenderStateChanged = () => {},
   onArtworkQualityChanged = () => {},
   onStateChanged = () => {},
@@ -691,6 +695,7 @@ export function createArtworkApp({
 
   function createSnapshot(workflowStep = persistedWorkflowStep()) {
     const topmost = artworks[0];
+    const cartonSource = getCartonSource() || { mode: 'quick', box: boxModel.toJSON() };
     return {
       schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
       meta: {
@@ -701,7 +706,7 @@ export function createArtworkApp({
         locale: documentRef.documentElement.lang || 'en',
       },
       workflowStep,
-      box: boxModel.toJSON(),
+      cartonSource: structuredClone(cartonSource),
       artworks: artworks.map((entry) => ({
         artwork: entry.model.toJSON(),
         visible: entry.visible,
@@ -722,6 +727,7 @@ export function createArtworkApp({
   }
 
   function enqueueSave(workflowStep = persistedWorkflowStep()) {
+    if (!canPersistProject()) return Promise.resolve(false);
     const hasCompleteArtwork = artworks.length > 0 && artworks.every(
       (entry) => entry.model.hasArtwork && entry.originalBlob && entry.previewBlob,
     );
@@ -734,6 +740,7 @@ export function createArtworkApp({
         }))
         : [],
       renderAssets: getRenderAssets() || [],
+      technicalAssets: getTechnicalAssets() || null,
     };
     saveQueue = saveQueue
       .catch(() => {})
@@ -890,6 +897,7 @@ export function createArtworkApp({
   }
 
   function renderPrepressControls() {
+    const technicalPrepressBlocked = boxModel?.mode === 'technical';
     const map = [
       ['prepressMode', prepress.mode], ['prepressProfile', prepress.profileId],
       ['prepressBleed', prepress.bleedMm], ['prepressSafe', prepress.safeMm],
@@ -906,6 +914,7 @@ export function createArtworkApp({
       if (!control) continue;
       if (control.type === 'checkbox') control.checked = Boolean(value);
       else control.value = String(value);
+      control.disabled = technicalPrepressBlocked;
     }
     if (controls.prepressPreset) {
       const selected = controls.prepressPreset.value;
@@ -913,8 +922,17 @@ export function createArtworkApp({
       controls.prepressPreset.replaceChildren(option('—', ''));
       for (const preset of prepressPresets) controls.prepressPreset.appendChild(option(preset.name, preset.id));
       controls.prepressPreset.value = prepressPresets.some((preset) => preset.id === selected) ? selected : '';
+      controls.prepressPreset.disabled = technicalPrepressBlocked;
+    }
+    for (const id of ['prepressRun', 'prepressReport', 'prepressExport', 'prepressReset', 'prepressSavePreset']) {
+      if (controls[id]) controls[id].disabled = technicalPrepressBlocked;
     }
     if (controls.prepressStatus) {
+      if (technicalPrepressBlocked) {
+        controls.prepressStatus.textContent = 'Production-assist export is unavailable for technical curved dielines. Exact flat SVG, PDF and raster export remain available.';
+        controls.prepressStatus.classList.add('is-error');
+        return;
+      }
       const production = buildProductionDieline(boxModel, prepress);
       controls.prepressStatus.textContent = production.diagnostics.valid
         ? `${prepress.mode === 'production-assist' ? 'Production assist' : 'Technical proof'} · ${production.diagnostics.elementCount} elements · ${production.diagnostics.bleedBounds.width.toFixed(1)} × ${production.diagnostics.bleedBounds.height.toFixed(1)} mm`
@@ -3392,6 +3410,10 @@ export function createArtworkApp({
   });
 
   async function saveProjectArchive() {
+    if (!canPersistProject()) {
+      showToast(t('technicalPluginNotReady'));
+      return { status: 'failed' };
+    }
     if (operationProgress?.isBusy?.()) {
       showToast(t('operationInProgress'));
       return { status: 'busy' };
@@ -3429,6 +3451,7 @@ export function createArtworkApp({
             previewBlob: entry.previewBlob,
           })),
           renderAssets: getRenderAssets() || [],
+          technicalAssets: getTechnicalAssets() || null,
           signal,
           onProgress: ({ fraction, stageKey, stageParams }) => report({ fraction, stageKey, stageParams }),
         });
@@ -3475,8 +3498,8 @@ export function createArtworkApp({
             signal,
             onProgress: ({ fraction, stageKey, stageParams }) => report({ fraction, stageKey, stageParams }),
           });
-          restoreProject(project);
-          onProjectLoaded(project.snapshot, project);
+          await restoreProject(project);
+          await onProjectLoaded(project.snapshot, project);
           return project;
         },
       });
@@ -3840,8 +3863,47 @@ export function createArtworkApp({
     return true;
   }
 
-  function restoreProject({ snapshot, artworkBlobs = [] }) {
-    boxApp.loadState(snapshot.box);
+  function clearArtworkForCartonChange() {
+    processingController?.abort();
+    processingController = null;
+    pdfRenderController?.abort();
+    pdfRenderController = null;
+    previewResourceController?.abort();
+    previewResourceController = null;
+    previewResourceGeneration += 1;
+    previewResourceSignatures.clear();
+    pdfRenderGeneration += 1;
+    for (const [, cached] of thumbnailUrlCache) {
+      if (cached.url) URL.revokeObjectURL(cached.url);
+    }
+    thumbnailUrlCache.clear();
+    artworks.length = 0;
+    activeArtworkIndex = -1;
+    selectedArtworkIndices.clear();
+    artwork = new ArtworkModel();
+    originalBlob = null;
+    previewBlob = null;
+    lastPreflight = null;
+    for (const key of Object.keys(prepressOverlays)) prepressOverlays[key] = false;
+    history.clear();
+    renderer.artwork = artwork;
+    renderer.setArtworks(artworks);
+    selected = false;
+    renderPdfLayers();
+    render();
+    onStateChanged();
+  }
+
+  async function restoreProject({ snapshot, artworkBlobs = [], technicalAssets = null }) {
+    const quickBox = snapshot.cartonSource?.mode === 'quick'
+      ? snapshot.cartonSource.box
+      : snapshot.box;
+    if (snapshot.cartonSource?.mode === 'technical') {
+      await restoreCartonDocument({ snapshot, technicalAssets });
+    } else {
+      if (!quickBox) throw new AppError('projectIncomplete');
+      boxApp.loadState(quickBox);
+    }
     prepress = sanitizePrepressSettings(snapshot.prepress);
     lastPreflight = null;
     projectCreatedAt = snapshot.meta?.createdAt || new Date().toISOString();
@@ -3993,8 +4055,8 @@ export function createArtworkApp({
       const stored = await loadCurrentProject();
       if (!stored) return false;
       const validated = await validateProjectBundle(stored);
-      restoreProject(validated);
-      onProjectLoaded(validated.snapshot, validated);
+      await restoreProject(validated);
+      await onProjectLoaded(validated.snapshot, validated);
       return true;
     } catch (error) {
       console.warn('Could not restore autosaved project', error);
@@ -4014,8 +4076,8 @@ export function createArtworkApp({
       const response = await windowRef.fetch(url, { cache: 'force-cache' });
       if (!response.ok) throw new Error(`Could not load example project: ${response.status}`);
       const project = await readProjectArchive(await response.blob());
-      restoreProject(project);
-      onProjectLoaded(project.snapshot, project);
+      await restoreProject(project);
+      await onProjectLoaded(project.snapshot, project);
       return true;
     } catch (error) {
       console.warn('Could not restore the first-run example project', error);
@@ -4047,6 +4109,7 @@ export function createArtworkApp({
     notifyRenderStateChanged: () => onRenderStateChanged(),
     flushPendingSave,
     dispose,
+    clearArtworkForCartonChange,
     restoreAutosave,
     restoreProjectFromUrl,
     get originalBlob() { return originalBlob; },

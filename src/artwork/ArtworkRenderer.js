@@ -1,4 +1,4 @@
-import { getDielineSegments, getPanelMaskPath } from '../model/dieline.js';
+import { getDielineSegments, getPanelMaskPath, segmentPathData } from '../model/dieline.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -167,22 +167,36 @@ function appendCropFrame(documentRef, parent, artwork, crop, handleSize) {
 function appendDieline(documentRef, parent, model) {
   const { cut, fold } = getDielineSegments(model);
   for (const segment of cut) {
-    parent.appendChild(svgElement(documentRef, 'line', {
-      class: 'dieline-cut',
-      x1: segment.start.x,
-      y1: segment.start.y,
-      x2: segment.end.x,
-      y2: segment.end.y,
-    }));
+    if (segment.kind === 'ARC') {
+      parent.appendChild(svgElement(documentRef, 'path', {
+        class: 'dieline-cut',
+        d: segmentPathData(segment),
+      }));
+    } else {
+      parent.appendChild(svgElement(documentRef, 'line', {
+        class: 'dieline-cut',
+        x1: segment.start.x,
+        y1: segment.start.y,
+        x2: segment.end.x,
+        y2: segment.end.y,
+      }));
+    }
   }
   for (const segment of fold) {
-    parent.appendChild(svgElement(documentRef, 'line', {
-      class: 'dieline-fold',
-      x1: segment.start.x,
-      y1: segment.start.y,
-      x2: segment.end.x,
-      y2: segment.end.y,
-    }));
+    if (segment.kind === 'ARC') {
+      parent.appendChild(svgElement(documentRef, 'path', {
+        class: 'dieline-fold',
+        d: segmentPathData(segment),
+      }));
+    } else {
+      parent.appendChild(svgElement(documentRef, 'line', {
+        class: 'dieline-fold',
+        x1: segment.start.x,
+        y1: segment.start.y,
+        x2: segment.end.x,
+        y2: segment.end.y,
+      }));
+    }
   }
 }
 
@@ -192,16 +206,23 @@ function appendSnapGuides(documentRef, parent, guides) {
     const segment = guide?.segment;
     if (!segment || seen.has(segment.id)) continue;
     seen.add(segment.id);
-    parent.appendChild(svgElement(documentRef, 'line', {
+    const attributes = {
       class: `snap-guide snap-guide-${segment.kind}`,
-      x1: segment.start.x,
-      y1: segment.start.y,
-      x2: segment.end.x,
-      y2: segment.end.y,
       'data-snap-axis': segment.axis,
       'data-snap-kind': segment.kind,
       'pointer-events': 'none',
-    }));
+    };
+    if (segment.geometryKind === 'ARC') {
+      parent.appendChild(svgElement(documentRef, 'path', { ...attributes, d: segmentPathData(segment) }));
+    } else {
+      parent.appendChild(svgElement(documentRef, 'line', {
+        ...attributes,
+        x1: segment.start.x,
+        y1: segment.start.y,
+        x2: segment.end.x,
+        y2: segment.end.y,
+      }));
+    }
   }
 }
 

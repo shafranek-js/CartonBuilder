@@ -1,4 +1,4 @@
-import { getDielineSegments } from '../model/dieline.js';
+import { closestPointOnArc, getDielineSegments } from '../model/dieline.js';
 
 function axisSnap(candidate, halfExtent, lineTargets, centerTargets, threshold) {
   let best = 0;
@@ -52,19 +52,70 @@ function targetForLine(targets, axis, coordinate, point = null) {
   };
 }
 
+function targetForArc(arc) {
+  return {
+    axis: null,
+    coordinate: null,
+    kind: arc?.kind || 'dieline',
+    segment: arc?.segment || arc || null,
+  };
+}
+
+function closestArcSnap(candidateCenter, halfExtents, targets, threshold) {
+  let best = null;
+  const arcs = targets?.arcs || [];
+  const candidates = [
+    candidateCenter,
+    { x: candidateCenter.x - halfExtents.x, y: candidateCenter.y - halfExtents.y },
+    { x: candidateCenter.x + halfExtents.x, y: candidateCenter.y - halfExtents.y },
+    { x: candidateCenter.x + halfExtents.x, y: candidateCenter.y + halfExtents.y },
+    { x: candidateCenter.x - halfExtents.x, y: candidateCenter.y + halfExtents.y },
+  ];
+  for (const arc of arcs) {
+    for (const candidate of candidates) {
+      const nearest = closestPointOnArc(candidate, arc);
+      if (!nearest || nearest.distance > threshold) continue;
+      const dx = nearest.point.x - candidate.x;
+      const dy = nearest.point.y - candidate.y;
+      const distance = Math.hypot(dx, dy);
+      if (!best || distance < best.distance) {
+        best = { dx, dy, distance, target: targetForArc(arc) };
+      }
+    }
+  }
+  return best;
+}
+
+function hasLineSnap(candidate, halfExtent, lineTargets, centerTargets, threshold) {
+  return [...(lineTargets || []).map((target) => target - (candidate - halfExtent)),
+    ...(lineTargets || []).map((target) => target - (candidate + halfExtent)),
+    ...(centerTargets || []).map((target) => target - candidate)]
+    .some((delta) => Math.abs(delta) <= threshold);
+}
+
 export function buildSnapTargets(boxModel) {
   const bounds = boxModel.getBounds();
   const { cut, fold } = getDielineSegments(boxModel);
   const xSet = new Set();
   const ySet = new Set();
   const segments = { x: [], y: [] };
+  const arcs = [];
   for (const segment of [...cut, ...fold]) {
     const axis = getSegmentAxis(segment);
+    const kind = cut.includes(segment) ? 'cut' : 'fold';
+    if (segment.kind === 'ARC') {
+      arcs.push({
+        ...segment,
+        id: `${kind}-arc-${segment.start.x}-${segment.start.y}-${segment.end.x}-${segment.end.y}`,
+        kind,
+        geometryKind: 'ARC',
+      });
+      continue;
+    }
     if (!axis) continue;
     const coordinate = axis === 'x' ? segment.start.x : segment.start.y;
     const alongStart = axis === 'x' ? segment.start.y : segment.start.x;
     const alongEnd = axis === 'x' ? segment.end.y : segment.end.x;
-    const kind = cut.includes(segment) ? 'cut' : 'fold';
     const metadata = {
       id: `${kind}-${axis}-${coordinate}-${alongStart}-${alongEnd}`,
       axis,
@@ -88,11 +139,12 @@ export function buildSnapTargets(boxModel) {
       y: [(bounds.minY + bounds.maxY) / 2],
     },
     segments,
+    arcs,
   };
 }
 
 export function getSnapOffset(candidateCenter, halfExtents, targets, threshold) {
-  return {
+  const lineOffset = {
     dx: axisSnap(
       candidateCenter.x,
       halfExtents.x,
@@ -108,6 +160,12 @@ export function getSnapOffset(candidateCenter, halfExtents, targets, threshold) 
       threshold,
     ),
   };
+  const arcOffset = closestArcSnap(candidateCenter, halfExtents, targets, threshold);
+  if (!arcOffset) return lineOffset;
+  const lineIsActive = hasLineSnap(candidateCenter.x, halfExtents.x, targets.lines.x, targets.centers.x, threshold)
+    || hasLineSnap(candidateCenter.y, halfExtents.y, targets.lines.y, targets.centers.y, threshold);
+  if (lineIsActive && Math.hypot(lineOffset.dx, lineOffset.dy) <= arcOffset.distance) return lineOffset;
+  return arcOffset;
 }
 
 export function getDisplayedReferenceFraction(rotation, fraction) {
@@ -157,6 +215,20 @@ export function getResizeSnapFactor({
     bestDistance = scaleDistance;
     bestFactor = factor;
     bestTarget = targetForLine(targets, axis, coordinate, point);
+  }
+  for (const arc of targets?.arcs || []) {
+    const candidatePoint = point || { x: anchor.x + vector.x * candidateFactor, y: anchor.y + vector.y * candidateFactor };
+    const nearest = closestPointOnArc(candidatePoint, arc);
+    if (!nearest || nearest.distance > (arc.kind === activeTarget?.kind ? releaseThreshold : threshold)) continue;
+    const directionLengthSquared = vector.x * vector.x + vector.y * vector.y;
+    if (directionLengthSquared < 1e-12) continue;
+    const factor = ((nearest.point.x - anchor.x) * vector.x + (nearest.point.y - anchor.y) * vector.y) / directionLengthSquared;
+    if (!Number.isFinite(factor) || factor < minFactor || factor > maxFactor) continue;
+    const scaleDistance = Math.abs(factor - candidateFactor);
+    if (scaleDistance >= bestDistance) continue;
+    bestDistance = scaleDistance;
+    bestFactor = factor;
+    bestTarget = targetForArc({ ...arc, segment: arc });
   }
   return { factor: bestFactor, target: bestTarget };
 }

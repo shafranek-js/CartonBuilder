@@ -1,6 +1,7 @@
-import { getDielineSegments } from '../model/dieline.js';
+import { contourPathData, getDielineSegments, getPanelContourSegments, segmentPathData } from '../model/dieline.js';
 import { rasterizeArtwork } from '../artwork/artworkRasterizer.js';
 import { buildProductionDieline } from '../prepress/productionDieline.js';
+import { AppError } from '../errors.js';
 
 const POINTS_PER_MM = 72 / 25.4;
 
@@ -34,11 +35,13 @@ export function createExportSvg(model) {
     const label = !Array.isArray(panel.polygon) && (panel.faceKey === 'front' || panel.faceKey === 'bottom')
       ? `<text x="${panel.x + panel.width / 2}" y="${panel.y + panel.height / 2}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" text-anchor="middle" dominant-baseline="middle" fill="#101010">${panel.faceName}</text>`
       : '';
+    const contour = isStructural ? getPanelContourSegments(panel) : [];
     const points = Array.isArray(panel.polygon) && panel.polygon.length >= 3
       ? panel.polygon.map(({ x: px, y: py }, index) => `${index ? 'L' : 'M'}${px} ${py}`).join('') + 'Z'
       : null;
-    const shape = points
-      ? `<path d="${points}" fill="${fill}" stroke="#101010" stroke-width="${strokeWidth}"/>`
+    const contourPath = contour.length ? contourPathData(contour) : points;
+    const shape = contourPath
+      ? `<path d="${contourPath}" fill="${fill}" stroke="#101010" stroke-width="${strokeWidth}"/>`
       : `<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" fill="${fill}" stroke="#101010" stroke-width="${strokeWidth}"/>`;
     return `<g><title>${panel.faceName}: ${formatNumber(panel.width)} × ${formatNumber(panel.height)} mm</title>${shape}${label}</g>`;
   }).join('');
@@ -46,7 +49,9 @@ export function createExportSvg(model) {
   const dieline = isStructural
     ? (() => {
         const segments = getDielineSegments(model);
-        const line = (segment) => `<line x1="${segment.start.x}" y1="${segment.start.y}" x2="${segment.end.x}" y2="${segment.end.y}"/>`;
+        const line = (segment) => segment.kind === 'ARC'
+          ? `<path d="${segmentPathData(segment)}"/>`
+          : `<line x1="${segment.start.x}" y1="${segment.start.y}" x2="${segment.end.x}" y2="${segment.end.y}"/>`;
         return `<g fill="none" stroke="#111" stroke-width="${strokeWidth}">${segments.cut.map(line).join('')}</g><g fill="none" stroke="#3157d5" stroke-width="${strokeWidth}" stroke-dasharray="2,1.5">${segments.fold.map(line).join('')}</g>`;
       })()
     : '';
@@ -62,7 +67,9 @@ function pathForPolygon(points) {
 }
 
 function lineMarkup(segments) {
-  return segments.map((segment) => `<line x1="${segment.start.x}" y1="${segment.start.y}" x2="${segment.end.x}" y2="${segment.end.y}"/>`).join('');
+  return segments.map((segment) => segment.kind === 'ARC'
+    ? `<path d="${segmentPathData(segment)}"/>`
+    : `<line x1="${segment.start.x}" y1="${segment.start.y}" x2="${segment.end.x}" y2="${segment.end.y}"/>`).join('');
 }
 
 function escapeXml(value) {
@@ -132,6 +139,7 @@ async function createPrepressArtworkMarkup({ artworks, production, rasterize }) 
 
 /** Production-assist SVG with named, independently toggleable proof groups. */
 export async function createPrepressSvg({ boxModel, artworks = [], settings = null, rasterize = rasterizeArtwork }) {
+  if (boxModel?.mode === 'technical') throw new AppError('technicalPrepressUnavailable');
   const production = buildProductionDieline(boxModel, settings);
   if (!production.diagnostics.valid) throw new Error('Prepress geometry is invalid.');
   const { mediaBounds: bounds, settings: prepress } = production;
