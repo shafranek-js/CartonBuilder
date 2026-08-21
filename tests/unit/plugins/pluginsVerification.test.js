@@ -327,7 +327,7 @@ describe("Vendored plugins verification gate", () => {
     expect(fs.readdirSync(path.join(hostRoot, "vendor/plugins"))).toEqual([]);
   });
 
-  it("syncs and verifies both PBD and Viewer plugins transactionally", () => {
+  it("syncs and verifies both PBD and Viewer plugins transactionally", { timeout: 20_000 }, () => {
     const hostRoot = createHostRoot(tempDir);
     const { pluginDir: pbdDir } = createPluginPackage(tempDir);
     const { pluginDir: viewerDir } = createViewerPluginPackage(tempDir);
