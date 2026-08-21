@@ -287,6 +287,14 @@ export class TechnicalCartonDocument extends CartonDocument {
     };
   }
 
+  /**
+   * Return the validated canonical semantic SVG asset without exposing the
+   * document's mutable internal bundle.
+   */
+  getCanonicalSemanticSvg() {
+    return clone(this._bundle.semanticSvg);
+  }
+
   serialize() {
     return {
       mode: 'technical',

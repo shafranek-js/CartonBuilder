@@ -20,7 +20,7 @@ import { getExportWarnings } from '../../src/export/exportChecks.js';
 import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
-import { arcToCubicSegments, getDielineSegments, segmentPathData } from '../../src/model/dieline.js';
+import { arcToCubicSegments, getDielineSegments } from '../../src/model/dieline.js';
 import { runPrepressPreflight } from '../../src/prepress/prepressPreflight.js';
 import { createExportSvg, createPrepressSvg } from '../../src/export/svgExport.js';
 
@@ -168,17 +168,14 @@ describe('artwork export', () => {
     const openCuts = document.getDielinePrimitives().filter((primitive) => primitive.role === 'OPEN_CUT');
 
     const svg = createExportSvg(model);
-    const cutMarkup = svg.match(/<g fill="none" stroke="#111"[^>]*>([\s\S]*?)<\/g>/)?.[1] || '';
-    expect(cutMarkup.match(/<(?:path|line) /g) || []).toHaveLength(dieline.cut.length);
+    const provenance = svg.match(/<metadata id="cartonbuilder-export-provenance"[^>]*>[\s\S]*?<\/metadata>/)?.[0];
+    expect(provenance).toBeTruthy();
+    expect(svg.replace(provenance, '')).toBe(loadTechnicalFixture(name).semanticSvg.markup);
     expect(sourceArcs).toBe(expectedArcCounts[name]);
-    expect((cutMarkup.match(/<path /g) || []).length).toBe(expectedArcCounts[name]);
     expect(openCuts.length).toBeGreaterThan(0);
-    for (const primitive of openCuts) {
-      const expectedMarkup = primitive.kind === 'ARC'
-        ? `<path d="${segmentPathData(primitive)}"/>`
-        : `<line x1="${primitive.start.x}" y1="${primitive.start.y}" x2="${primitive.end.x}" y2="${primitive.end.y}"/>`;
-      expect(cutMarkup).toContain(expectedMarkup);
-    }
+    const openCutFeatures = JSON.parse(loadTechnicalFixture(name).modelJson.text).features
+      .filter((feature) => feature.operation === 'OPEN_CUT');
+    for (const feature of openCutFeatures) expect(svg).toContain(`data-entity-id="${feature.id}"`);
 
     const pdf = await createPdfExport({ boxModel: model, artworks: [artwork] });
     const contents = await readPdfPageContents(new Uint8Array(await pdf.arrayBuffer()));

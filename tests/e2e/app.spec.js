@@ -370,6 +370,49 @@ test('completes the technical workflow for RTE, STE and TT_SL123 and restores te
   expect(pageErrors).toEqual([]);
 });
 
+test('technical SVG export preserves canonical metadata and provenance for RTE, STE and TT_SL123', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.locator('label.workflow-mode-card-technical').click();
+  const frame = page.frameLocator('#technicalHostFrame');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+    { timeout: 20_000 },
+  );
+
+  for (const [index, cartonType] of ['RTE', 'STE', 'TT_SL123'].entries()) {
+    if (index > 0) {
+      await page.locator('.step[data-step-target="box"]').click();
+      await expect(frame.locator('#cartonType')).toBeVisible();
+      await frame.locator('#cartonType').selectOption(cartonType);
+      await expect(page.locator('#technicalHostValidation')).toHaveText(
+        'Structural VALID · Geometry VALID · Contract VALID',
+      );
+    }
+
+    await page.locator('.step[data-step-target="artwork"]').click();
+    await expect(page.locator('#artworkStep')).toBeVisible();
+    await expect(page.locator('.step[data-step-target="preview"]')).toBeDisabled();
+    await expect(page.locator('.step[data-step-target="render"]')).toBeDisabled();
+
+    const downloadPromise = page.waitForEvent('download');
+    await (await openMenuExport(page, '2d', '#menuExportSvgBtn')).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    await expect.poll(async () => readFile(downloadPath, 'utf8'), { timeout: 10_000 })
+      .toContain('<metadata id="cartonbuilder-metadata"');
+    const exported = await readFile(downloadPath, 'utf8');
+    const pbdMetadata = exported.match(/<metadata id="cartonbuilder-metadata"[^>]*>[\s\S]*?<\/metadata>/g) || [];
+    const provenance = exported.match(/<metadata id="cartonbuilder-export-provenance"[^>]*>[\s\S]*?<\/metadata>/g) || [];
+
+    expect(pbdMetadata).toHaveLength(1);
+    expect(provenance).toHaveLength(1);
+    expect(provenance[0]).toContain(`&quot;cartonType&quot;:&quot;${cartonType}&quot;`);
+    expect(exported).toContain('data-export-schema-version="pbd.svg.v4"');
+    expect(exported).toContain('data-semantic-layer="regions"');
+    expect(exported).toContain('data-semantic-layer="folds"');
+  }
+});
+
 for (const cartonType of ['RTE', 'STE']) {
   test(`restores ${cartonType} technical workflow without replacing artwork`, async ({ page }) => {
     test.setTimeout(60_000);

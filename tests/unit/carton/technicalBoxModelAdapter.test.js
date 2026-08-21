@@ -25,6 +25,8 @@ describe('technical artwork compatibility model', () => {
     expect(adapter.getPanels()).toEqual(adapter.getElements());
     expect(adapter.getDielinePrimitives()).toEqual(document.getDielinePrimitives());
     expect(adapter.getBounds()).toEqual(document.getBounds());
+    expect(adapter.getCanonicalSemanticSvg()).toEqual(document.getCanonicalSemanticSvg());
+    expect(adapter.getSourceIdentity()).toEqual(document.getSourceIdentity());
     expect(adapter.toJSON().mode).toBe('technical');
   });
 

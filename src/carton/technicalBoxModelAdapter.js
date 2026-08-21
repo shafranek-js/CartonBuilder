@@ -68,6 +68,8 @@ export function createTechnicalBoxModelAdapter(document) {
     getDielinePrimitives: () => document.getDielinePrimitives(),
     getArtworkSurfaces: () => document.getArtworkSurfaces(),
     getArtworkMaskPaths: () => document.getArtworkMaskPaths(),
+    getCanonicalSemanticSvg: () => document.getCanonicalSemanticSvg(),
+    getSourceIdentity: () => document.getSourceIdentity(),
     toJSON: () => document.serialize(),
     setBoardCaliper: () => false,
     setBoardConstruction: () => false,

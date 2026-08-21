@@ -2,6 +2,7 @@ import { contourPathData, getDielineSegments, getPanelContourSegments, segmentPa
 import { rasterizeArtwork } from '../artwork/artworkRasterizer.js';
 import { buildProductionDieline } from '../prepress/productionDieline.js';
 import { AppError } from '../errors.js';
+import { createTechnicalSvgExport } from './technicalSvgExport.js';
 
 const POINTS_PER_MM = 72 / 25.4;
 
@@ -15,6 +16,12 @@ export function getExportFilename(dimensions) {
 }
 
 export function createExportSvg(model) {
+  if (model?.mode === 'technical'
+    || model?.construction?.templateId === 'technical-pbd'
+    || model?.getCanonicalSemanticSvg?.()) {
+    return createTechnicalSvgExport(model);
+  }
+
   const bounds = model.getBounds();
   const padding = Math.max(5, Math.max(bounds.width, bounds.height) * 0.03);
   const x = bounds.minX - padding;
