@@ -299,6 +299,21 @@ describe("Vendored plugins verification gate", () => {
     expect(
       findForbiddenNetworkReferences('&sol;&sol;evil.example/a.js')
     ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('<script src=//evil.example/a.js></script>')
+    ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('<img src=//evil.example/a.png>')
+    ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('<link href=//evil.example/a.css>')
+    ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('<iframe src=//evil.example/embed></iframe>')
+    ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('<form action=//evil.example/submit></form>')
+    ).toHaveLength(1);
   });
 
   it("rejects an external reference during sync preflight without mutation", () => {

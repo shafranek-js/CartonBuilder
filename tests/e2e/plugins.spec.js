@@ -1,11 +1,15 @@
 import { expect, test } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
 
-test('loads vendored PBD with enforced CSP, error tracking and no external requests', async ({ page, baseURL }) => {
+test('loads vendored PBD with enforced CSP, error tracking and no external requests', async ({
+  page,
+  baseURL,
+}) => {
   const hostOrigin = new URL(baseURL).origin;
   const externalRequests = [];
   const pageErrors = [];
@@ -27,11 +31,16 @@ test('loads vendored PBD with enforced CSP, error tracking and no external reque
     .getAttribute('content');
   expect(csp).toContain("connect-src 'none'");
   expect(csp).toContain("object-src 'none'");
+  expect(csp).toContain("base-uri 'none'");
+  expect(csp).toContain("form-action 'none'");
   expect(externalRequests).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
 
-test('loads vendored Viewer, renders 3D WebGL viewport, and verifies offline CSP', async ({ page, baseURL }) => {
+test('loads vendored Viewer in declared sandboxed iframe, renders 3D WebGL viewport, and verifies offline CSP', async ({
+  page,
+  baseURL,
+}) => {
   const hostOrigin = new URL(baseURL).origin;
   const externalRequests = [];
   const pageErrors = [];
@@ -42,39 +51,55 @@ test('loads vendored Viewer, renders 3D WebGL viewport, and verifies offline CSP
     if (requestUrl.origin !== hostOrigin) externalRequests.push(request.url());
   });
 
-  const response = await page.goto('/plugins/carton-fold-viewer/2.4.0/index.html', {
-    waitUntil: 'networkidle',
-  });
-  expect(response?.ok()).toBe(true);
-  await expect(page.locator('body')).toBeVisible();
+  await page.setContent(`
+    <!doctype html>
+    <html>
+    <head><title>Viewer Sandbox Test Harness</title></head>
+    <body style="margin:0;padding:0;overflow:hidden;">
+      <iframe
+        id="viewerFrame"
+        src="${baseURL}/plugins/carton-fold-viewer/2.4.0/index.html"
+        sandbox="allow-scripts"
+        style="width:100vw;height:100vh;border:none;"
+      ></iframe>
+    </body>
+    </html>
+  `);
+
+  const frame = page.frameLocator('#viewerFrame');
 
   // Verify brand version
-  const brand = await page.locator('.brand').textContent();
-  expect(brand).toContain('v2.4');
+  await expect(frame.locator('.brand')).toContainText('v2.4', { timeout: 10000 });
 
   // Verify WebGL Canvas is initialized
-  await expect(page.locator('#viewport canvas')).toBeVisible();
+  await expect(frame.locator('#viewport canvas')).toBeVisible();
 
-  // Verify CSP
-  const csp = await page
+  // Verify CSP in iframe
+  const csp = await frame
     .locator('meta[http-equiv="Content-Security-Policy"]')
     .getAttribute('content');
   expect(csp).toContain("connect-src 'none'");
+  expect(csp).toContain("object-src 'none'");
+  expect(csp).toContain("base-uri 'none'");
+  expect(csp).toContain("form-action 'none'");
 
   // Verify UI controls and options
-  await expect(page.locator('#fitBtn')).toBeVisible();
-  await expect(page.locator('#displayModeSel')).toBeVisible();
-  await expect(page.locator('#gridChk')).toBeChecked();
+  await expect(frame.locator('#fitBtn')).toBeVisible();
+  await expect(frame.locator('#displayModeSel')).toBeVisible();
+  await expect(frame.locator('#gridChk')).toBeChecked();
 
   // Toggle wireframe and display mode
-  await page.locator('#wireChk').check();
-  expect(await page.locator('#wireChk').isChecked()).toBe(true);
+  await frame.locator('#wireChk').check();
+  expect(await frame.locator('#wireChk').isChecked()).toBe(true);
 
   expect(externalRequests).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
 
-test('converts semantic SVG dieline into animated 3D foldable model in vendored Viewer', async ({ page, baseURL }) => {
+test('converts semantic SVGs (RTE, STE, TT_SL123/A55) into animated 3D foldable models in Viewer sandboxed iframe', async ({
+  page,
+  baseURL,
+}) => {
   const hostOrigin = new URL(baseURL).origin;
   const externalRequests = [];
   const pageErrors = [];
@@ -85,34 +110,86 @@ test('converts semantic SVG dieline into animated 3D foldable model in vendored 
     if (requestUrl.origin !== hostOrigin) externalRequests.push(request.url());
   });
 
-  await page.goto('/plugins/carton-fold-viewer/2.4.0/index.html', {
-    waitUntil: 'networkidle',
-  });
+  await page.setContent(`
+    <!doctype html>
+    <html>
+    <head><title>Viewer Multi-Model Sandbox Test Harness</title></head>
+    <body style="margin:0;padding:0;overflow:hidden;">
+      <iframe
+        id="viewerFrame"
+        src="${baseURL}/plugins/carton-fold-viewer/2.4.0/index.html"
+        sandbox="allow-scripts"
+        style="width:100vw;height:100vh;border:none;"
+      ></iframe>
+    </body>
+    </html>
+  `);
 
-  const sampleSvgPath = path.resolve(
+  const frame = page.frameLocator('#viewerFrame');
+  await expect(frame.locator('#viewport canvas')).toBeVisible({ timeout: 10000 });
+
+  const fixturesDir = path.resolve(
     repoRoot,
-    'vendor/plugins/carton-fold-viewer/2.4.0/assets/samples/carton-rte-reference-v0.10.0.svg'
+    'vendor/plugins/packaging-box-designer/1.2.0/contract/fixtures'
   );
 
-  // Upload semantic SVG
-  const fileInput = page.locator('#fileInput');
-  await fileInput.setInputFiles(sampleSvgPath);
+  const testCases = [
+    {
+      name: 'RTE',
+      file: 'rte-workflow.v1.json',
+      expectedClipPattern: /assembly|simultaneous/i,
+    },
+    {
+      name: 'STE',
+      file: 'ste-workflow.v1.json',
+      expectedClipPattern: /assembly|simultaneous/i,
+    },
+    {
+      name: 'TT_SL123_A55',
+      file: 'tt_sl123-workflow.v1.json',
+      expectedClipPattern: /assembly|simultaneous/i,
+    },
+  ];
 
-  // Verify converted model badge and enablements
-  await expect(page.locator('#modelBadge')).toContainText('pbd.svg.v4', { timeout: 10000 });
-  await expect(page.locator('#saveGlbBtn')).toBeEnabled();
-  await expect(page.locator('#slider')).toBeEnabled();
-  await expect(page.locator('#foldBtn')).toBeEnabled();
-  await expect(page.locator('#unfoldBtn')).toBeEnabled();
+  for (const tc of testCases) {
+    const fixturePath = path.join(fixturesDir, tc.file);
+    const fixtureData = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    const svgMarkup = fixtureData.semanticSvg?.markup;
+    expect(svgMarkup).toBeTruthy();
 
-  // Verify animations populated
-  const clipOptions = await page.locator('#clipSelect option').allTextContents();
-  expect(clipOptions.some((opt) => /assembly|simultaneous/i.test(opt))).toBe(true);
+    const fileInput = frame.locator('#fileInput');
+    await fileInput.setInputFiles({
+      name: `${tc.name}.svg`,
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from(svgMarkup, 'utf8'),
+    });
 
-  // Interact with fold button
-  await page.locator('#foldBtn').click();
-  const pct = await page.locator('#pct').textContent();
-  expect(pct).toBe('100.0%');
+    // Verify converted model badge and enablements
+    await expect(frame.locator('#modelBadge')).toContainText('pbd.svg.v4', { timeout: 10000 });
+    await expect(frame.locator('#saveGlbBtn')).toBeEnabled();
+    await expect(frame.locator('#slider')).toBeEnabled();
+    await expect(frame.locator('#foldBtn')).toBeEnabled();
+    await expect(frame.locator('#unfoldBtn')).toBeEnabled();
+
+    // Verify positive node and mesh counts
+    const nodeCountText = await frame.locator('#nodeInfo').textContent();
+    const meshCountText = await frame.locator('#meshInfo').textContent();
+    expect(parseInt(nodeCountText, 10)).toBeGreaterThan(0);
+    expect(parseInt(meshCountText, 10)).toBeGreaterThan(0);
+
+    // Verify animations populated
+    const clipOptions = await frame.locator('#clipSelect option').allTextContents();
+    expect(clipOptions.length).toBeGreaterThan(0);
+    expect(clipOptions.some((opt) => tc.expectedClipPattern.test(opt))).toBe(true);
+
+    // Interact with fold button
+    await frame.locator('#foldBtn').click();
+    await expect(frame.locator('#pct')).toHaveText('100.0%');
+
+    // Interact with unfold button
+    await frame.locator('#unfoldBtn').click();
+    await expect(frame.locator('#pct')).toHaveText('0.0%');
+  }
 
   expect(externalRequests).toEqual([]);
   expect(pageErrors).toEqual([]);

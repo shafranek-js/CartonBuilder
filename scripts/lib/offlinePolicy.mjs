@@ -18,6 +18,13 @@ function lineNumberAt(text, index) {
   return text.slice(0, index).split("\n").length;
 }
 
+function isAllowedUrl(url) {
+  const clean = url.replace(/[),.;]+$/, "");
+  if (ALLOWED_EXACT_REFERENCE_URLS.includes(clean)) return true;
+  if (ALLOWED_REFERENCE_PREFIXES.some((prefix) => clean.startsWith(prefix))) return true;
+  return false;
+}
+
 export function stripComments(text) {
   let result = "";
   let i = 0;
@@ -29,12 +36,15 @@ export function stripComments(text) {
   let inBlockComment = false;
   let inLineComment = false;
   let inHtmlComment = false;
+  let inHtmlTag = false;
+  let inScriptBlock = false;
+  let inStyleBlock = false;
   let lineStartPos = 0;
 
   while (i < n) {
     if (text[i] === "\n") {
       lineStartPos = i + 1;
-      // Single and double quotes cannot span across unescaped newlines
+      // Single and double quotes cannot span across unescaped newlines in JS
       if (inSingleQuote && (i === 0 || text[i - 1] !== "\\")) inSingleQuote = false;
       if (inDoubleQuote && (i === 0 || text[i - 1] !== "\\")) inDoubleQuote = false;
     }
@@ -131,6 +141,31 @@ export function stripComments(text) {
       continue;
     }
 
+    // Inside HTML tag <tag attr=val ...>
+    if (inHtmlTag) {
+      if (text[i] === "'") {
+        inSingleQuote = true;
+        result += "'";
+        i++;
+        continue;
+      }
+      if (text[i] === '"') {
+        inDoubleQuote = true;
+        result += '"';
+        i++;
+        continue;
+      }
+      if (text[i] === ">") {
+        inHtmlTag = false;
+        result += ">";
+        i++;
+        continue;
+      }
+      result += text[i];
+      i++;
+      continue;
+    }
+
     // Outside quotes and comments:
     if (text.startsWith("<!--", i)) {
       inHtmlComment = true;
@@ -138,15 +173,41 @@ export function stripComments(text) {
       result += "    ";
       continue;
     }
+
+    // Check script/style close tags
+    if (inScriptBlock && text.slice(i, i + 9).toLowerCase() === "</script>") {
+      inScriptBlock = false;
+      result += text.slice(i, i + 9);
+      i += 9;
+      continue;
+    }
+    if (inStyleBlock && text.slice(i, i + 8).toLowerCase() === "</style>") {
+      inStyleBlock = false;
+      result += text.slice(i, i + 8);
+      i += 8;
+      continue;
+    }
+
+    // Check HTML open tag
+    if (text[i] === "<" && i + 1 < n && /[a-zA-Z!/]/.test(text[i + 1])) {
+      if (text.slice(i, i + 7).toLowerCase() === "<script") inScriptBlock = true;
+      else if (text.slice(i, i + 6).toLowerCase() === "<style") inStyleBlock = true;
+      inHtmlTag = true;
+      result += "<";
+      i++;
+      continue;
+    }
+
     if (text.startsWith("/*", i)) {
       inBlockComment = true;
       i += 2;
       result += "  ";
       continue;
     }
+
     if (text.startsWith("//", i)) {
       const linePrefix = text.slice(lineStartPos, i);
-      if (linePrefix.endsWith(":") || /url\s*\(\s*$/i.test(linePrefix)) {
+      if (linePrefix.endsWith(":") || /url\s*\(\s*$/i.test(linePrefix) || /=\s*$/.test(linePrefix)) {
         result += text[i];
         i++;
         continue;
@@ -156,6 +217,7 @@ export function stripComments(text) {
       result += "  ";
       continue;
     }
+
     if (text[i] === "'") {
       inSingleQuote = true;
       result += "'";
@@ -195,10 +257,7 @@ export function findForbiddenNetworkReferences(text) {
   for (const pattern of patterns) {
     for (const match of normalized.matchAll(pattern)) {
       const reference = match[0].replace(/[),.;]+$/, "");
-      if (
-        ALLOWED_EXACT_REFERENCE_URLS.includes(reference) ||
-        ALLOWED_REFERENCE_PREFIXES.some((allowed) => reference.startsWith(allowed))
-      ) {
+      if (isAllowedUrl(reference)) {
         continue;
       }
       matches.push({ reference, line: lineNumberAt(original, match.index ?? 0) });
