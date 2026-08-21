@@ -2,13 +2,10 @@
   "name": "@cartonbuilder/fold-runtime",
   "version": "2.4.0",
   "type": "module",
-  "main": "index.js",
-  "module": "index.mjs",
+  "main": "./index.js",
+  "module": "./index.js",
   "exports": {
-    ".": {
-      "import": "./index.mjs",
-      "require": "./index.js"
-    }
+    ".": "./index.js"
   },
   "peerDependencies": {
     "three": ">=0.185.0"

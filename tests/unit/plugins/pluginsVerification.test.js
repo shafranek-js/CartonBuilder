@@ -133,7 +133,7 @@ function createViewerPluginPackage(tempDir, { version = "2.4.0", htmlSuffix = ""
       artwork2d: false,
       flatExport: false,
       foldPreview: true,
-      technicalRender: true,
+      technicalRender: false,
     },
     referenceOnly: true,
     productionCertified: false,
@@ -164,11 +164,152 @@ describe("Vendored plugins verification gate", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("verifies the committed repository plugins catalog cleanly", () => {
+  it("verifies the live vendored plugins catalog", () => {
     const result = verifyVendoredPlugins({ logger: silentLogger });
     expect(result.valid).toBe(true);
     expect(result.issues).toEqual([]);
     expect(result.catalog.plugins.length).toBe(2);
+  });
+
+  it("rejects plugin version traversal before any destination mutation", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const outside = path.join(tempDir, "outside");
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, "sentinel.txt"), "untouched", "utf8");
+
+    const { pluginDir } = createPluginPackage(tempDir, { version: "../../outside" });
+    expect(() => syncPbdPlugin(pluginDir, { rootDir: hostRoot })).toThrow(
+      /Standalone plugin manifest validation failed/
+    );
+    expect(fs.readFileSync(path.join(outside, "sentinel.txt"), "utf8")).toBe("untouched");
+    expect(fs.readdirSync(path.join(hostRoot, "vendor/plugins"))).toEqual([]);
+    expect(fs.readFileSync(path.join(hostRoot, "src/workflow/original.txt"), "utf8")).toBe(
+      "original workflow"
+    );
+  });
+
+  it("rolls back plugin, workflow and catalog when the final activation fails", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir } = createPluginPackage(tempDir);
+    const originalRename = fs.renameSync.bind(fs);
+    let renameCalls = 0;
+    vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      renameCalls++;
+      if (String(target).endsWith("plugins.manifest.json")) {
+        throw new Error("simulated catalog activation failure");
+      }
+      return originalRename(source, target);
+    });
+
+    expect(() => syncPbdPlugin(pluginDir, { rootDir: hostRoot })).toThrow(
+      /simulated catalog activation failure/
+    );
+    expect(
+      fs.existsSync(
+        path.join(hostRoot, "vendor/plugins/packaging-box-designer/1.2.0")
+      )
+    ).toBe(false);
+    expect(fs.existsSync(path.join(hostRoot, "vendor/plugins/plugins.manifest.json"))).toBe(false);
+    expect(fs.readFileSync(path.join(hostRoot, "src/workflow/original.txt"), "utf8")).toBe(
+      "original workflow"
+    );
+    expect(renameCalls).toBeGreaterThan(3);
+  });
+
+  it("detects a modified standalone manifest even when plugin files are unchanged", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir } = createPluginPackage(tempDir);
+    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
+    const vendoredManifest = path.join(
+      hostRoot,
+      "vendor/plugins/packaging-box-designer/1.2.0/plugin-manifest.json"
+    );
+    const manifest = JSON.parse(fs.readFileSync(vendoredManifest, "utf8"));
+    manifest.description = "tampered";
+    writeJson(vendoredManifest, manifest);
+
+    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
+    expect(result.valid).toBe(false);
+    expect(result.issues.join("\n")).toMatch(/Catalog entry does not match/);
+  });
+
+  it("detects artifact-to-entrypoint disagreement in the catalog", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir } = createPluginPackage(tempDir);
+    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
+    const catalogPath = path.join(hostRoot, "vendor/plugins/plugins.manifest.json");
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+    catalog.plugins[0].plugin.artifact.sha256 = "f".repeat(64);
+    writeJson(catalogPath, catalog);
+
+    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
+    expect(result.valid).toBe(false);
+    expect(result.issues.join("\n")).toMatch(/Catalog entry does not match/);
+  });
+
+  it("rejects duplicate plugin identities in the catalog", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir } = createPluginPackage(tempDir);
+    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
+    const catalogPath = path.join(hostRoot, "vendor/plugins/plugins.manifest.json");
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+    catalog.plugins.push(structuredClone(catalog.plugins[0]));
+    writeJson(catalogPath, catalog);
+
+    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
+    expect(result.valid).toBe(false);
+    expect(result.issues.join("\n")).toMatch(/Duplicate plugin identity/);
+  });
+
+  it("rejects unauthorized files in the vendor plugins root", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir } = createPluginPackage(tempDir);
+    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
+    fs.writeFileSync(path.join(hostRoot, "vendor/plugins/unauthorized.txt"), "bad", "utf8");
+
+    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
+    expect(result.valid).toBe(false);
+    expect(result.issues.join("\n")).toMatch(/Unauthorized file/);
+  });
+
+  it("rejects a namespace-line bypass and other external URL forms", () => {
+    const findings = findForbiddenNetworkReferences(
+      '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil.example/a.png"/></svg>\n' +
+        "const ws = 'wss://evil.example/socket';\n" +
+        "<script src='//evil.example/a.js'></script>\n" +
+        "const url = \"//evil.example/data\";\n" +
+        "body { background: url(//evil.example/bg.png); }"
+    );
+    expect(findings.map((finding) => finding.reference)).toEqual([
+      "https://evil.example/a.png",
+      "wss://evil.example/socket",
+      "//evil.example/a.js",
+      "//evil.example/data",
+      "//evil.example/bg.png",
+    ]);
+    expect(
+      findForbiddenNetworkReferences('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    ).toEqual([]);
+    expect(
+      findForbiddenNetworkReferences('http://www.w3.org/2000/svg.evil.example/a.js')
+    ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('https&colon;&sol;&sol;evil.example/a.js')
+    ).toHaveLength(1);
+    expect(
+      findForbiddenNetworkReferences('&sol;&sol;evil.example/a.js')
+    ).toHaveLength(1);
+  });
+
+  it("rejects an external reference during sync preflight without mutation", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir } = createPluginPackage(tempDir, {
+      htmlSuffix: '<img src="https://evil.example/pixel.png">',
+    });
+    expect(() => syncPbdPlugin(pluginDir, { rootDir: hostRoot })).toThrow(
+      /Forbidden external network reference/
+    );
+    expect(fs.readdirSync(path.join(hostRoot, "vendor/plugins"))).toEqual([]);
   });
 
   it("syncs and verifies both PBD and Viewer plugins transactionally", () => {
@@ -186,21 +327,36 @@ describe("Vendored plugins verification gate", () => {
     expect(result.catalog.plugins.map((p) => p.plugin.id)).toEqual(["carton-fold-viewer", "packaging-box-designer"]);
   });
 
-  it("detects forbidden network references while ignoring comments", () => {
-    const cleanWithComments = `
-      // https://github.com/mrdoob/three.js/issues/123
-      /* https://developer.mozilla.org/en-US/docs/Web/API */
-      //uniforms.envMap.value
-      const x = 42;
-    `;
-    expect(findForbiddenNetworkReferences(cleanWithComments)).toEqual([]);
+  it("detects a modified standalone manifest in Viewer plugin", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir: viewerDir } = createViewerPluginPackage(tempDir);
+    syncViewerPlugin(viewerDir, { rootDir: hostRoot });
+    const vendoredManifest = path.join(
+      hostRoot,
+      "vendor/plugins/carton-fold-viewer/2.4.0/plugin-manifest.json"
+    );
+    const manifest = JSON.parse(fs.readFileSync(vendoredManifest, "utf8"));
+    manifest.description = "tampered-viewer";
+    writeJson(vendoredManifest, manifest);
 
-    const realNetworkCall = `
-      fetch("https://evil.example.com/api");
-    `;
-    const issues = findForbiddenNetworkReferences(realNetworkCall);
-    expect(issues.length).toBe(1);
-    expect(issues[0].reference).toBe("https://evil.example.com/api");
+    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
+    expect(result.valid).toBe(false);
+    expect(result.issues.join("\n")).toMatch(/Catalog entry does not match/);
+  });
+
+  it("rejects Viewer plugin version traversal and invalid id", () => {
+    const hostRoot = createHostRoot(tempDir);
+    const { pluginDir: badVersionDir } = createViewerPluginPackage(tempDir, { version: "../../bad" });
+    expect(() => syncViewerPlugin(badVersionDir, { rootDir: hostRoot })).toThrow(
+      /Standalone plugin manifest validation failed/
+    );
+
+    const { pluginDir: badIdDir, manifest } = createViewerPluginPackage(tempDir, { version: "2.4.0" });
+    manifest.id = "malicious-plugin";
+    writeJson(path.join(badIdDir, "plugin-manifest.json"), manifest);
+    expect(() => syncViewerPlugin(badIdDir, { rootDir: hostRoot })).toThrow(
+      /Invalid plugin ID: expected "carton-fold-viewer"/
+    );
   });
 
   it("strictly validates isPathSafe", () => {

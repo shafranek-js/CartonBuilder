@@ -5,10 +5,10 @@
   "name": "CartonFoldViewer",
   "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
   "entrypoint": "index.html",
-  "sourceCommit": "c3278c4bbf608ad0fea1cef83031c0247dffb004",
+  "sourceCommit": "934bd1cc50436a47b6c9317ae5ee696b2edc99f7",
   "artifact": {
     "byteLength": 2697,
-    "sha256": "7fbc5ddfd3cc2ce3c72c4230987acfa895648b6ad66b1f5ac1a24cd50e192aae"
+    "sha256": "663df6339abd1790bc6d9ebd882c19f9418a30472bfe119b05cfee2cc42cdea0"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -19,7 +19,7 @@
     "artwork2d": false,
     "flatExport": false,
     "foldPreview": true,
-    "technicalRender": true
+    "technicalRender": false
   },
   "referenceOnly": true,
   "productionCertified": false,
@@ -67,6 +67,11 @@
       "sha256": "b1632a703206c3d830de9fcbe515696770d04b71a15ee6b50afa6d2c3298c86f"
     },
     {
+      "path": "assets/vendor/three/three.core.js",
+      "byteLength": 1443055,
+      "sha256": "3d5482da923a4db73811dacecc779ea6b8c5ff19470feb886e3582d853d7b003"
+    },
+    {
       "path": "assets/vendor/three/three.module.js",
       "byteLength": 650153,
       "sha256": "bbf5ed13fe4373f5bd38b14ea8e62e9f157327da5638edc6d3863e08b167c9c7"
@@ -74,7 +79,7 @@
     {
       "path": "index.html",
       "byteLength": 2697,
-      "sha256": "7fbc5ddfd3cc2ce3c72c4230987acfa895648b6ad66b1f5ac1a24cd50e192aae"
+      "sha256": "663df6339abd1790bc6d9ebd882c19f9418a30472bfe119b05cfee2cc42cdea0"
     },
     {
       "path": "runtime/animation/fold-animations.js",
@@ -112,24 +117,19 @@
       "sha256": "c56dc47c296e9865cb44445f71be3f493ab6516b706a4b7656ef7a5fdeb3668c"
     },
     {
-      "path": "runtime/index.mjs",
-      "byteLength": 516,
-      "sha256": "c56dc47c296e9865cb44445f71be3f493ab6516b706a4b7656ef7a5fdeb3668c"
-    },
-    {
       "path": "runtime/model/model-builder.js",
       "byteLength": 2708,
       "sha256": "143bf818d1d47f7726be08d55866697a88d7f24d4e3248003f8b07e55dfb6c0a"
     },
     {
       "path": "runtime/package-manifest.json",
-      "byteLength": 2237,
-      "sha256": "e0336b71101c791a9b8c46957ef6ddae5d43df9deca8e1b129ab491d3d3d01aa"
+      "byteLength": 2089,
+      "sha256": "dda0734b6d595ba7b4463d096476d0a69b6f739bf4fe36383e514db2e2b9793d"
     },
     {
       "path": "runtime/package.json",
-      "byteLength": 285,
-      "sha256": "7be086ca9dfc7380530816e0b5a191f62e8c2c51c58dbfe4166a709fc3821d57"
+      "byteLength": 232,
+      "sha256": "8e2a26247c9d2f9620dc9f0ae51be411b391f899472e2cc1a49b8f392b0930f9"
     },
     {
       "path": "runtime/pbd/path-parser.js",
