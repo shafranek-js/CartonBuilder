@@ -78,6 +78,91 @@ async function loadGeneratedPng(page, fileName = 'sample-artwork.png') {
   await expect(page.locator('#processingOverlay')).toBeHidden();
 }
 
+async function loadRenderBackground(page, fileName = 'checkpoint-background.png') {
+  const bytes = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 8;
+    canvas.height = 8;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#2b5cff';
+    context.fillRect(0, 0, 8, 8);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  await page.locator('#renderBackgroundFile').setInputFiles({
+    name: fileName,
+    mimeType: 'image/png',
+    buffer: Buffer.from(bytes),
+  });
+  await expect(page.locator('#renderBackgroundFileName')).toHaveText(fileName);
+}
+
+async function captureCheckpointFingerprint(page) {
+  return page.evaluate(async () => {
+    const digestBlob = async (blob) => {
+      if (!(blob instanceof Blob)) return null;
+      const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+      return {
+        size: blob.size,
+        type: blob.type,
+        sha256: [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+      };
+    };
+    const payload = await window.cartonBuilderApp.artwork.createProjectCheckpoint();
+    const snapshot = structuredClone(payload.snapshot);
+    if (snapshot.meta) snapshot.meta.updatedAt = '<normalized>';
+    return {
+      snapshot,
+      artworkBlobs: await Promise.all(payload.artworkBlobs.map(async (entry) => ({
+        originalBlob: await digestBlob(entry.originalBlob),
+        previewBlob: await digestBlob(entry.previewBlob),
+      }))),
+      renderAssets: await Promise.all(payload.renderAssets.map(async ({ blob, ...metadata }) => ({
+        metadata,
+        blob: await digestBlob(blob),
+      }))),
+      technicalAssets: payload.technicalAssets ? {
+        modelBlob: await digestBlob(payload.technicalAssets.modelBlob),
+        svgBlob: await digestBlob(payload.technicalAssets.svgBlob),
+      } : null,
+    };
+  });
+}
+
+async function captureLiveFingerprint(page) {
+  return page.evaluate(async () => {
+    const digestBlob = async (blob) => {
+      if (!(blob instanceof Blob)) return null;
+      const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    };
+    const snapshot = window.cartonBuilderApp.getState();
+    if (snapshot.meta) snapshot.meta.updatedAt = '<normalized>';
+    return {
+      snapshot,
+      originalSha256: await digestBlob(window.cartonBuilderApp.artwork.originalBlob),
+      previewSha256: await digestBlob(window.cartonBuilderApp.artwork.previewBlob),
+      renderAssets: await Promise.all(window.cartonBuilderApp.render.getRenderAssets().map(async ({ blob, ...metadata }) => ({
+        metadata,
+        sha256: await digestBlob(blob),
+      }))),
+    };
+  });
+}
+
+async function createTechnicalArtworkProject(page, artworkName = 'technical-checkpoint.png') {
+  await page.locator('label.workflow-mode-card-technical').click();
+  const frame = page.frameLocator('#technicalHostFrame');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+    { timeout: 20_000 },
+  );
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await loadGeneratedPng(page, artworkName);
+  return frame;
+}
+
 async function assertTechnicalRestoreRoundTrip(page, cartonType) {
   await page.locator('label.workflow-mode-card-technical').click();
   const frame = page.frameLocator('#technicalHostFrame');
@@ -335,23 +420,7 @@ test('restores a complete project checkpoint including artwork and Render assets
   test.setTimeout(60_000);
   await openArtworkStep(page);
   await loadGeneratedPng(page, 'checkpoint-artwork.png');
-
-  const backgroundBytes = await page.evaluate(async () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 8;
-    canvas.height = 8;
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#2b5cff';
-    context.fillRect(0, 0, 8, 8);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    return [...new Uint8Array(await blob.arrayBuffer())];
-  });
-  await page.locator('#renderBackgroundFile').setInputFiles({
-    name: 'checkpoint-background.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(backgroundBytes),
-  });
-  await expect(page.locator('#renderBackgroundFileName')).toHaveText('checkpoint-background.png');
+  await loadRenderBackground(page);
 
   const before = await page.evaluate(async () => {
     const digest = async (blob) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))]
@@ -391,9 +460,12 @@ test('restores a complete project checkpoint including artwork and Render assets
       boardAppearance: { ...app.render.getBoardAppearance(), thicknessMm: 1.4 },
     });
   });
+  await page.evaluate(() => window.cartonBuilderApp.showStep('box'));
+  await expect(page.locator('#boxStep')).toBeVisible();
   await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
 
   await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.restoreProjectCheckpoint())).toBe(true);
+  await expect(page.locator('#artworkStep')).toBeVisible();
   await expect(page.locator('#artworkFileName')).toHaveText('checkpoint-artwork.png');
 
   const after = await page.evaluate(async () => {
@@ -415,56 +487,143 @@ test('restores a complete project checkpoint including artwork and Render assets
   expect(after).toEqual(before);
 });
 
-test('rolls back the live technical document when replacement mutation fails', async ({ page }) => {
+test('restores a Quick checkpoint after switching to Technical workflow', async ({ page }) => {
   test.setTimeout(60_000);
-  await page.locator('label.workflow-mode-card-technical').click();
-  const frame = page.frameLocator('#technicalHostFrame');
-  await expect(page.locator('#technicalHostValidation')).toHaveText(
-    'Structural VALID · Geometry VALID · Contract VALID',
-    { timeout: 20_000 },
-  );
-  await page.locator('.step[data-step-target="artwork"]').click();
-  await expect(page.locator('#artworkStep')).toBeVisible();
-  await loadGeneratedPng(page, 'rollback-artwork.png');
-
-  const before = await page.evaluate(() => {
-    const state = window.cartonBuilderApp.getState();
-    return {
-      cartonType: state.cartonSource?.source?.cartonType,
-      modelSha256: state.cartonSource?.modelSha256,
-      svgSha256: state.cartonSource?.svgSha256,
-      artworkFileName: state.artworks[0]?.artwork?.source?.fileName,
-    };
-  });
-  expect(before.cartonType).toBe('RTE');
-
+  await openArtworkStep(page);
+  await loadGeneratedPng(page, 'quick-checkpoint.png');
   await page.locator('.step[data-step-target="box"]').click();
+  await page.evaluate(() => window.cartonBuilderApp.artwork.createProjectCheckpoint());
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('label.workflow-mode-card-technical').click();
+  await expect(page.locator('input[name="cartonWorkflowMode"][value="technical"]')).toBeChecked();
+  await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
+
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.restoreProjectCheckpoint())).toBe(true);
+  await expect(page.locator('input[name="cartonWorkflowMode"][value="quick"]')).toBeChecked();
   await expect(page.locator('#boxStep')).toBeVisible();
+  await expect(page.locator('#artworkFileName')).toHaveText('quick-checkpoint.png');
+  expect(await page.evaluate(() => window.cartonBuilderApp.getState().cartonSource?.mode)).toBe('quick');
+});
+
+test('restores Technical A after a successful replacement with Technical B', async ({ page }) => {
+  test.setTimeout(60_000);
+  const frame = await createTechnicalArtworkProject(page, 'technical-a.png');
+  await page.locator('.step[data-step-target="box"]').click();
   await frame.locator('#cartonType').selectOption('STE');
   await expect(page.locator('#technicalHostValidation')).toHaveText(
     'Structural VALID · Geometry VALID · Contract VALID',
   );
+  const before = await captureCheckpointFingerprint(page);
 
-  await page.evaluate(() => {
-    window.cartonBuilderApp.artwork.clearArtworkForCartonChange = () => {
-      throw new Error('TEST_INJECTED_REPLACEMENT_FAILURE');
-    };
-  });
   page.once('dialog', (dialog) => dialog.accept());
   await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
+  expect(await page.evaluate(() => window.cartonBuilderApp.getState().cartonSource?.source?.cartonType)).toBe('STE');
 
-  await expect.poll(() => page.evaluate(() => {
-    const state = window.cartonBuilderApp.getState();
-    return {
-      cartonType: state.cartonSource?.source?.cartonType,
-      modelSha256: state.cartonSource?.modelSha256,
-      svgSha256: state.cartonSource?.svgSha256,
-      artworkFileName: state.artworks[0]?.artwork?.source?.fileName,
-    };
-  })).toEqual(before);
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.restoreProjectCheckpoint())).toBe(true);
   await expect(frame.locator('#cartonType')).toHaveValue('RTE', { timeout: 20_000 });
-  await expect(page.locator('#artworkFileName')).toHaveText('rollback-artwork.png');
+  await expect(page.locator('#artworkFileName')).toHaveText('technical-a.png');
+  expect(await captureCheckpointFingerprint(page)).toEqual(before);
 });
+
+test('keeps the existing checkpoint unchanged when technical replacement is cancelled', async ({ page }) => {
+  test.setTimeout(60_000);
+  const frame = await createTechnicalArtworkProject(page, 'cancel-checkpoint.png');
+  const checkpointX = await page.evaluate(async () => {
+    const app = window.cartonBuilderApp;
+    await app.artwork.createProjectCheckpoint();
+    return app.artwork.artwork.centerXmm;
+  });
+  await page.evaluate(() => {
+    window.cartonBuilderApp.artwork.artwork.moveBy(17, 0);
+    window.cartonBuilderApp.artwork.render();
+  });
+  await page.locator('.step[data-step-target="box"]').click();
+  await frame.locator('#cartonType').selectOption('STE');
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#boxStep')).toBeVisible();
+
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.restoreProjectCheckpoint())).toBe(true);
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await expect(frame.locator('#cartonType')).toHaveValue('RTE', { timeout: 20_000 });
+  expect(await page.evaluate(() => window.cartonBuilderApp.artwork.artwork.centerXmm)).toBe(checkpointX);
+});
+
+test('rejects an invalid checkpoint before changing live project state', async ({ page }) => {
+  await openArtworkStep(page);
+  await loadGeneratedPng(page, 'validation-checkpoint.png');
+  await page.evaluate(() => window.cartonBuilderApp.artwork.createProjectCheckpoint());
+  await page.evaluate(() => {
+    window.cartonBuilderApp.artwork.artwork.moveBy(9, 4);
+    window.cartonBuilderApp.artwork.render();
+  });
+  const before = await captureLiveFingerprint(page);
+  const result = await page.evaluate(async () => {
+    try {
+      await window.cartonBuilderApp.artwork.restoreProjectCheckpoint({
+        verifyCheckpoint: async () => { throw new Error('TEST_INVALID_CHECKPOINT'); },
+      });
+      return 'resolved';
+    } catch (error) {
+      return error.message;
+    }
+  });
+  expect(result).toBe('TEST_INVALID_CHECKPOINT');
+  expect(await captureLiveFingerprint(page)).toEqual(before);
+});
+
+for (const phase of [
+  'clear-artwork',
+  'activate-model',
+  'update-technical-assets',
+  'reset-preview',
+  'reset-render',
+  'final-save',
+]) {
+  test(`rolls back snapshot, blobs and Render assets after ${phase} failure`, async ({ page }) => {
+    test.setTimeout(60_000);
+    const frame = await createTechnicalArtworkProject(page, `rollback-${phase}.png`);
+    await loadRenderBackground(page, `rollback-${phase}-background.png`);
+    await page.evaluate(() => {
+      const app = window.cartonBuilderApp;
+      const renderState = app.render.getState();
+      renderState.background.mode = 'image';
+      renderState.background.image.fit = 'contain';
+      renderState.background.image.positionX = 0.27;
+      renderState.background.image.positionY = 0.68;
+      app.render.applySettings({
+        renderSettings: renderState,
+        boardAppearance: { ...app.render.getBoardAppearance(), thicknessMm: 0.81 },
+      });
+    });
+    await page.locator('.step[data-step-target="box"]').click();
+    await frame.locator('#cartonType').selectOption('STE');
+    await expect(page.locator('#technicalHostValidation')).toHaveText(
+      'Structural VALID · Geometry VALID · Contract VALID',
+    );
+    const before = await captureCheckpointFingerprint(page);
+
+    await page.evaluate((faultPhase) => {
+      const app = window.cartonBuilderApp;
+      if (faultPhase === 'final-save') {
+        app.artwork.commitProjectSave = async () => { throw new Error('TEST_FINAL_SAVE_FAILURE'); };
+      } else {
+        app.testHooks.setTechnicalReplacementFaultInjector((currentPhase) => {
+          if (currentPhase === faultPhase) throw new Error(`TEST_${faultPhase.toUpperCase()}_FAILURE`);
+        });
+      }
+    }, phase);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('.step[data-step-target="artwork"]').click();
+    await expect(page.locator('#boxStep')).toBeVisible();
+    await expect(frame.locator('#cartonType')).toHaveValue('RTE', { timeout: 20_000 });
+    await expect(page.locator('#artworkFileName')).toHaveText(`rollback-${phase}.png`);
+    expect(await captureCheckpointFingerprint(page)).toEqual(before);
+  });
+}
 
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
   test.setTimeout(90_000);

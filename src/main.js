@@ -393,9 +393,20 @@ function setActiveCartonModel(nextModel, nextDocument = null) {
   activeCartonModel = nextModel || model;
   technicalDocument = nextDocument;
   cartonModelBridge.mode = workflowMode;
+  const caliperMm = Number(activeCartonModel.board?.caliperMm);
+  if (Number.isFinite(caliperMm)) {
+    renderApp?.setBoardCaliper?.(caliperMm, { notify: false });
+    preview3dFacade?.setBoardCaliper?.(caliperMm);
+  }
 }
 
 let pbdHost;
+let technicalReplacementFaultInjector = null;
+
+async function runTechnicalReplacementPhase(phase, operation) {
+  await technicalReplacementFaultInjector?.(phase);
+  return operation();
+}
 
 function updateTechnicalHostStatus(message, level = '') {
   if (!technicalHostStatus) return;
@@ -521,16 +532,27 @@ async function acceptTechnicalCarton() {
 
     try {
       if (technicalDocument && artworkApp?.artwork?.hasArtwork) {
-        artworkApp.clearArtworkForCartonChange?.();
+        await runTechnicalReplacementPhase('clear-artwork', () => {
+          artworkApp.clearArtworkForCartonChange?.();
+        });
       }
-      setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
-      technicalAssets = technicalAssetBlobs(nextDocument);
-      preview3dFacade?.resetForProject?.();
-      renderApp?.resetForProject?.();
+      await runTechnicalReplacementPhase('activate-model', () => {
+        setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
+      });
+      await runTechnicalReplacementPhase('update-technical-assets', () => {
+        technicalAssets = technicalAssetBlobs(nextDocument);
+      });
+      await runTechnicalReplacementPhase('reset-preview', () => {
+        preview3dFacade?.resetForProject?.();
+      });
+      await runTechnicalReplacementPhase('reset-render', () => {
+        renderApp?.resetForProject?.();
+      });
+      await runTechnicalReplacementPhase('final-save', () => artworkApp.commitProjectSave('artwork'));
     } catch (error) {
       if (checkpointCreated) {
         try {
-          await artworkApp?.restoreProjectCheckpoint?.();
+          await artworkApp?.restoreProjectCheckpoint?.({ schedule: false });
         } catch (rollbackError) {
           error.rollbackError = rollbackError;
         }
@@ -540,7 +562,6 @@ async function acceptTechnicalCarton() {
     updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
     updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
     updateStepNavigationStates();
-    artworkApp?.scheduleSave?.();
     return true;
   } catch (error) {
     updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
@@ -550,14 +571,6 @@ async function acceptTechnicalCarton() {
 
 async function transitionToStep(step) {
   if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
-  if (step === 'box' && workflowMode === 'technical' && technicalDocument) {
-    try {
-      await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-editor-open' });
-    } catch (error) {
-      updateTechnicalHostStatus(error?.message || t('technicalPluginError'), 'error');
-      return false;
-    }
-  }
   if (step === 'artwork' && workflowMode === 'technical' && !(await acceptTechnicalCarton())) return false;
   showStep(step);
   return true;
@@ -801,6 +814,11 @@ window.cartonBuilderApp = {
   artwork: artworkApp,
   preview3d: preview3dFacade,
   render: renderApp,
+  testHooks: {
+    setTechnicalReplacementFaultInjector(injector = null) {
+      technicalReplacementFaultInjector = typeof injector === 'function' ? injector : null;
+    },
+  },
 };
 
 async function handleWorkflowModeChange(input) {

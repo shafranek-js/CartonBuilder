@@ -759,12 +759,15 @@ export function createArtworkApp({
     });
   }
 
-  async function restoreProjectCheckpoint() {
-    const payload = await projectCheckpoint.restoreProjectCheckpoint({ verify: verifyCheckpointPayload });
+  async function restoreProjectCheckpoint({
+    verifyCheckpoint = verifyCheckpointPayload,
+    schedule = true,
+  } = {}) {
+    const payload = await projectCheckpoint.restoreProjectCheckpoint({ verify: verifyCheckpoint });
     if (!payload) return false;
     await restoreProject(payload, { schedule: false });
     await onProjectLoaded(payload.snapshot, payload);
-    scheduleSave();
+    if (schedule) scheduleSave();
     return true;
   }
 
@@ -814,6 +817,11 @@ export function createArtworkApp({
   function persistWorkflowStep(workflowStep = persistedWorkflowStep()) {
     windowRef.clearTimeout(saveTimer);
     return enqueueSave(workflowStep).catch(() => false);
+  }
+
+  function commitProjectSave(workflowStep = persistedWorkflowStep()) {
+    windowRef.clearTimeout(saveTimer);
+    return enqueueSave(workflowStep);
   }
 
   async function flushPendingSave() {
@@ -4155,6 +4163,7 @@ export function createArtworkApp({
     hasProjectCheckpoint: () => projectCheckpoint.hasProjectCheckpoint(),
     saveProjectArchive,
     persistWorkflowStep,
+    commitProjectSave,
     scheduleSave,
     notifyRenderStateChanged: () => onRenderStateChanged(),
     flushPendingSave,
