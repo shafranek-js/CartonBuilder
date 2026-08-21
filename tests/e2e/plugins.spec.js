@@ -42,4 +42,3 @@ test('loads vendored Viewer with enforced CSP and no external requests', async (
   expect(csp).toContain("connect-src 'none'");
   expect(externalRequests).toEqual([]);
 });
-

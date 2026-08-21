@@ -5,7 +5,7 @@
   "name": "CartonFoldViewer",
   "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
   "entrypoint": "index.html",
-  "sourceCommit": "6df8f5d13f904c586856d7c80d50f934ff18b5a8",
+  "sourceCommit": "c3278c4bbf608ad0fea1cef83031c0247dffb004",
   "artifact": {
     "byteLength": 2697,
     "sha256": "7fbc5ddfd3cc2ce3c72c4230987acfa895648b6ad66b1f5ac1a24cd50e192aae"
@@ -83,8 +83,8 @@
     },
     {
       "path": "runtime/animation/motion-models/tuck-standard.js",
-      "byteLength": 2445,
-      "sha256": "9e8f5b163511c8060e1778710628a81b4ced505c726d86016e24e8289b294f04"
+      "byteLength": 2436,
+      "sha256": "a7aee9c0ff777b621cd3e647acdfd4fefbf6418c79ce40b84f9f024b339e5bf8"
     },
     {
       "path": "runtime/FoldRuntime.js",
@@ -124,7 +124,7 @@
     {
       "path": "runtime/package-manifest.json",
       "byteLength": 2237,
-      "sha256": "4cb8cfd2bed0a43da451dc37861c9c0d06600daf004b6af1d052d2e2d24a2b9c"
+      "sha256": "e0336b71101c791a9b8c46957ef6ddae5d43df9deca8e1b129ab491d3d3d01aa"
     },
     {
       "path": "runtime/package.json",
@@ -153,8 +153,8 @@
     },
     {
       "path": "src/animation/motion-models/tuck-standard.js",
-      "byteLength": 2445,
-      "sha256": "9e8f5b163511c8060e1778710628a81b4ced505c726d86016e24e8289b294f04"
+      "byteLength": 2436,
+      "sha256": "a7aee9c0ff777b621cd3e647acdfd4fefbf6418c79ce40b84f9f024b339e5bf8"
     },
     {
       "path": "src/config.js",

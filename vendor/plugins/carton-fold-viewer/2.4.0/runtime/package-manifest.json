@@ -1,7 +1,7 @@
 {
   "packageName": "@cartonbuilder/fold-runtime",
   "packageVersion": "2.4.0",
-  "viewerCommit": "6df8f5d13f904c586856d7c80d50f934ff18b5a8",
+  "viewerCommit": "c3278c4bbf608ad0fea1cef83031c0247dffb004",
   "files": [
     {
       "path": "animation/fold-animations.js",
@@ -10,8 +10,8 @@
     },
     {
       "path": "animation/motion-models/tuck-standard.js",
-      "byteLength": 2445,
-      "sha256": "9e8f5b163511c8060e1778710628a81b4ced505c726d86016e24e8289b294f04"
+      "byteLength": 2436,
+      "sha256": "a7aee9c0ff777b621cd3e647acdfd4fefbf6418c79ce40b84f9f024b339e5bf8"
     },
     {
       "path": "FoldRuntime.js",

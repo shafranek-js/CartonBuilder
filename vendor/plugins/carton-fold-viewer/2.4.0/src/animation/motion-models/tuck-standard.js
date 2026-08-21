@@ -1,6 +1,6 @@
 /**
  * Authoritative Single Source of Truth for TUCK_STANDARD Motion Model
- * 
+ *
  * Defines the calibrated kinematic trajectory for standard tuck-in closure flaps.
  * Evaluator is used by fold animation synthesizer, GLB exporter, and regression test suites.
  */
@@ -21,18 +21,18 @@ export const TUCK_STANDARD_CURVE = {
 export function evaluateTuckStandard(t) {
   const { k, closureFactors, tongueFactors } = TUCK_STANDARD_CURVE;
   const clamped = Math.max(0, Math.min(1, t));
-  
+
   let idx = 0;
   while (idx < k.length - 1 && clamped > k[idx + 1]) {
     idx++;
   }
-  
+
   const lo = k[idx], hi = k[idx + 1];
   const alpha = hi > lo ? (clamped - lo) / (hi - lo) : 0;
-  
+
   const closureFactor = closureFactors[idx] + (closureFactors[idx + 1] - closureFactors[idx]) * alpha;
   const tongueFactor  = tongueFactors[idx]  + (tongueFactors[idx + 1]  - tongueFactors[idx])  * alpha;
-  
+
   return { closureFactor, tongueFactor };
 }
 
