@@ -485,6 +485,7 @@ async function acceptTechnicalCarton() {
     return false;
   }
   updateTechnicalHostStatus(t('technicalBundleRequesting'));
+  let checkpointCreated = false;
   try {
     const bundle = await host.requestCarton();
     const nextDocument = await TechnicalCartonDocument.create(bundle, {
@@ -504,26 +505,38 @@ async function acceptTechnicalCarton() {
       return true;
     }
 
-    try {
-      await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-model-replacement' });
-    } catch (error) {
-      updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
-      return false;
-    }
-
     if (technicalDocument && artworkApp?.artwork?.hasArtwork
       && !window.confirm(t('workflowChangeClearsArtwork'))) {
       updateTechnicalHostStatus(t('technicalBundleRejected'), 'error');
       return false;
     }
 
-    if (technicalDocument && artworkApp?.artwork?.hasArtwork) {
-      artworkApp.clearArtworkForCartonChange?.();
+    try {
+      await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-model-replacement' });
+      checkpointCreated = true;
+    } catch (error) {
+      updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
+      return false;
     }
-    setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
-    technicalAssets = technicalAssetBlobs(nextDocument);
-    preview3dFacade?.resetForProject?.();
-    renderApp?.resetForProject?.();
+
+    try {
+      if (technicalDocument && artworkApp?.artwork?.hasArtwork) {
+        artworkApp.clearArtworkForCartonChange?.();
+      }
+      setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
+      technicalAssets = technicalAssetBlobs(nextDocument);
+      preview3dFacade?.resetForProject?.();
+      renderApp?.resetForProject?.();
+    } catch (error) {
+      if (checkpointCreated) {
+        try {
+          await artworkApp?.restoreProjectCheckpoint?.();
+        } catch (rollbackError) {
+          error.rollbackError = rollbackError;
+        }
+      }
+      throw error;
+    }
     updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
     updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
     updateStepNavigationStates();

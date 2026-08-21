@@ -415,6 +415,57 @@ test('restores a complete project checkpoint including artwork and Render assets
   expect(after).toEqual(before);
 });
 
+test('rolls back the live technical document when replacement mutation fails', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.locator('label.workflow-mode-card-technical').click();
+  const frame = page.frameLocator('#technicalHostFrame');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+    { timeout: 20_000 },
+  );
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await loadGeneratedPng(page, 'rollback-artwork.png');
+
+  const before = await page.evaluate(() => {
+    const state = window.cartonBuilderApp.getState();
+    return {
+      cartonType: state.cartonSource?.source?.cartonType,
+      modelSha256: state.cartonSource?.modelSha256,
+      svgSha256: state.cartonSource?.svgSha256,
+      artworkFileName: state.artworks[0]?.artwork?.source?.fileName,
+    };
+  });
+  expect(before.cartonType).toBe('RTE');
+
+  await page.locator('.step[data-step-target="box"]').click();
+  await expect(page.locator('#boxStep')).toBeVisible();
+  await frame.locator('#cartonType').selectOption('STE');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+  );
+
+  await page.evaluate(() => {
+    window.cartonBuilderApp.artwork.clearArtworkForCartonChange = () => {
+      throw new Error('TEST_INJECTED_REPLACEMENT_FAILURE');
+    };
+  });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('.step[data-step-target="artwork"]').click();
+
+  await expect.poll(() => page.evaluate(() => {
+    const state = window.cartonBuilderApp.getState();
+    return {
+      cartonType: state.cartonSource?.source?.cartonType,
+      modelSha256: state.cartonSource?.modelSha256,
+      svgSha256: state.cartonSource?.svgSha256,
+      artworkFileName: state.artworks[0]?.artwork?.source?.fileName,
+    };
+  })).toEqual(before);
+  await expect(frame.locator('#cartonType')).toHaveValue('RTE', { timeout: 20_000 });
+  await expect(page.locator('#artworkFileName')).toHaveText('rollback-artwork.png');
+});
+
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1920, height: 1080 });
