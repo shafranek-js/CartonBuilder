@@ -109,12 +109,12 @@ export function verifyVendoredPlugins({ rootDir = defaultRootDir, logger = conso
   if (issues.length) {
     logger.error("\n[FAIL] Vendored plugins verification failed:");
     for (const issue of issues) logger.error(`  - ${issue}`);
-    return { valid: false, issues };
+    return { valid: false, issues, catalog };
   }
 
   logger.log("\nAll vendored plugin integrity checks passed.");
   logger.log("Static network-reference scan passed; runtime offline behavior is covered by Playwright.");
-  return { valid: true, issues: [] };
+  return { valid: true, issues: [], catalog };
 }
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {

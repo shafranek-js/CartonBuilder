@@ -125,39 +125,81 @@ export function inspectPluginPackage({
 
   const contractRecord = records.get("contract/package-manifest.json");
   const contractPath = path.join(packageDir, "contract/package-manifest.json");
-  if (!contractRecord || !fs.existsSync(contractPath)) {
-    issues.push("Embedded workflow package manifest is missing or undeclared.");
-  } else {
-    try {
-      const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
-      if (contract.contractVersion !== manifest.contracts.workflow) {
-        issues.push("Embedded workflow contract version does not match plugin manifest.");
-      }
-      if (contract.pbdCommit !== manifest.sourceCommit) {
-        issues.push("Embedded workflow contract commit does not match plugin sourceCommit.");
-      }
-      const contractPaths = new Set(contract.files.map((file) => file.path));
-      for (const file of contract.files) {
-        const embedded = records.get(`contract/${file.path}`);
-        if (
-          !embedded ||
-          embedded.byteLength !== file.byteLength ||
-          embedded.sha256 !== file.sha256
-        ) {
-          issues.push(`Embedded workflow contract record mismatch: "${file.path}".`);
+  if (manifest.id === "packaging-box-designer" || contractRecord || fs.existsSync(contractPath)) {
+    if (!contractRecord || !fs.existsSync(contractPath)) {
+      issues.push("Embedded workflow package manifest is missing or undeclared.");
+    } else {
+      try {
+        const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+        if (contract.contractVersion !== manifest.contracts.workflow) {
+          issues.push("Embedded workflow contract version does not match plugin manifest.");
         }
-      }
-      for (const pluginPath of records.keys()) {
-        if (
-          pluginPath.startsWith("contract/") &&
-          pluginPath !== "contract/package-manifest.json" &&
-          !contractPaths.has(pluginPath.slice("contract/".length))
-        ) {
-          issues.push(`Plugin contains a contract file not declared by package-manifest.json: "${pluginPath}".`);
+        if (contract.pbdCommit !== manifest.sourceCommit) {
+          issues.push("Embedded workflow contract commit does not match plugin sourceCommit.");
         }
+        const contractPaths = new Set(contract.files.map((file) => file.path));
+        for (const file of contract.files) {
+          const embedded = records.get(`contract/${file.path}`);
+          if (
+            !embedded ||
+            embedded.byteLength !== file.byteLength ||
+            embedded.sha256 !== file.sha256
+          ) {
+            issues.push(`Embedded workflow contract record mismatch: "${file.path}".`);
+          }
+        }
+        for (const pluginPath of records.keys()) {
+          if (
+            pluginPath.startsWith("contract/") &&
+            pluginPath !== "contract/package-manifest.json" &&
+            !contractPaths.has(pluginPath.slice("contract/".length))
+          ) {
+            issues.push(`Plugin contains a contract file not declared by package-manifest.json: "${pluginPath}".`);
+          }
+        }
+      } catch (error) {
+        issues.push(`Embedded workflow package manifest parse failed: ${error.message}`);
       }
-    } catch (error) {
-      issues.push(`Embedded workflow package manifest parse failed: ${error.message}`);
+    }
+  }
+
+  const runtimeRecord = records.get("runtime/package-manifest.json");
+  const runtimePath = path.join(packageDir, "runtime/package-manifest.json");
+  if (manifest.id === "carton-fold-viewer" || runtimeRecord || fs.existsSync(runtimePath)) {
+    if (!runtimeRecord || !fs.existsSync(runtimePath)) {
+      issues.push("Embedded fold runtime package manifest is missing or undeclared.");
+    } else {
+      try {
+        const runtime = JSON.parse(fs.readFileSync(runtimePath, "utf8"));
+        if (runtime.packageVersion !== manifest.version) {
+          issues.push("Embedded runtime package version does not match plugin manifest.");
+        }
+        if (runtime.viewerCommit !== manifest.sourceCommit) {
+          issues.push("Embedded runtime package commit does not match plugin sourceCommit.");
+        }
+        const runtimePaths = new Set(runtime.files.map((file) => file.path));
+        for (const file of runtime.files) {
+          const embedded = records.get(`runtime/${file.path}`);
+          if (
+            !embedded ||
+            embedded.byteLength !== file.byteLength ||
+            embedded.sha256 !== file.sha256
+          ) {
+            issues.push(`Embedded fold runtime record mismatch: "${file.path}".`);
+          }
+        }
+        for (const pluginPath of records.keys()) {
+          if (
+            pluginPath.startsWith("runtime/") &&
+            pluginPath !== "runtime/package-manifest.json" &&
+            !runtimePaths.has(pluginPath.slice("runtime/".length))
+          ) {
+            issues.push(`Plugin contains a runtime file not declared by package-manifest.json: "${pluginPath}".`);
+          }
+        }
+      } catch (error) {
+        issues.push(`Embedded fold runtime package manifest parse failed: ${error.message}`);
+      }
     }
   }
 

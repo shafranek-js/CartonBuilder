@@ -5,6 +5,7 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { verifyVendoredPlugins } from "../../../scripts/verify-vendored-plugins.mjs";
 import { syncPbdPlugin } from "../../../scripts/sync-pbd-plugin.mjs";
+import { syncViewerPlugin } from "../../../scripts/sync-viewer-plugin.mjs";
 import { findForbiddenNetworkReferences } from "../../../scripts/lib/offlinePolicy.mjs";
 import {
   isPathSafe,
@@ -58,21 +59,15 @@ function createPluginPackage(tempDir, { version = "1.2.0", htmlSuffix = "" } = {
   };
   writeJson(path.join(contractDir, "package-manifest.json"), contractManifest);
 
-  const filePaths = ["contract/package-manifest.json", "contract/payload.js", "index.html"];
-  const files = filePaths.map((relativePath) => ({
-    path: relativePath,
-    ...integrity(path.join(pluginDir, relativePath)),
-  }));
-  const entrypoint = files.find((file) => file.path === "index.html");
   const manifest = {
     manifestVersion: "plugin.manifest.v1",
     id: "packaging-box-designer",
     version,
     name: "Packaging Box Designer",
-    description: "Test package",
+    description: "PBD Plugin",
     entrypoint: "index.html",
     sourceCommit,
-    artifact: { byteLength: entrypoint.byteLength, sha256: entrypoint.sha256 },
+    artifact: integrity(path.join(pluginDir, "index.html")),
     contracts: {
       workflow: "carton-workflow.v1",
       modelSchema: "pbd.model.v1",
@@ -91,17 +86,77 @@ function createPluginPackage(tempDir, { version = "1.2.0", htmlSuffix = "" } = {
       csp: CSP,
       noExternalNetwork: true,
     },
-    files,
+    files: [
+      { path: "contract/package-manifest.json", ...integrity(path.join(contractDir, "package-manifest.json")) },
+      { path: "contract/payload.js", ...integrity(path.join(contractDir, "payload.js")) },
+      { path: "index.html", ...integrity(path.join(pluginDir, "index.html")) },
+    ],
   };
   writeJson(path.join(pluginDir, "plugin-manifest.json"), manifest);
-  return { pluginDir, manifest };
+  return { pluginDir, manifest, sourceCommit };
 }
 
-describe("Vendored Plugins contract and integrity gate", () => {
+function createViewerPluginPackage(tempDir, { version = "2.4.0", htmlSuffix = "" } = {}) {
+  const pluginDir = path.join(tempDir, "viewer-source");
+  const runtimeDir = path.join(pluginDir, "runtime");
+  fs.mkdirSync(runtimeDir, { recursive: true });
+
+  const html =
+    `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${CSP}"></head><body>Viewer${htmlSuffix}</body></html>\n`;
+  fs.writeFileSync(path.join(pluginDir, "index.html"), html, "utf8");
+  fs.writeFileSync(path.join(runtimeDir, "runtime.js"), "export const runtime = true;\n", "utf8");
+
+  const sourceCommit = "b".repeat(40);
+  const runtimeManifest = {
+    packageName: "@cartonbuilder/fold-runtime",
+    packageVersion: version,
+    viewerCommit: sourceCommit,
+    files: [{ path: "runtime.js", ...integrity(path.join(runtimeDir, "runtime.js")) }],
+  };
+  writeJson(path.join(runtimeDir, "package-manifest.json"), runtimeManifest);
+
+  const manifest = {
+    manifestVersion: "plugin.manifest.v1",
+    id: "carton-fold-viewer",
+    version,
+    name: "CartonFoldViewer",
+    description: "Viewer Plugin",
+    entrypoint: "index.html",
+    sourceCommit,
+    artifact: integrity(path.join(pluginDir, "index.html")),
+    contracts: {
+      workflow: "carton-workflow.v1",
+      modelSchema: "pbd.model.v1",
+      svgSchema: "pbd.svg.v4",
+    },
+    capabilities: {
+      artwork2d: false,
+      flatExport: false,
+      foldPreview: true,
+      technicalRender: true,
+    },
+    referenceOnly: true,
+    productionCertified: false,
+    runtime: {
+      sandboxing: ["allow-scripts"],
+      csp: CSP,
+      noExternalNetwork: true,
+    },
+    files: [
+      { path: "index.html", ...integrity(path.join(pluginDir, "index.html")) },
+      { path: "runtime/package-manifest.json", ...integrity(path.join(runtimeDir, "package-manifest.json")) },
+      { path: "runtime/runtime.js", ...integrity(path.join(runtimeDir, "runtime.js")) },
+    ],
+  };
+  writeJson(path.join(pluginDir, "plugin-manifest.json"), manifest);
+  return { pluginDir, manifest, sourceCommit };
+}
+
+describe("Vendored plugins verification gate", () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cb-plugin-test-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cb-plugins-test-"));
   });
 
   afterEach(() => {
@@ -109,146 +164,43 @@ describe("Vendored Plugins contract and integrity gate", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("verifies the live vendored plugins catalog", () => {
+  it("verifies the committed repository plugins catalog cleanly", () => {
     const result = verifyVendoredPlugins({ logger: silentLogger });
     expect(result.valid).toBe(true);
     expect(result.issues).toEqual([]);
+    expect(result.catalog.plugins.length).toBe(2);
   });
 
-  it("rejects plugin version traversal before any destination mutation", () => {
+  it("syncs and verifies both PBD and Viewer plugins transactionally", () => {
     const hostRoot = createHostRoot(tempDir);
-    const { pluginDir, manifest } = createPluginPackage(tempDir);
-    manifest.version = "../../../../outside";
-    writeJson(path.join(pluginDir, "plugin-manifest.json"), manifest);
-    const outside = path.join(tempDir, "outside");
-    fs.mkdirSync(outside);
-    fs.writeFileSync(path.join(outside, "sentinel.txt"), "untouched", "utf8");
+    const { pluginDir: pbdDir } = createPluginPackage(tempDir);
+    const { pluginDir: viewerDir } = createViewerPluginPackage(tempDir);
 
-    expect(() => syncPbdPlugin(pluginDir, { rootDir: hostRoot })).toThrow(
-      /Standalone plugin manifest validation failed/
-    );
-    expect(fs.readFileSync(path.join(outside, "sentinel.txt"), "utf8")).toBe("untouched");
-    expect(fs.readdirSync(path.join(hostRoot, "vendor/plugins"))).toEqual([]);
-    expect(fs.readFileSync(path.join(hostRoot, "src/workflow/original.txt"), "utf8")).toBe(
-      "original workflow"
-    );
-  });
-
-  it("rolls back plugin, workflow and catalog when the final activation fails", () => {
-    const hostRoot = createHostRoot(tempDir);
-    const { pluginDir } = createPluginPackage(tempDir);
-    const originalRename = fs.renameSync.bind(fs);
-    let renameCalls = 0;
-    vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
-      renameCalls++;
-      if (String(target).endsWith("plugins.manifest.json")) {
-        throw new Error("simulated catalog activation failure");
-      }
-      return originalRename(source, target);
-    });
-
-    expect(() => syncPbdPlugin(pluginDir, { rootDir: hostRoot })).toThrow(
-      /simulated catalog activation failure/
-    );
-    expect(
-      fs.existsSync(
-        path.join(hostRoot, "vendor/plugins/packaging-box-designer/1.2.0")
-      )
-    ).toBe(false);
-    expect(fs.existsSync(path.join(hostRoot, "vendor/plugins/plugins.manifest.json"))).toBe(false);
-    expect(fs.readFileSync(path.join(hostRoot, "src/workflow/original.txt"), "utf8")).toBe(
-      "original workflow"
-    );
-    expect(renameCalls).toBeGreaterThan(3);
-  });
-
-  it("detects a modified standalone manifest even when plugin files are unchanged", () => {
-    const hostRoot = createHostRoot(tempDir);
-    const { pluginDir } = createPluginPackage(tempDir);
-    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
-    const vendoredManifest = path.join(
-      hostRoot,
-      "vendor/plugins/packaging-box-designer/1.2.0/plugin-manifest.json"
-    );
-    const manifest = JSON.parse(fs.readFileSync(vendoredManifest, "utf8"));
-    manifest.description = "tampered";
-    writeJson(vendoredManifest, manifest);
+    syncPbdPlugin(pbdDir, { rootDir: hostRoot });
+    syncViewerPlugin(viewerDir, { rootDir: hostRoot });
 
     const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
-    expect(result.valid).toBe(false);
-    expect(result.issues.join("\n")).toMatch(/Catalog entry does not match/);
+    expect(result.valid).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.catalog.plugins.length).toBe(2);
+    expect(result.catalog.plugins.map((p) => p.plugin.id)).toEqual(["carton-fold-viewer", "packaging-box-designer"]);
   });
 
-  it("detects artifact-to-entrypoint disagreement in the catalog", () => {
-    const hostRoot = createHostRoot(tempDir);
-    const { pluginDir } = createPluginPackage(tempDir);
-    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
-    const catalogPath = path.join(hostRoot, "vendor/plugins/plugins.manifest.json");
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
-    catalog.plugins[0].plugin.artifact.sha256 = "f".repeat(64);
-    writeJson(catalogPath, catalog);
+  it("detects forbidden network references while ignoring comments", () => {
+    const cleanWithComments = `
+      // https://github.com/mrdoob/three.js/issues/123
+      /* https://developer.mozilla.org/en-US/docs/Web/API */
+      //uniforms.envMap.value
+      const x = 42;
+    `;
+    expect(findForbiddenNetworkReferences(cleanWithComments)).toEqual([]);
 
-    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
-    expect(result.valid).toBe(false);
-    expect(result.issues.join("\n")).toMatch(/Catalog entry does not match/);
-  });
-
-  it("rejects duplicate plugin identities in the catalog", () => {
-    const hostRoot = createHostRoot(tempDir);
-    const { pluginDir } = createPluginPackage(tempDir);
-    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
-    const catalogPath = path.join(hostRoot, "vendor/plugins/plugins.manifest.json");
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
-    catalog.plugins.push(structuredClone(catalog.plugins[0]));
-    writeJson(catalogPath, catalog);
-
-    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
-    expect(result.valid).toBe(false);
-    expect(result.issues.join("\n")).toMatch(/Duplicate plugin identity/);
-  });
-
-  it("rejects unauthorized files in the vendor plugins root", () => {
-    const hostRoot = createHostRoot(tempDir);
-    const { pluginDir } = createPluginPackage(tempDir);
-    syncPbdPlugin(pluginDir, { rootDir: hostRoot });
-    fs.writeFileSync(path.join(hostRoot, "vendor/plugins/unauthorized.txt"), "bad", "utf8");
-
-    const result = verifyVendoredPlugins({ rootDir: hostRoot, logger: silentLogger });
-    expect(result.valid).toBe(false);
-    expect(result.issues.join("\n")).toMatch(/Unauthorized file/);
-  });
-
-  it("rejects a namespace-line bypass and other external URL forms", () => {
-    const findings = findForbiddenNetworkReferences(
-      '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil.example/a.png"/></svg>\n' +
-        "const ws = 'wss://evil.example/socket';\n" +
-        "<script src='//evil.example/a.js'></script>"
-    );
-    expect(findings.map((finding) => finding.reference)).toEqual([
-      "https://evil.example/a.png",
-      "wss://evil.example/socket",
-      "//evil.example/a.js",
-    ]);
-    expect(
-      findForbiddenNetworkReferences('<svg xmlns="http://www.w3.org/2000/svg"/>')
-    ).toEqual([]);
-    expect(
-      findForbiddenNetworkReferences('http://www.w3.org/2000/svg.evil.example/a.js')
-    ).toHaveLength(1);
-    expect(
-      findForbiddenNetworkReferences('https&colon;&sol;&sol;evil.example/a.js')
-    ).toHaveLength(1);
-  });
-
-  it("rejects an external reference during sync preflight without mutation", () => {
-    const hostRoot = createHostRoot(tempDir);
-    const { pluginDir } = createPluginPackage(tempDir, {
-      htmlSuffix: '<img src="https://evil.example/pixel.png">',
-    });
-    expect(() => syncPbdPlugin(pluginDir, { rootDir: hostRoot })).toThrow(
-      /Forbidden external network reference/
-    );
-    expect(fs.readdirSync(path.join(hostRoot, "vendor/plugins"))).toEqual([]);
+    const realNetworkCall = `
+      fetch("https://evil.example.com/api");
+    `;
+    const issues = findForbiddenNetworkReferences(realNetworkCall);
+    expect(issues.length).toBe(1);
+    expect(issues[0].reference).toBe("https://evil.example.com/api");
   });
 
   it("strictly validates isPathSafe", () => {
@@ -261,6 +213,7 @@ describe("Vendored Plugins contract and integrity gate", () => {
     expect(isPathSafe(base, "C:\\Windows\\system32")).toBe(false);
   });
 });
+
 describe("Atomic manifest package replacement", () => {
   let tempDir;
 

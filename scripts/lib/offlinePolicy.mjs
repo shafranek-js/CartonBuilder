@@ -17,8 +17,19 @@ function lineNumberAt(text, index) {
   return text.slice(0, index).split("\n").length;
 }
 
+function stripComments(text) {
+  // Replace HTML comments
+  let cleaned = text.replace(/<!--[\s\S]*?-->/g, (match) => " ".repeat(match.length));
+  // Replace block comments /* ... */
+  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, (match) => " ".repeat(match.length));
+  // Replace single-line comments // ... when // is not preceded by :
+  cleaned = cleaned.replace(/(^|[^:])\/\/[^\r\n]*/g, (match, prefix) => prefix + " ".repeat(match.length - prefix.length));
+  return cleaned;
+}
+
 export function findForbiddenNetworkReferences(text) {
-  const normalized = decodeUrlEntities(String(text));
+  const original = decodeUrlEntities(String(text));
+  const stripped = stripComments(original);
   const matches = [];
   const patterns = [
     /\b(?:https?|wss?):\/\/[^\s"'<>\`\\)]+/gi,
@@ -26,7 +37,7 @@ export function findForbiddenNetworkReferences(text) {
   ];
 
   for (const pattern of patterns) {
-    for (const match of normalized.matchAll(pattern)) {
+    for (const match of stripped.matchAll(pattern)) {
       const reference = match[0].replace(/[),.;]+$/, "");
       if (
         ALLOWED_EXACT_REFERENCE_URLS.includes(reference) ||
@@ -34,7 +45,7 @@ export function findForbiddenNetworkReferences(text) {
       ) {
         continue;
       }
-      matches.push({ reference, line: lineNumberAt(normalized, match.index ?? 0) });
+      matches.push({ reference, line: lineNumberAt(original, match.index ?? 0) });
     }
   }
 

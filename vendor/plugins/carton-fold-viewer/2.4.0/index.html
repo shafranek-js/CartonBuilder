@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-src 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CartonEngine Generic PBD v4 Fold Viewer</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./assets/vendor/three/three.module.js",
+      "three/addons/": "./assets/vendor/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app">
+  <div id="viewport"></div>
+  <div class="topbar">
+    <div class="brand">CartonEngine Fold Viewer v2.3</div>
+    <div class="badge" id="modelBadge">ready</div>
+    <div class="spacer"></div>
+    <button id="fitBtn">Fit</button>
+    <label class="fileBtn">Open GLB / SVG<input id="fileInput" type="file" accept=".glb,.gltf,.svg,model/gltf-binary,model/gltf+json,image/svg+xml"></label>
+    <button id="saveGlbBtn" disabled>Save GLB</button>
+  </div>
+  <div class="status">
+    <div><b>Mouse:</b> rotate / pan / zoom</div>
+    <div><b>Model:</b> <span id="modelName">—</span></div>
+    <div><b>Clip:</b> <span id="clipInfo">loading…</span></div>
+    <div><b>Nodes:</b> <span id="nodeInfo">—</span></div>
+    <div><b>Meshes:</b> <span id="meshInfo">—</span></div>
+    <div><b>Source:</b> <span id="sourceInfo">—</span></div>
+    <div id="error"></div>
+  </div>
+  <div class="panel">
+    <div class="row"><div class="label">Fold</div><input id="slider" type="range" min="0" max="1000" value="0" step="1" disabled /><div id="pct">0.0%</div></div>
+    <div class="row"><div class="label">Animation</div><select id="clipSelect" disabled></select><button id="unfoldBtn" disabled>Unfold</button><button id="reverseBtn" disabled>◀ Reverse</button><button id="playBtn" class="primary" disabled>Play ▶</button><button id="foldBtn" disabled>Fold</button></div>
+    <div class="row"><div class="label">View</div><label class="switch">Mode <select id="displayModeSel"><option value="plain">Plain paper / artwork</option><option value="technical">Technical crease shading</option></select></label><label class="switch"><input id="gridChk" type="checkbox" checked> Grid</label><label class="switch"><input id="axesChk" type="checkbox"> Axes</label><label class="switch"><input id="wireChk" type="checkbox"> Wireframe</label><label class="switch"><input id="rotateChk" type="checkbox"> Auto rotate</label><span class="small" style="margin-left:auto">Space = play/pause · Home = unfold · End = fold</span></div>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

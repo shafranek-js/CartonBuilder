@@ -1,0 +1,72 @@
+{
+  "packageName": "@cartonbuilder/fold-runtime",
+  "packageVersion": "2.4.0",
+  "viewerCommit": "6df8f5d13f904c586856d7c80d50f934ff18b5a8",
+  "files": [
+    {
+      "path": "animation/fold-animations.js",
+      "byteLength": 7332,
+      "sha256": "5874089a6fafed8b001e23b41085b9bce4de1ae67f22b683d14c7e22d35d5a24"
+    },
+    {
+      "path": "animation/motion-models/tuck-standard.js",
+      "byteLength": 2445,
+      "sha256": "9e8f5b163511c8060e1778710628a81b4ced505c726d86016e24e8289b294f04"
+    },
+    {
+      "path": "FoldRuntime.js",
+      "byteLength": 2593,
+      "sha256": "8df8894e2349f7ecfe9e11622c7b98291283c1b58fd8d2227e4feb86043581b6"
+    },
+    {
+      "path": "geometry/crease-geometry.js",
+      "byteLength": 12590,
+      "sha256": "7a6a12509d3ddd1f3fb567e317729bf730bf6eb320567822714ad0225a387f60"
+    },
+    {
+      "path": "geometry/materials.js",
+      "byteLength": 1034,
+      "sha256": "0214314e7ac1e0c16de046334a36be8c65a3e66911872b55e051bcc4b01525bc"
+    },
+    {
+      "path": "geometry/panel-geometry.js",
+      "byteLength": 6501,
+      "sha256": "7ec6c2d9e23a3dd3c72f31eae41cdea63fc91f97bea909768e71f665f45ae9ff"
+    },
+    {
+      "path": "index.js",
+      "byteLength": 516,
+      "sha256": "c56dc47c296e9865cb44445f71be3f493ab6516b706a4b7656ef7a5fdeb3668c"
+    },
+    {
+      "path": "index.mjs",
+      "byteLength": 516,
+      "sha256": "c56dc47c296e9865cb44445f71be3f493ab6516b706a4b7656ef7a5fdeb3668c"
+    },
+    {
+      "path": "model/model-builder.js",
+      "byteLength": 2708,
+      "sha256": "143bf818d1d47f7726be08d55866697a88d7f24d4e3248003f8b07e55dfb6c0a"
+    },
+    {
+      "path": "package.json",
+      "byteLength": 285,
+      "sha256": "7be086ca9dfc7380530816e0b5a191f62e8c2c51c58dbfe4166a709fc3821d57"
+    },
+    {
+      "path": "pbd/path-parser.js",
+      "byteLength": 5144,
+      "sha256": "abe2ef610e39c1ec2b97af582a14c054ec3338beba3e63990d059621d393b08f"
+    },
+    {
+      "path": "pbd/semantic-svg.js",
+      "byteLength": 11275,
+      "sha256": "8d9372f880e564800c4c87223bcd3b0e98f3d3bc6ebceaf0dd3e8a481d448179"
+    },
+    {
+      "path": "utils/dispose.js",
+      "byteLength": 333,
+      "sha256": "f8e90a54658ffb9f6edc21048f72cf80f93a7375f718db3289de6c5ab35b465f"
+    }
+  ]
+}
