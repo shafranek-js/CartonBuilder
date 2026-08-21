@@ -6,7 +6,7 @@
       "manifestPath": "carton-fold-viewer/2.4.0/plugin-manifest.json",
       "manifestArtifact": {
         "byteLength": 3675,
-        "sha256": "f28c3325a20d044c8abb345744abb7fb1b83ee2627c303fb4f29337d448b2422"
+        "sha256": "f974b481dc5f2443572550e012343195445505eeabf021c829a5c55c25c3216c"
       },
       "plugin": {
         "manifestVersion": "plugin.manifest.v1",
@@ -15,7 +15,7 @@
         "name": "CartonFoldViewer",
         "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
         "entrypoint": "index.html",
-        "sourceCommit": "039e74553752e161e716901a40d4cffebb9d68f5",
+        "sourceCommit": "c9e15db1bf227cf8c401aaf2dd09b656c69cdf6f",
         "artifact": {
           "byteLength": 1709865,
           "sha256": "219c64092eb3a2b80fc1ff1a7aa6229e3bc06ec2903504c5f93471844f8d91ce"
@@ -63,8 +63,8 @@
           },
           {
             "path": "runtime/FoldRuntime.js",
-            "byteLength": 2593,
-            "sha256": "8df8894e2349f7ecfe9e11622c7b98291283c1b58fd8d2227e4feb86043581b6"
+            "byteLength": 2592,
+            "sha256": "aee888afdc081b711fa734073354465be0ce4a4912c114ac398b641ae9f1fb56"
           },
           {
             "path": "runtime/geometry/crease-geometry.js",
@@ -83,8 +83,8 @@
           },
           {
             "path": "runtime/index.js",
-            "byteLength": 516,
-            "sha256": "c56dc47c296e9865cb44445f71be3f493ab6516b706a4b7656ef7a5fdeb3668c"
+            "byteLength": 515,
+            "sha256": "d2d5f4df20843641a42a421eb694d03e7af98e87754c93c71fbe1bbb3b136732"
           },
           {
             "path": "runtime/model/model-builder.js",
@@ -94,7 +94,7 @@
           {
             "path": "runtime/package-manifest.json",
             "byteLength": 2089,
-            "sha256": "e65d89b6296a6f9e5391b42ec0b43643318db6d21b645c385b7ac64e6b6adf7d"
+            "sha256": "770e122a67c924fbe66c90bb8a3a5b22c73a5e11210664867df0ee02c8c5ea1b"
           },
           {
             "path": "runtime/package.json",

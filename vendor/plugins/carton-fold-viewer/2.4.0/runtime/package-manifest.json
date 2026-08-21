@@ -1,7 +1,7 @@
 {
   "packageName": "@cartonbuilder/fold-runtime",
   "packageVersion": "2.4.0",
-  "viewerCommit": "039e74553752e161e716901a40d4cffebb9d68f5",
+  "viewerCommit": "c9e15db1bf227cf8c401aaf2dd09b656c69cdf6f",
   "files": [
     {
       "path": "animation/fold-animations.js",
@@ -15,8 +15,8 @@
     },
     {
       "path": "FoldRuntime.js",
-      "byteLength": 2593,
-      "sha256": "8df8894e2349f7ecfe9e11622c7b98291283c1b58fd8d2227e4feb86043581b6"
+      "byteLength": 2592,
+      "sha256": "aee888afdc081b711fa734073354465be0ce4a4912c114ac398b641ae9f1fb56"
     },
     {
       "path": "geometry/crease-geometry.js",
@@ -35,8 +35,8 @@
     },
     {
       "path": "index.js",
-      "byteLength": 516,
-      "sha256": "c56dc47c296e9865cb44445f71be3f493ab6516b706a4b7656ef7a5fdeb3668c"
+      "byteLength": 515,
+      "sha256": "d2d5f4df20843641a42a421eb694d03e7af98e87754c93c71fbe1bbb3b136732"
     },
     {
       "path": "model/model-builder.js",
