@@ -20,11 +20,12 @@ import { getExportWarnings } from '../../src/export/exportChecks.js';
 import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
-import { getDielineSegments } from '../../src/model/dieline.js';
+import { arcToCubicSegments, getDielineSegments, segmentPathData } from '../../src/model/dieline.js';
 import { runPrepressPreflight } from '../../src/prepress/prepressPreflight.js';
-import { createExportSvg } from '../../src/export/svgExport.js';
+import { createExportSvg, createPrepressSvg } from '../../src/export/svgExport.js';
 
 const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/workflow/fixtures');
+const expectedArcCounts = { rte: 19, ste: 20, tt_sl123: 21 };
 
 function loadTechnicalFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(fixturesDir, `${name}-workflow.v1.json`), 'utf8'));
@@ -77,6 +78,13 @@ async function createSourcePdf() {
   const page = document.addPage([600, 400]);
   page.drawRectangle({ x: 10, y: 10, width: 580, height: 380, color: rgb(1, 0, 0) });
   return document.save();
+}
+
+function createSourcePng() {
+  return Uint8Array.from(Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69flkwAAAABJRU5ErkJggg==',
+    'base64',
+  ));
 }
 
 describe('artwork export', () => {
@@ -148,14 +156,11 @@ describe('artwork export', () => {
 
   it.each(['rte', 'ste', 'tt_sl123'])('preserves technical ARC and OPEN_CUT geometry in SVG and PDF for %s', async (name) => {
     const { document, model } = await createTechnicalModel(name);
-    const sourceBytes = await createSourcePdf();
-    const sourceBlob = new Blob([sourceBytes], { type: 'application/pdf' });
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
     const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob, {
-      fileName: `technical-${name}.pdf`,
-      mimeType: 'application/pdf',
-      pageIndex: 0,
-      pageCount: 1,
-      vector: true,
+      fileName: `technical-${name}.png`,
+      mimeType: 'image/png',
+      vector: false,
     });
     const dieline = getDielineSegments(model);
     const allPrimitives = [...dieline.cut, ...dieline.fold];
@@ -165,21 +170,34 @@ describe('artwork export', () => {
     const svg = createExportSvg(model);
     const cutMarkup = svg.match(/<g fill="none" stroke="#111"[^>]*>([\s\S]*?)<\/g>/)?.[1] || '';
     expect(cutMarkup.match(/<(?:path|line) /g) || []).toHaveLength(dieline.cut.length);
-    expect((cutMarkup.match(/<path /g) || []).length).toBe(sourceArcs);
+    expect(sourceArcs).toBe(expectedArcCounts[name]);
+    expect((cutMarkup.match(/<path /g) || []).length).toBe(expectedArcCounts[name]);
     expect(openCuts.length).toBeGreaterThan(0);
+    for (const primitive of openCuts) {
+      const expectedMarkup = primitive.kind === 'ARC'
+        ? `<path d="${segmentPathData(primitive)}"/>`
+        : `<line x1="${primitive.start.x}" y1="${primitive.start.y}" x2="${primitive.end.x}" y2="${primitive.end.y}"/>`;
+      expect(cutMarkup).toContain(expectedMarkup);
+    }
 
     const pdf = await createPdfExport({ boxModel: model, artworks: [artwork] });
     const contents = await readPdfPageContents(new Uint8Array(await pdf.arrayBuffer()));
     const panelArcs = model.getElements().flatMap((panel) => panel.contour.segments || [])
-      .filter((segment) => segment.kind === 'ARC').length;
-    expect((contents.match(/\bc\b/g) || []).length).toBeGreaterThanOrEqual(panelArcs + sourceArcs);
-    for (const primitive of openCuts.slice(0, 3)) {
+      .filter((segment) => segment.kind === 'ARC');
+    const dielineArcs = allPrimitives.filter((segment) => segment.kind === 'ARC');
+    const expectedCurveOperators = panelArcs.concat(dielineArcs)
+      .reduce((count, arc) => count + arcToCubicSegments(arc).length, 0);
+    expect((contents.match(/\bc\b/g) || []).length).toBe(expectedCurveOperators);
+    for (const primitive of openCuts) {
       const bounds = model.getBounds();
-      const x = (primitive.start.x - bounds.minX) * (72 / 25.4);
-      const y = (bounds.maxY - primitive.start.y) * (72 / 25.4);
-      expect(contents).toContain(`${x} ${y} m`);
+      const startX = (primitive.start.x - bounds.minX) * (72 / 25.4);
+      const startY = (bounds.maxY - primitive.start.y) * (72 / 25.4);
+      const endX = (primitive.end.x - bounds.minX) * (72 / 25.4);
+      const endY = (bounds.maxY - primitive.end.y) * (72 / 25.4);
+      expect(contents).toContain(`${startX} ${startY} m`);
+      expect(contents).toContain(`${endX} ${endY}`);
     }
-    expect(allPrimitives.filter((primitive) => primitive.kind === 'ARC')).toHaveLength(sourceArcs);
+    expect(allPrimitives.filter((primitive) => primitive.kind === 'ARC')).toHaveLength(expectedArcCounts[name]);
   });
 
   it.each(['rte', 'ste', 'tt_sl123'])('traces every technical ARC in raster export for %s', async (name) => {
@@ -239,6 +257,31 @@ describe('artwork export', () => {
     const dielineArcs = getDielineSegments(model).cut.concat(getDielineSegments(model).fold)
       .filter((segment) => segment.kind === 'ARC').length;
     expect(calls.filter(([type]) => type === 'arc')).toHaveLength(panelArcs + dielineArcs);
+  });
+
+  it.each(['rte', 'ste', 'tt_sl123'])('blocks exact technical prepress exports for %s', async (name) => {
+    const { model } = await createTechnicalModel(name);
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob);
+    const preflight = runPrepressPreflight({
+      boxModel: model,
+      artworks: [artwork],
+      settings: { mode: 'production-assist' },
+    });
+
+    expect(preflight.valid).toBe(false);
+    expect(preflight.blocking.map((issue) => issue.code)).toContain('technical-prepress-unavailable');
+    await expect(createPrepressPdfExport({
+      boxModel: model,
+      artworks: [artwork],
+      settings: { mode: 'production-assist' },
+      preflight,
+    })).rejects.toMatchObject({ code: 'technicalPrepressUnavailable' });
+    await expect(createPrepressSvg({
+      boxModel: model,
+      artworks: [artwork],
+      settings: { mode: 'production-assist' },
+    })).rejects.toMatchObject({ code: 'technicalPrepressUnavailable' });
   });
 
   it('creates a production-assist PDF with distinct trim/bleed/media boxes and OCGs', async () => {

@@ -1,10 +1,51 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 import {
+  ArtworkRenderer,
   getArtworkOrigin,
   getArtworkRotationTransform,
   getCropCorners,
   getCropRect,
 } from '../../src/artwork/ArtworkRenderer.js';
+import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
+import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
+
+const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/workflow/fixtures');
+const expectedArcCounts = { rte: 19, ste: 20, tt_sl123: 21 };
+
+class FakeSvgNode {
+  constructor(tagName, ownerDocument) {
+    this.tagName = tagName;
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.attributes = new Map();
+    this.id = tagName === 'svg' ? 'test-svg' : '';
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+  }
+
+  getAttribute(name) {
+    return this.attributes.get(name) || null;
+  }
+
+  appendChild(child) {
+    this.children.push(child);
+    return child;
+  }
+
+  replaceChildren(...children) {
+    this.children = children;
+  }
+}
+
+function descendants(node) {
+  return node.children.flatMap((child) => [child, ...descendants(child)]);
+}
 
 function createArtwork(rotation = 0) {
   return {
@@ -49,4 +90,40 @@ describe('ArtworkRenderer crop geometry', () => {
     });
     expect(getArtworkRotationTransform(artwork)).toBe(`rotate(${rotation} 100 60)`);
   });
+
+  for (const name of ['rte', 'ste', 'tt_sl123']) {
+    it(`renders exact technical ARC paths and an ARC panel mask for ${name.toUpperCase()}`, async () => {
+      const bundle = JSON.parse(fs.readFileSync(path.join(fixturesDir, `${name}-workflow.v1.json`), 'utf8'));
+      const document = await TechnicalCartonDocument.create(bundle);
+      const model = createTechnicalBoxModelAdapter(document);
+      const documentRef = { createElementNS: (_namespace, tagName) => new FakeSvgNode(tagName, documentRef) };
+      const svg = new FakeSvgNode('svg', documentRef);
+      const renderer = new ArtworkRenderer({
+        svg,
+        model,
+        artwork: { hasArtwork: false },
+        viewport: { zoom: 1, panX: 0, panY: 0 },
+        layers: {},
+        onPointerStart() {},
+      });
+
+      renderer.renderScene(svg, {
+        preview: true,
+        showDieline: true,
+        showNames: false,
+        showHighlights: false,
+        showArtwork: false,
+      });
+
+      const nodes = descendants(svg);
+      const maskPath = nodes.find((node) => node.tagName === 'clipPath')?.children[0];
+      const arcPaths = nodes.filter((node) => (
+        node.tagName === 'path'
+        && /^dieline-(?:cut|fold)$/.test(node.getAttribute('class') || '')
+        && node.getAttribute('d')?.includes('A')
+      ));
+      expect(maskPath?.getAttribute('d')).toContain('A');
+      expect(arcPaths).toHaveLength(expectedArcCounts[name]);
+    });
+  }
 });

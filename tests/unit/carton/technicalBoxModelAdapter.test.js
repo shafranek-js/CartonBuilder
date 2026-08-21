@@ -8,6 +8,7 @@ import { getDielineSegments, getPanelMaskPath } from '../../../src/model/dieline
 import { createExportSvg } from '../../../src/export/svgExport.js';
 
 const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/workflow/fixtures');
+const expectedArcCounts = { rte: 19, ste: 20, tt_sl123: 21 };
 function loadFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(fixturesDir, `${name}-workflow.v1.json`), 'utf8'));
 }
@@ -36,9 +37,12 @@ describe('technical artwork compatibility model', () => {
       const consumed = [...cut, ...fold];
 
       expect(consumed).toHaveLength(sourcePrimitives.length);
-      expect(consumed.filter((primitive) => primitive.kind === 'ARC')).toHaveLength(
-        sourcePrimitives.filter((primitive) => primitive.kind === 'ARC').length,
-      );
+      for (const kind of ['LINE', 'ARC']) {
+        expect(consumed.filter((primitive) => primitive.kind === kind)).toHaveLength(
+          sourcePrimitives.filter((primitive) => primitive.kind === kind).length,
+        );
+      }
+      expect(sourcePrimitives.filter((primitive) => primitive.kind === 'ARC')).toHaveLength(expectedArcCounts[name]);
       expect(getPanelMaskPath(adapter)).toContain('A');
 
       const svg = createExportSvg(adapter);
