@@ -22,6 +22,44 @@ async function quickState(page) {
   return page.evaluate(() => window.cartonBuilderApp.getState().cartonSource.box);
 }
 
+async function quickLayoutBounds(page) {
+  return page.evaluate(() => {
+    const toRect = (element) => {
+      const { left, top, right, bottom, width, height } = element.getBoundingClientRect();
+      return { left, top, right, bottom, width, height };
+    };
+    const within = (inner, outer) =>
+      inner.left >= outer.left - 0.5 &&
+      inner.top >= outer.top - 0.5 &&
+      inner.right <= outer.right + 0.5 &&
+      inner.bottom <= outer.bottom + 0.5;
+
+    const boxStep = toRect(document.getElementById('boxStep'));
+    const workspaceWrap = toRect(document.querySelector('.workspace-wrap'));
+    const workspace = toRect(document.getElementById('workspace'));
+    const panels = [...document.querySelectorAll('#workspace .panel-shape')].map(toRect);
+
+    return {
+      panelCount: panels.length,
+      workspaceWithinBoxStep: within(workspaceWrap, boxStep),
+      workspaceWithinWorkspaceWrap: within(workspace, workspaceWrap),
+      panelsWithinWorkspace: panels.every((panel) => within(panel, workspace)),
+      boxStep,
+      workspaceWrap,
+      workspace,
+      panels,
+    };
+  });
+}
+
+async function expectQuickLayoutBounds(page, expectedPanelCount) {
+  const bounds = await quickLayoutBounds(page);
+  expect(bounds.panelCount).toBe(expectedPanelCount);
+  expect(bounds.workspaceWithinBoxStep).toBe(true);
+  expect(bounds.workspaceWithinWorkspaceWrap).toBe(true);
+  expect(bounds.panelsWithinWorkspace).toBe(true);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.step')).toHaveCount(5);
@@ -72,6 +110,42 @@ test('Quick Layout exposes only manual Custom Net controls and preserves six-pan
     'front', 'bottom', 'top', 'back', 'left', 'right',
   ]);
   expect(JSON.stringify(state)).not.toMatch(/"templateId":"(ste|rte)"/);
+});
+
+test('Quick workspace keeps every panel inside its layout at desktop and compact viewports', async ({ page }) => {
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1280, height: 720 },
+  ];
+  const additions = [
+    'Add Base Panel to the bottom edge of Front Panel',
+    'Add Top Panel to the top edge of Front Panel',
+    'Add Back Panel to the top edge of Top Panel',
+    'Add Left Panel to the left edge of Front Panel',
+    'Add Right Panel to the right edge of Back Panel',
+  ];
+
+  for (const [viewportIndex, viewport] of viewports.entries()) {
+    await page.setViewportSize(viewport);
+    if (viewportIndex > 0) {
+      await page.getByRole('button', { name: 'File', exact: true }).click();
+      await page.locator('#menuNewProjectBtn').click();
+      await expect(page.locator('#workflowStep')).toBeVisible();
+      await chooseWorkflow(page, 'quick');
+    } else {
+      await chooseWorkflow(page, 'quick');
+    }
+
+    await expect(page.locator('#panelCount')).toHaveText('1/6');
+    await expect(page.locator('#workspace .panel-front .panel-shape')).toHaveCount(1);
+    await expectQuickLayoutBounds(page, 1);
+
+    for (const [additionIndex, label] of additions.entries()) {
+      await page.getByRole('button', { name: label }).click();
+      await expect(page.locator('#panelCount')).toHaveText(`${additionIndex + 2}/6`);
+      await expectQuickLayoutBounds(page, additionIndex + 2);
+    }
+  }
 });
 
 test('Quick preset, Reset Box and New Project keep the Custom Net invariant', async ({ page }) => {
