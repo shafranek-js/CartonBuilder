@@ -3,6 +3,7 @@ import './styles/main.css';
 import { createArtworkApp } from './artwork/ArtworkApp.js';
 import { initializeI18n, t } from './i18n.js';
 import { BoxNetModel } from './model/BoxNetModel.js';
+import { QUICK_CONSTRUCTION_MIGRATION_FLAG } from './model/quickCustomNet.js';
 import {
   EDGES,
   FACE_BY_NORMAL,
@@ -31,6 +32,12 @@ import { createCartonDocument } from './carton/createCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from './carton/technicalBoxModelAdapter.js';
 import { createPbdHost } from './host/pbdHostProtocol.js';
 import { FROZEN_PBD_ARTIFACT_SHA256 } from './workflow/index.js';
+import {
+  canPersistWorkflow,
+  completeWorkflowBootstrap,
+  createWorkflowBootstrapState,
+  resolveWorkflowSelection,
+} from './workflow/workflowSelectionState.js';
 
 initializeI18n();
 applyTheme(getSavedTheme());
@@ -45,6 +52,11 @@ const previewStep = document.getElementById('previewStep');
 const renderStep = document.getElementById('renderStep');
 const stepButtons = [...document.querySelectorAll('.step')];
 const previewWarning = document.getElementById('previewWarning');
+let currentStep = 'workflow';
+let workflowMode = null;
+let workflowChosen = false;
+let workflowBootstrap = createWorkflowBootstrapState();
+let startupRestoring = workflowBootstrap.restoring;
 
 const fileMenuTriggerBtn = document.getElementById('fileMenuTriggerBtn');
 const fileMenuPopover = document.getElementById('fileMenuPopover');
@@ -57,6 +69,7 @@ const handleOpenProject = () => {
 };
 
 const handleSaveProject = () => {
+  if (!workflowChosen) return Promise.resolve({ status: 'blocked', reason: 'workflow-selection-required' });
   if (artworkApp?.saveProjectArchive) {
     return artworkApp.saveProjectArchive();
   }
@@ -127,6 +140,7 @@ const editMenuPopover = document.getElementById('editMenuPopover');
 const artworkFileInput = document.getElementById('artworkFileInput');
 
 const handlePlaceArtwork = () => {
+  if (!workflowChosen) return;
   if (artworkFileInput) artworkFileInput.click();
 };
 
@@ -159,8 +173,9 @@ if (fileMenuTriggerBtn && fileMenuPopover) {
     onOpenProject: handleOpenProject,
     onSaveProject: handleSaveProject,
     onPlaceArtwork: handlePlaceArtwork,
-    onExport: (type) => artworkApp?.exportDeliverable?.(type),
-    onRenderExport: (kind) => renderApp?.openExportDialog?.('png', kind),
+    onExport: (type) => { if (workflowChosen) return artworkApp?.exportDeliverable?.(type); return undefined; },
+    onRenderExport: (kind) => { if (workflowChosen) return renderApp?.openExportDialog?.('png', kind); return undefined; },
+    canPersistProject: () => canPersistWorkflow(workflowChosen),
     onOpen: () => {
       editMenu?.togglePopover(false);
       contactsMenu?.togglePopover(false);
@@ -310,22 +325,9 @@ const panelDock = createPanelDock({
   rightPin: document.getElementById('pinRightPanel'),
 });
 
-let currentStep = 'box';
 let artworkApp;
 let preview3dFacade;
 let renderApp;
-const WORKFLOW_MODE_STORAGE_KEY = 'cartonBuilder.workflowMode.default';
-function readWorkflowMode() {
-  try {
-    const storage = window.localStorage;
-    const stored = storage?.getItem(WORKFLOW_MODE_STORAGE_KEY)
-      || storage?.getItem('cartonBuilder.workflowMode');
-    return stored === 'technical' ? 'technical' : 'quick';
-  } catch {
-    return 'quick';
-  }
-}
-let workflowMode = readWorkflowMode();
 let technicalDocument = null;
 let technicalAssets = null;
 let activeCartonModel = model;
@@ -336,6 +338,7 @@ let technicalValidation = {
 };
 
 const cartonModelBridge = {
+  get mode() { return activeCartonModel.mode || 'quick'; },
   get dimensions() { return activeCartonModel.dimensions; },
   get board() { return activeCartonModel.board; },
   get construction() { return activeCartonModel.construction; },
@@ -349,6 +352,7 @@ const cartonModelBridge = {
   getBounds: () => activeCartonModel.getBounds(),
   getDielinePrimitives: () => activeCartonModel.getDielinePrimitives?.() || [],
   getArtworkSurfaces: () => activeCartonModel.getArtworkSurfaces?.() || [],
+  getArtworkReferenceFrame: () => activeCartonModel.getArtworkReferenceFrame?.() || null,
   getArtworkMaskPaths: () => activeCartonModel.getArtworkMaskPaths?.() || [],
   getCanonicalSemanticSvg: () => activeCartonModel.getCanonicalSemanticSvg?.() || null,
   getSourceIdentity: () => activeCartonModel.getSourceIdentity?.() || null,
@@ -358,12 +362,13 @@ const cartonModelBridge = {
   setBoardConstruction: (...args) => activeCartonModel.setBoardConstruction?.(...args),
 };
 
-const workflowModeInputs = [...document.querySelectorAll('input[name="cartonWorkflowMode"]')];
+const workflowModeCards = [...document.querySelectorAll('[data-workflow-mode]')];
 const quickWorkflowEditor = document.getElementById('quickWorkflowEditor');
 const technicalWorkflowEditor = document.getElementById('technicalWorkflowEditor');
 const technicalHostFrame = document.getElementById('technicalHostFrame');
 const technicalHostStatus = document.getElementById('technicalHostStatus');
 const technicalHostValidation = document.getElementById('technicalHostValidation');
+const presetTriggerBtn = document.getElementById('presetTriggerBtn');
 
 function technicalSourceSnapshot() {
   if (!technicalDocument) return null;
@@ -394,7 +399,6 @@ function technicalAssetBlobs(documentRef = technicalDocument) {
 function setActiveCartonModel(nextModel, nextDocument = null) {
   activeCartonModel = nextModel || model;
   technicalDocument = nextDocument;
-  cartonModelBridge.mode = workflowMode;
   const caliperMm = Number(activeCartonModel.board?.caliperMm);
   if (Number.isFinite(caliperMm)) {
     renderApp?.setBoardCaliper?.(caliperMm, { notify: false });
@@ -484,10 +488,22 @@ async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAsset
 }
 
 function applyWorkflowModeUi() {
-  for (const input of workflowModeInputs) input.checked = input.value === workflowMode;
-  if (quickWorkflowEditor) quickWorkflowEditor.hidden = workflowMode !== 'quick';
-  if (technicalWorkflowEditor) technicalWorkflowEditor.hidden = workflowMode !== 'technical';
-  if (workflowMode === 'technical') ensurePbdHost()?.start();
+  for (const card of workflowModeCards) {
+    const active = workflowChosen && card.dataset.workflowMode === workflowMode;
+    card.disabled = startupRestoring;
+    card.classList.toggle('active', active);
+    card.setAttribute('aria-pressed', String(active));
+    card.dataset.current = String(active);
+    const currentStatus = card.querySelector('.workflow-current');
+    if (currentStatus) currentStatus.hidden = !active;
+  }
+  if (quickWorkflowEditor) quickWorkflowEditor.hidden = !workflowChosen || workflowMode !== 'quick';
+  if (technicalWorkflowEditor) technicalWorkflowEditor.hidden = !workflowChosen || workflowMode !== 'technical';
+  if (presetTriggerBtn) {
+    presetTriggerBtn.disabled = !workflowChosen || workflowMode !== 'quick';
+    presetTriggerBtn.title = !workflowChosen ? t('workflowSelectionRequired') : 'Box Presets Library';
+  }
+  if (workflowChosen && workflowMode === 'technical') ensurePbdHost()?.start();
   updateStepNavigationStates();
 }
 
@@ -572,6 +588,8 @@ async function acceptTechnicalCarton() {
 }
 
 async function transitionToStep(step) {
+  if (startupRestoring) return false;
+  if (step !== 'workflow' && !workflowChosen) return false;
   if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
   if (step === 'artwork' && workflowMode === 'technical' && !(await acceptTechnicalCarton())) return false;
   showStep(step);
@@ -579,21 +597,23 @@ async function transitionToStep(step) {
 }
 
 function updateStepNavigationStates() {
-  const isBoxComplete = workflowMode === 'technical'
+  const isBoxComplete = workflowChosen && (workflowMode === 'technical'
     ? Boolean(technicalDocument?.isComplete || technicalValidationIsReady())
-    : model.isComplete;
+    : model.isComplete);
   const hasArtwork = Boolean(artworkApp?.artwork?.hasArtwork);
 
+  const workflowBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'workflow');
   const boxBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'box');
   const artworkBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'artwork');
   const previewBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'preview');
   const renderBtn = stepButtons.find((btn) => btn.dataset.stepTarget === 'render');
 
-  if (boxBtn) boxBtn.disabled = false;
-  if (artworkBtn) artworkBtn.disabled = !isBoxComplete;
+  if (workflowBtn) workflowBtn.disabled = startupRestoring;
+  if (boxBtn) boxBtn.disabled = !workflowChosen;
+  if (artworkBtn) artworkBtn.disabled = !workflowChosen || !isBoxComplete;
   const technicalPreviewReady = workflowMode !== 'technical';
-  if (previewBtn) previewBtn.disabled = !isBoxComplete || !hasArtwork || !technicalPreviewReady;
-  if (renderBtn) renderBtn.disabled = !isBoxComplete || !hasArtwork || !technicalPreviewReady;
+  if (previewBtn) previewBtn.disabled = !workflowChosen || !isBoxComplete || !hasArtwork || !technicalPreviewReady;
+  if (renderBtn) renderBtn.disabled = !workflowChosen || !isBoxComplete || !hasArtwork || !technicalPreviewReady;
 
   if (artworkBtn) artworkBtn.classList.toggle('unlocked', isBoxComplete);
   if (previewBtn) previewBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork && technicalPreviewReady);
@@ -601,8 +621,12 @@ function updateStepNavigationStates() {
 }
 
 function showStep(step) {
+  if (startupRestoring && step === 'workflow') return false;
+  if (step !== 'workflow' && !workflowChosen) return false;
   if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
   currentStep = step;
+  const workflowStep = document.getElementById('workflowStep');
+  if (workflowStep) workflowStep.hidden = step !== 'workflow';
   boxStep.hidden = step !== 'box';
   artworkStep.hidden = step !== 'artwork';
   previewStep.hidden = step !== 'preview';
@@ -610,7 +634,7 @@ function showStep(step) {
 
   updateStepNavigationStates();
 
-  const stepOrder = ['box', 'artwork', 'preview', 'render'];
+  const stepOrder = ['workflow', 'box', 'artwork', 'preview', 'render'];
   const currentIndex = stepOrder.indexOf(step);
 
   for (const button of stepButtons) {
@@ -618,7 +642,9 @@ function showStep(step) {
     const targetIndex = stepOrder.indexOf(target);
     const isActive = target === step;
     const isCompletedPreviousStep = targetIndex < currentIndex && (
-      target === 'box'
+      target === 'workflow'
+        ? workflowChosen
+        : target === 'box'
         ? (workflowMode === 'technical'
           ? Boolean(technicalDocument?.isComplete || technicalValidationIsReady())
           : model.isComplete)
@@ -659,9 +685,10 @@ function showStep(step) {
     renderApp?.deactivate();
   }
 
-  if (artworkApp) {
+  if (artworkApp && step !== 'workflow') {
     artworkApp.persistWorkflowStep(step);
   }
+  return true;
 }
 
 const boxApp = createBoxNetApp({
@@ -685,14 +712,6 @@ const boxApp = createBoxNetApp({
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
   },
-  onConstructionChange: () => {
-    // Construction changes invalidate all derived polygon/UV/hinge resources.
-    // The active facade/render app will lazily rebuild on its next frame.
-    preview3dFacade?.resetForProject?.();
-    renderApp?.resetForProject?.();
-    updateStepNavigationStates();
-  },
-  hasArtwork: () => Boolean(artworkApp?.artwork?.hasArtwork),
   onChange: () => {
     updateStepNavigationStates();
     artworkApp?.scheduleSave();
@@ -711,6 +730,7 @@ artworkApp = createArtworkApp({
   onBackToEditor: () => showStep('artwork'),
   onProjectLoaded: (snapshot, project = null) => {
     workflowMode = snapshot.workflowSelection === 'technical' ? 'technical' : 'quick';
+    workflowChosen = true;
     if (snapshot.cartonSource?.mode !== 'technical') {
       technicalDocument = null;
       technicalAssets = null;
@@ -737,15 +757,18 @@ artworkApp = createArtworkApp({
     }
     updateStepNavigationStates();
     showStep(targetStep);
+    if (snapshot[QUICK_CONSTRUCTION_MIGRATION_FLAG]) {
+      window.setTimeout(() => artworkApp?.showToast?.(t('quickConstructionMigrated')), 0);
+    }
   },
   getWorkflowStep: () => currentStep,
   getRenderState: () => renderApp?.getState?.() || DEFAULT_RENDER_SETTINGS,
   getRenderBoardAppearance: () => renderApp?.getBoardAppearance?.(),
   getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
   getCartonSource: () => technicalSourceSnapshot() || { mode: 'quick', box: model.toJSON() },
-  getWorkflowSelection: () => workflowMode,
+  getWorkflowSelection: () => workflowMode || 'quick',
   getTechnicalAssets: () => technicalAssets,
-  canPersistProject: () => true,
+  canPersistProject: () => canPersistWorkflow(workflowChosen),
   restoreCartonDocument: restoreTechnicalCarton,
   getPreview3dState: () => preview3dFacade?.getState?.() || null,
   operationProgress,
@@ -810,7 +833,8 @@ window.cartonBuilderApp = {
     return currentStep;
   },
   getState() {
-    return artworkApp.createSnapshot(currentStep);
+    if (!workflowChosen) return null;
+    return artworkApp.createSnapshot(currentStep === 'workflow' ? 'box' : currentStep);
   },
   showStep: transitionToStep,
   artwork: artworkApp,
@@ -823,36 +847,50 @@ window.cartonBuilderApp = {
   },
 };
 
-async function handleWorkflowModeChange(input) {
-    if (!input.checked) return;
-    if (input.value === workflowMode) return;
-    if (artworkApp?.artwork?.hasArtwork && !window.confirm(t('workflowChangeClearsArtwork'))) {
-      applyWorkflowModeUi();
-      return;
-    }
-    if (artworkApp?.artwork?.hasArtwork) {
-      try {
-        await artworkApp.createProjectCheckpoint({ reason: 'workflow-switch' });
-      } catch (error) {
-        applyWorkflowModeUi();
-        updateTechnicalHostStatus(error?.message || t('projectSaveFailed'), 'error');
-        return;
-      }
-    }
-    artworkApp?.clearArtworkForCartonChange?.();
-    workflowMode = input.value === 'technical' ? 'technical' : 'quick';
-    technicalDocument = null;
-    technicalAssets = null;
-    technicalValidation = { structural: 'NOT_GENERATED', geometry: 'NOT_GENERATED', contract: 'NOT_GENERATED' };
-    setActiveCartonModel(model, null);
-    preview3dFacade?.resetForProject?.();
-    renderApp?.resetForProject?.();
+async function selectWorkflow(mode) {
+  const outcome = await resolveWorkflowSelection({
+    currentMode: workflowMode,
+    workflowChosen,
+    nextMode: mode,
+    hasArtwork: Boolean(artworkApp?.artwork?.hasArtwork),
+    confirmSwitch: () => window.confirm(t('workflowChangeClearsArtwork')),
+    createCheckpoint: () => artworkApp.createProjectCheckpoint({ reason: 'workflow-switch' }),
+    clearArtwork: () => artworkApp?.clearArtworkForCartonChange?.(),
+    commit: (nextMode) => {
+      workflowMode = nextMode;
+      workflowChosen = true;
+    },
+  });
+
+  if (outcome.status === 'repeat') {
+    await transitionToStep('box');
+    return;
+  }
+
+  if (outcome.status === 'cancelled') {
     applyWorkflowModeUi();
-    artworkApp?.scheduleSave?.();
+    showStep('workflow');
+    return;
+  }
+  if (outcome.status === 'checkpoint-error') {
+    applyWorkflowModeUi();
+    updateTechnicalHostStatus(outcome.error?.message || t('projectSaveFailed'), 'error');
+    showStep('workflow');
+    return;
+  }
+
+  technicalDocument = null;
+  technicalAssets = null;
+  technicalValidation = { structural: 'NOT_GENERATED', geometry: 'NOT_GENERATED', contract: 'NOT_GENERATED' };
+  setActiveCartonModel(model, null);
+  preview3dFacade?.resetForProject?.();
+  renderApp?.resetForProject?.();
+  applyWorkflowModeUi();
+  await transitionToStep('box');
 }
 
-for (const input of workflowModeInputs) {
-  input.addEventListener('change', () => { void handleWorkflowModeChange(input); });
+for (const card of workflowModeCards) {
+  card.addEventListener('click', () => { void selectWorkflow(card.dataset.workflowMode); });
 }
 
 applyWorkflowModeUi();
@@ -865,12 +903,31 @@ for (const button of stepButtons) {
 
 document.getElementById('openRenderButton')?.addEventListener('click', () => void transitionToStep('render'));
 
-restoreStartupProject({
+void restoreStartupProject({
   restoreAutosave: () => artworkApp.restoreAutosave(),
   restoreExample: () => artworkApp.restoreProjectFromUrl(
     new URL('Calmdownol_template.carton', document.baseURI).href,
   ),
   storage: window.localStorage,
+}).then((result) => {
+  workflowBootstrap = completeWorkflowBootstrap(
+    { ...workflowBootstrap, mode: workflowMode, chosen: workflowChosen },
+    result,
+    workflowMode,
+  );
+  startupRestoring = workflowBootstrap.restoring;
+  workflowChosen = workflowBootstrap.chosen;
+  workflowMode = workflowBootstrap.mode;
+  applyWorkflowModeUi();
+  if (result === 'empty') showStep('workflow');
+}).catch((error) => {
+  console.error('Startup restore failed:', error);
+  workflowBootstrap = completeWorkflowBootstrap(workflowBootstrap, 'empty');
+  startupRestoring = workflowBootstrap.restoring;
+  workflowChosen = workflowBootstrap.chosen;
+  workflowMode = workflowBootstrap.mode;
+  applyWorkflowModeUi();
+  showStep('workflow');
 });
 window.addEventListener('beforeunload', () => {
   preview3dFacade.dispose();

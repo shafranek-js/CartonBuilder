@@ -5,10 +5,10 @@
   "name": "Packaging Box Designer",
   "description": "Parametric packaging box designer engine and canonical 2D/3D dieline generator",
   "entrypoint": "index.html",
-  "sourceCommit": "67444de2a0fcf65857974ad6ba35f9b699d69e59",
+  "sourceCommit": "1208f9188e662895cb66a3e3138fa2ac2fadc511",
   "artifact": {
-    "byteLength": 598034,
-    "sha256": "d798b23784c800c625d9ad42e31878f824567f9df43c47f60fb6fa5c2d9c3715"
+    "byteLength": 598887,
+    "sha256": "1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -89,7 +89,7 @@
     {
       "path": "contract/package-manifest.json",
       "byteLength": 3275,
-      "sha256": "35698265680bc44dfdd7b4c5bcbd8e543e2f8e3f7bbf7e835459c2afe1e510b0"
+      "sha256": "af65cd1262acc7722302bf2c3dac82953d00bd09f1a6841077655bcbc670cfa0"
     },
     {
       "path": "contract/package.json",
@@ -133,8 +133,8 @@
     },
     {
       "path": "index.html",
-      "byteLength": 598034,
-      "sha256": "d798b23784c800c625d9ad42e31878f824567f9df43c47f60fb6fa5c2d9c3715"
+      "byteLength": 598887,
+      "sha256": "1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904"
     }
   ]
 }

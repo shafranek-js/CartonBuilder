@@ -47,7 +47,7 @@ function tracePanelPath(context, panel) {
   for (const segment of segments) {
     if (segment.kind === 'ARC') {
       const { center, radius, startAngle, delta, clockwise } = getArcAngles(segment);
-      context.arc(center.x, center.y, radius, startAngle, startAngle + (clockwise ? 1 : -1) * delta, !clockwise);
+      context.arc(center.x, center.y, radius, startAngle, startAngle + (clockwise ? -1 : 1) * delta, clockwise);
     } else {
       context.lineTo(segment.end.x, segment.end.y);
     }
@@ -60,7 +60,7 @@ function traceDieline(context, segments) {
     if (segment.kind === 'ARC') {
       const { center, radius, startAngle, delta, clockwise } = getArcAngles(segment);
       context.moveTo(segment.start.x, segment.start.y);
-      context.arc(center.x, center.y, radius, startAngle, startAngle + (clockwise ? 1 : -1) * delta, !clockwise);
+      context.arc(center.x, center.y, radius, startAngle, startAngle + (clockwise ? -1 : 1) * delta, clockwise);
     } else {
       context.moveTo(segment.start.x, segment.start.y);
       context.lineTo(segment.end.x, segment.end.y);

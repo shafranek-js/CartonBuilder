@@ -1,4 +1,6 @@
 import { createExportSvg, createPrepressSvg, getExportFilename, getPrepressExportFilename } from '../export/svgExport.js';
+import { createTechnicalSvgExport } from '../export/technicalSvgExport.js';
+import { computeFrontRelativeCoordinates } from '../carton/frontRelativeCoordinates.js';
 import { createDiagnosticsBlob, recordDiagnostic } from '../diagnostics.js';
 import { AppError } from '../errors.js';
 import { getExportWarnings } from '../export/exportChecks.js';
@@ -266,6 +268,9 @@ export function createArtworkApp({
 
   const controls = {
     fileName: documentRef.getElementById('artworkFileName'),
+    frontRelativeSection: documentRef.getElementById('frontRelativeCoordinates'),
+    frontRelativeX: documentRef.getElementById('frontRelativeX'),
+    frontRelativeY: documentRef.getElementById('frontRelativeY'),
     x: documentRef.getElementById('artworkX'),
     y: documentRef.getElementById('artworkY'),
     width: documentRef.getElementById('artworkWidth'),
@@ -765,8 +770,9 @@ export function createArtworkApp({
   } = {}) {
     const payload = await projectCheckpoint.restoreProjectCheckpoint({ verify: verifyCheckpoint });
     if (!payload) return false;
-    await restoreProject(payload, { schedule: false });
-    await onProjectLoaded(payload.snapshot, payload);
+    const validated = await validateProjectBundle(payload);
+    await restoreProject(validated, { schedule: false });
+    await onProjectLoaded(validated.snapshot, validated);
     if (schedule) scheduleSave();
     return true;
   }
@@ -840,6 +846,12 @@ export function createArtworkApp({
     const reference = enabled ? artwork.getReferencePosition() : null;
     controls.x.value = enabled ? round(reference.x) : '';
     controls.y.value = enabled ? round(reference.y) : '';
+    const isTechnical = boxModel?.mode === 'technical';
+    const frame = isTechnical ? boxModel.getArtworkReferenceFrame?.() : null;
+    const frontRelative = enabled ? computeFrontRelativeCoordinates(reference, frame) : null;
+    if (controls.frontRelativeSection) controls.frontRelativeSection.hidden = !isTechnical || !enabled;
+    if (controls.frontRelativeX) controls.frontRelativeX.textContent = frontRelative ? String(round(frontRelative.x)) : '—';
+    if (controls.frontRelativeY) controls.frontRelativeY.textContent = frontRelative ? String(round(frontRelative.y)) : '—';
     controls.width.value = enabled ? round(artwork.displayedWidthMm) : '';
     controls.height.value = enabled ? round(artwork.displayedHeightMm) : '';
     if (enabled) {
@@ -3695,7 +3707,10 @@ export function createArtworkApp({
           const exportArtworks = getArtworks().filter((entry) => entry.visible && entry.outputRole !== 'finish');
 
           if (type === 'svg') {
-            blob = new Blob([createExportSvg(boxModel)], { type: 'image/svg+xml;charset=utf-8' });
+            const markup = boxModel.mode === 'technical'
+              ? await createTechnicalSvgExport(boxModel)
+              : createExportSvg(boxModel);
+            blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
             suggestedName = getExportFilename(boxModel.dimensions);
             types = [{
               description: 'Scalable Vector Graphics (*.svg)',
@@ -4147,6 +4162,8 @@ export function createArtworkApp({
 
   return {
     get artwork() { return artwork; },
+    getArtworkReferenceFrame: () => boxModel?.getArtworkReferenceFrame?.() || null,
+    showToast,
     renderer,
     history,
     layers,

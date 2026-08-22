@@ -37,9 +37,12 @@ export function getArcAngles(arc) {
   const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
   const endAngle = Math.atan2(end.y - center.y, end.x - center.x);
   const clockwise = Boolean(arc?.clockwise);
+  // PBD geometry uses a Cartesian model plane (Y points up). Keep that
+  // convention here; renderers which use a Y-down plane must adapt only at
+  // their output boundary.
   const delta = clockwise
-    ? normalizeAngle(endAngle - startAngle)
-    : normalizeAngle(startAngle - endAngle);
+    ? normalizeAngle(startAngle - endAngle)
+    : normalizeAngle(endAngle - startAngle);
   return {
     center,
     start,
@@ -58,7 +61,9 @@ export function arcPathData(arc) {
     return `M${start.x} ${start.y}L${end.x} ${end.y}`;
   }
   const largeArc = delta > Math.PI + EPSILON ? 1 : 0;
-  const sweep = clockwise ? 1 : 0;
+  // SVG consumes the unprojected model coordinates in a Y-down viewport, so
+  // its visual sweep is the inverse of the model's Cartesian direction.
+  const sweep = clockwise ? 0 : 1;
   return `M${start.x} ${start.y}A${radius} ${radius} 0 ${largeArc} ${sweep} ${end.x} ${end.y}`;
 }
 
@@ -75,7 +80,7 @@ export function segmentPathData(segment) {
 export function arcToCubicSegments(arc) {
   const { center, radius, startAngle, delta, clockwise } = getArcAngles(arc);
   if (!Number.isFinite(radius) || radius <= 0 || !Number.isFinite(delta)) return [];
-  const signedDelta = (clockwise ? 1 : -1) * delta;
+  const signedDelta = (clockwise ? -1 : 1) * delta;
   const pieceCount = Math.max(1, Math.ceil(Math.abs(signedDelta) / (Math.PI / 2)));
   const step = signedDelta / pieceCount;
   const pieces = [];
@@ -103,7 +108,7 @@ export function contourPathData(segments = []) {
     if (segment?.kind === 'ARC') {
       const { end, radius, delta, clockwise } = getArcAngles(segment);
       const largeArc = delta > Math.PI + EPSILON ? 1 : 0;
-      path += `A${radius} ${radius} 0 ${largeArc} ${clockwise ? 1 : 0} ${end.x} ${end.y}`;
+      path += `A${radius} ${radius} 0 ${largeArc} ${clockwise ? 0 : 1} ${end.x} ${end.y}`;
     } else {
       const end = clonePoint(segment?.end);
       path += `L${end.x} ${end.y}`;
@@ -158,7 +163,11 @@ export function getDielineSegments(model) {
     const fold = [];
     for (const primitive of model.getDielinePrimitives()) {
       const segment = {
+        id: primitive.id,
         kind: primitive.kind || 'LINE',
+        role: primitive.role,
+        semanticRole: primitive.semanticRole,
+        classification: primitive.classification,
         start: { x: Number(primitive.start?.x), y: Number(primitive.start?.y) },
         end: { x: Number(primitive.end?.x), y: Number(primitive.end?.y) },
         panelIds: Array.isArray(primitive.owners) ? primitive.owners.slice() : [],
@@ -240,16 +249,20 @@ export function closestPointOnArc(point, arc) {
   if (!Number.isFinite(radius) || radius <= 0) return null;
   const candidateAngle = Math.atan2(Number(point?.y) - center.y, Number(point?.x) - center.x);
   const directed = clockwise
-    ? normalizeAngle(candidateAngle - startAngle)
-    : normalizeAngle(startAngle - candidateAngle);
+    ? normalizeAngle(startAngle - candidateAngle)
+    : normalizeAngle(candidateAngle - startAngle);
   const clampedDirected = Math.min(delta, Math.max(0, directed));
   const angle = clockwise
-    ? startAngle + clampedDirected
-    : startAngle - clampedDirected;
-  const closest = {
-    x: center.x + radius * Math.cos(angle),
-    y: center.y + radius * Math.sin(angle),
-  };
+    ? startAngle - clampedDirected
+    : startAngle + clampedDirected;
+  const closest = clampedDirected <= EPSILON
+    ? start
+    : delta - clampedDirected <= EPSILON
+      ? end
+      : {
+          x: center.x + radius * Math.cos(angle),
+          y: center.y + radius * Math.sin(angle),
+        };
   const startDistance = Math.hypot(Number(point?.x) - start.x, Number(point?.y) - start.y);
   const endDistance = Math.hypot(Number(point?.x) - end.x, Number(point?.y) - end.y);
   const radialDistance = Math.hypot(Number(point?.x) - closest.x, Number(point?.y) - closest.y);

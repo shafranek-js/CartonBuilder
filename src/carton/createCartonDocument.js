@@ -4,6 +4,7 @@
 
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
+import { normalizeQuickBoxState } from '../model/quickCustomNet.js';
 import { QuickCartonDocument } from './QuickCartonDocument.js';
 import { TechnicalCartonDocument } from './TechnicalCartonDocument.js';
 
@@ -15,7 +16,8 @@ export async function createCartonDocument(cartonSource, technicalAssets = null,
   const mode = cartonSource.mode;
   if (mode === 'quick') {
     const box = cartonSource.box;
-    const boxModel = box instanceof BoxNetModel ? box : BoxNetModel.fromJSON(box);
+    const normalized = normalizeQuickBoxState(box instanceof BoxNetModel ? box.toJSON() : box);
+    const boxModel = BoxNetModel.fromJSON(normalized.box);
     return new QuickCartonDocument(boxModel);
   }
 

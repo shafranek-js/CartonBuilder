@@ -57,6 +57,25 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     expect(migrated.box).toBeUndefined(); // Top-level box removed
   });
 
+  it('keeps the transient workflow step out of persisted schema v17 snapshots', () => {
+    const migrated = migrateProjectSnapshot({
+      schemaVersion: 17,
+      meta: { name: 'Transient workflow choice' },
+      workflowStep: 'workflow',
+      workflowSelection: 'quick',
+      cartonSource: { mode: 'quick', box: new BoxNetModel().toJSON() },
+      artworks: [],
+      render: {},
+      renderAppearance: {},
+      prepress: {},
+      view: {},
+      history: { undo: [], redo: [] },
+    });
+
+    expect(migrated.workflowStep).toBe('box');
+    expect(migrated.workflowSelection).toBe('quick');
+  });
+
   it('migrates older schema (e.g. v1, v6, v13) through full chain to schema v17', () => {
     const v6Snapshot = {
       schemaVersion: 6,

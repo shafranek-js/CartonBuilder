@@ -34,10 +34,11 @@
         </div>
 
         <div class="stepper-center-steps">
-          <button class="step active" type="button" data-step-target="box" aria-current="step"><span>1</span><b data-i18n="createBox">Create Box</b></button>
-          <button class="step" type="button" data-step-target="artwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
-          <button class="step" type="button" data-step-target="preview" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
-          <button class="step" type="button" data-step-target="render" disabled title="Complete earlier steps to render"><span>4</span><b data-i18n="renderStep">Render</b></button>
+          <button class="step active" type="button" data-step-target="workflow" aria-current="step" aria-label="Select Workflow" data-i18n-aria-label="selectWorkflowStepLabel" disabled><span>0</span><b data-i18n="selectWorkflowStep">Select Workflow</b></button>
+          <button class="step" type="button" data-step-target="box" aria-label="Create Box" data-i18n-aria-label="createBox" disabled title="Choose a workflow first" data-i18n-title="workflowSelectionRequired"><span>1</span><b data-i18n="createBox">Create Box</b></button>
+          <button class="step" type="button" data-step-target="artwork" aria-label="Place Artwork" data-i18n-aria-label="placeArtwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
+          <button class="step" type="button" data-step-target="preview" aria-label="Preview / Export" data-i18n-aria-label="previewExport" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
+          <button class="step" type="button" data-step-target="render" aria-label="Render" data-i18n-aria-label="renderStep" disabled title="Complete earlier steps to render"><span>4</span><b data-i18n="renderStep">Render</b></button>
         </div>
         <div class="header-right-tools">
           <div class="preset-picker-wrap">
@@ -87,34 +88,33 @@
         </div>
       </div>
 
-      <section class="workflow-step box-step" id="boxStep">
-        <section class="workflow-mode-picker" id="workflowModePicker" aria-labelledby="workflowModeTitle">
-          <div class="workflow-mode-picker-heading">
-            <div>
-              <span class="eyebrow" data-i18n="workflowModeEyebrow">Choose a box workflow</span>
-              <h1 id="workflowModeTitle" data-i18n="workflowModeTitle">How do you want to build the dieline?</h1>
-            </div>
-            <span class="workflow-mode-note" data-i18n="workflowModeNote">You can switch before placing artwork.</span>
-          </div>
-          <div class="workflow-mode-cards" role="radiogroup" aria-label="Box workflow">
-            <label class="workflow-mode-card">
-              <input type="radio" name="cartonWorkflowMode" value="quick" checked>
+      <section class="workflow-step workflow-selection-step" id="workflowStep" hidden aria-labelledby="workflowSelectionTitle">
+        <div class="workflow-selection-content">
+          <span class="eyebrow" data-i18n="selectWorkflowStep">Select Workflow</span>
+          <h1 id="workflowSelectionTitle" data-i18n="workflowSelectionTitle">How do you want to build the dieline?</h1>
+          <p data-i18n="workflowSelectionDescription">Choose a workflow to start a new carton project.</p>
+          <div class="workflow-mode-cards" role="group" aria-label="Workflow choices" data-i18n-aria-label="workflowSelectionChoices">
+            <button class="workflow-mode-card" type="button" data-workflow-mode="quick" aria-pressed="false" disabled>
               <span class="workflow-mode-card-body">
                 <strong data-i18n="workflowQuickTitle">Quick Layout</strong>
-                <span data-i18n="workflowQuickDescription">Legacy Custom Net for a fast, flexible layout.</span>
+                <span data-i18n="workflowQuickDescription">Custom Net for a fast, flexible layout.</span>
                 <small data-i18n="workflowQuickBadge">Fast start</small>
+                <em class="workflow-current" data-i18n="workflowCurrent" hidden>Current</em>
               </span>
-            </label>
-            <label class="workflow-mode-card workflow-mode-card-technical">
-              <input type="radio" name="cartonWorkflowMode" value="technical">
+            </button>
+            <button class="workflow-mode-card workflow-mode-card-technical" type="button" data-workflow-mode="technical" aria-pressed="false" disabled>
               <span class="workflow-mode-card-body">
                 <strong data-i18n="workflowTechnicalTitle">Technical Dieline</strong>
                 <span data-i18n="workflowTechnicalDescription">Build a reference-calibrated dieline in Packaging Box Designer.</span>
                 <small data-i18n="workflowTechnicalBadge">Reference-only · not production certified</small>
+                <em class="workflow-current" data-i18n="workflowCurrent" hidden>Current</em>
               </span>
-            </label>
+            </button>
           </div>
-        </section>
+        </div>
+      </section>
+
+      <section class="workflow-step box-step" id="boxStep" hidden>
 
         <section class="technical-workflow-editor" id="technicalWorkflowEditor" hidden aria-label="Packaging Box Designer host">
           <header class="technical-workflow-toolbar">
@@ -175,29 +175,6 @@
             <button class="footer-button cancel-button" id="cancelButton" type="button" disabled data-i18n="resetBox">Reset Box</button>
           </div>
         </header>
-
-        <section class="construction-library" aria-label="Construction Library">
-          <div class="construction-library-heading">
-            <strong data-i18n="constructionLibrary">Construction Library</strong>
-            <span id="constructionStatus" class="construction-status" role="status"></span>
-          </div>
-          <div class="construction-library-controls">
-            <label for="constructionTemplate" data-i18n="constructionTemplate">Construction:</label>
-            <select id="constructionTemplate" name="constructionTemplate">
-              <option value="legacy-six-panel" data-i18n="constructionLegacy">Legacy Custom Net</option>
-              <option value="ste" data-i18n="constructionSte">Straight Tuck End</option>
-              <option value="rte" data-i18n="constructionRte">Reverse Tuck End</option>
-            </select>
-            <button id="constructionResetDefaults" type="button" class="footer-button" data-i18n="constructionReset">Reset Defaults</button>
-          </div>
-          <div id="constructionParameters" class="construction-parameters" hidden>
-            <label><span data-i18n="glueTabWidth">Glue tab</span><input id="constructionGlue" type="number" min="6" step="0.1"><span>mm</span></label>
-            <label><span data-i18n="tuckTabDepth">Tuck depth</span><input id="constructionTuck" type="number" min="6" step="0.1"><span>mm</span></label>
-            <label><span data-i18n="dustFlapReach">Dust reach</span><input id="constructionDust" type="number" min="6" step="0.1"><span>mm</span></label>
-            <label><span data-i18n="lockEar">Lock ear</span><input id="constructionEar" type="number" min="0" step="0.1"><span>mm</span></label>
-          </div>
-          <p id="constructionDisclaimer" class="construction-disclaimer" hidden data-i18n="constructionDisclaimer">Structural mockup — production allowances not applied.</p>
-        </section>
 
         <section class="designer" aria-label="Box net designer" data-i18n-aria-label="boxDesignerLabel">
           <div class="workspace-wrap">
@@ -440,6 +417,17 @@
                   <span class="transform-unit">mm</span>
                   <label class="transform-axis" for="artworkHeight">H:</label>
                   <span class="transform-input"><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled></span>
+                  <span class="transform-unit">mm</span>
+                </div>
+              </div>
+              <div id="frontRelativeCoordinates" class="front-relative-coordinates" hidden aria-live="polite">
+                <span class="front-relative-label" data-i18n="frontRelativeLabel">Front-relative</span>
+                <div class="front-relative-fields">
+                  <span class="front-relative-axis" data-i18n="frontRelativeXLabel">Front X</span>
+                  <output id="frontRelativeX" aria-label="Front X" data-i18n-aria-label="frontRelativeXLabel">—</output>
+                  <span class="transform-unit">mm</span>
+                  <span class="front-relative-axis" data-i18n="frontRelativeYLabel">Front Y</span>
+                  <output id="frontRelativeY" aria-label="Front Y" data-i18n-aria-label="frontRelativeYLabel">—</output>
                   <span class="transform-unit">mm</span>
                 </div>
               </div>

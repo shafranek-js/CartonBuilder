@@ -7,6 +7,7 @@ import { CartonDocument } from './CartonDocument.js';
 import { validateCartonWorkflowBundle } from '../workflow/index.js';
 import { AppError } from '../errors.js';
 import { contourPathData } from '../model/dieline.js';
+import { presentationTransformFromSvg } from './technicalPresentation.js';
 
 function deepFreeze(value, seen = new WeakSet()) {
   if (!value || typeof value !== 'object' || seen.has(value)) return value;
@@ -126,6 +127,10 @@ export class TechnicalCartonDocument extends CartonDocument {
    */
   getBundle() {
     return clone(this._bundle);
+  }
+
+  getPresentationTransform() {
+    return presentationTransformFromSvg(this._bundle.semanticSvg?.markup);
   }
 
   getBounds() {

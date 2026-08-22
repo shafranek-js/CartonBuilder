@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import {
   BUILT_IN_PRESETS,
   deletePreset,
@@ -18,6 +19,7 @@ describe('PresetStore', () => {
       dimensions: { width: 150, height: 90, depth: 40 },
       isBuiltIn: true,
     });
+    expect(BUILT_IN_PRESETS.find((preset) => preset.id === 'preset-tuck')?.name).toBe('Small Box');
   });
 
   it('formats dimensions into readable strings', () => {
@@ -69,5 +71,46 @@ describe('PresetStore', () => {
     expect(imported).toBeDefined();
 
     if (imported) await deletePreset(imported.id);
+  });
+
+  it('normalizes legacy presets when reading and exporting', async () => {
+    const legacyState = new BoxNetModel(
+      { width: 180, height: 110, depth: 45 },
+      { caliperMm: 0.55 },
+      { templateId: 'ste', parameters: {} },
+    ).toJSON();
+    let stored = JSON.stringify([{
+      id: 'legacy-preset',
+      name: 'Legacy preset',
+      dimensions: legacyState.dimensions,
+      netState: legacyState,
+      construction: legacyState.construction,
+    }]);
+    vi.stubGlobal('localStorage', {
+      getItem: () => stored,
+      setItem: (_key, value) => { stored = value; },
+    });
+
+    try {
+      const loaded = await getUserPresets();
+      expect(loaded[0].netState.construction).toEqual({
+        templateId: 'legacy-six-panel',
+        templateVersion: 1,
+        parameters: {},
+      });
+      expect(JSON.parse(stored)[0].netState.construction.templateId).toBe('legacy-six-panel');
+
+      const exported = JSON.parse(exportPresetsJson([{
+        id: 'legacy-preset',
+        name: 'Legacy preset',
+        dimensions: legacyState.dimensions,
+        netState: legacyState,
+        construction: legacyState.construction,
+      }]));
+      expect(exported.presets[0].netState.construction.templateId).toBe('legacy-six-panel');
+      expect(JSON.stringify(exported)).not.toMatch(/"templateId":"(ste|rte)"/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

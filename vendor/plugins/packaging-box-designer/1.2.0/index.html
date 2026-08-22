@@ -7016,6 +7016,12 @@ var PBD;
         renderProfileResolution(m);
     }
     PBD.getCurrentModel = () => currentModel;
+    PBD.getPresentationTransform = () => PBD.normalizePresentationTransform(presentationTransform);
+    PBD.setPresentationTransform = (value) => {
+        presentationTransform = PBD.normalizePresentationTransform(value);
+        render();
+        return PBD.normalizePresentationTransform(presentationTransform);
+    };
     PBD.restoreCartonInput = (rawInput = {}) => {
         const input = rawInput && typeof rawInput === 'object' ? rawInput : {};
         const setControlValue = (id, value) => {
@@ -7687,14 +7693,13 @@ function pbdHostIssue(code, message, details = {}) {
   return { code, severity: "ERROR", message, ...details };
 }
 
-function applyHostModeUi() {
-  for (const id of ["flipHorizontalBtn", "flipVerticalBtn", "rotateCcwBtn", "rotateCwBtn"]) {
-    const control = document.getElementById(id);
-    if (!control) continue;
-    control.hidden = true;
-    control.style.display = "none";
-    control.setAttribute("aria-hidden", "true");
-  }
+function presentationTransformFromSvg(svgMarkup) {
+  const serialized = String(svgMarkup || "").match(/<svg\b[^>]*\bdata-presentation-transform="([^"]+)"/i)?.[1];
+  const values = String(serialized || "1,0,0,1").split(",").map(Number);
+  const candidate = values.length === 4 && values.every(Number.isFinite)
+    ? { a: values[0], b: values[1], c: values[2], d: values[3] }
+    : PBD.IDENTITY_PRESENTATION_TRANSFORM;
+  return PBD.normalizePresentationTransform(candidate);
 }
 
 function installPbdHostProtocol() {
@@ -7739,7 +7744,7 @@ function installPbdHostProtocol() {
 
   const setReadOnlyFallback = (enabled, reason = "") => {
     readOnlyFallback = Boolean(enabled);
-    const ids = ["widthInput", "heightInput", "depthInput", "thicknessInput", "cartonType", "snapProfile", "materialProfile", "converterProfile", "exportSvg", "exportJson"];
+    const ids = ["widthInput", "heightInput", "depthInput", "thicknessInput", "cartonType", "snapProfile", "materialProfile", "converterProfile", "flipHorizontalBtn", "flipVerticalBtn", "rotateCcwBtn", "rotateCwBtn", "exportSvg", "exportJson"];
     for (const id of ids) {
       const control = document.getElementById(id);
       if (control) control.disabled = readOnlyFallback;
@@ -7786,9 +7791,12 @@ function installPbdHostProtocol() {
     const modelCheck = PBD.validateModelExport(modelExport);
     if (!modelCheck.valid) throw new Error(modelCheck.issues.map((issue) => issue.message || issue.code).join(" "));
 
+    const presentationTransform = typeof PBD.getPresentationTransform === "function"
+      ? PBD.getPresentationTransform()
+      : PBD.IDENTITY_PRESENTATION_TRANSFORM;
     const svgResult = PBD.renderSvgMarkupV4(model, {
       includeDimensions: false,
-      presentationTransform: PBD.IDENTITY_PRESENTATION_TRANSFORM,
+      presentationTransform,
       bleed: { enabled: false },
       safeZones: { enabled: false },
     });
@@ -7862,6 +7870,8 @@ function installPbdHostProtocol() {
     if (!restoredModel || typeof PBD.getCurrentModel !== "function" || !PBD.getCurrentModel()) {
       throw new Error("PBD_CARTON_RESTORE_GENERATION_FAILED");
     }
+    if (typeof PBD.setPresentationTransform !== "function") throw new Error("PBD_PRESENTATION_RESTORE_API_UNAVAILABLE");
+    PBD.setPresentationTransform(presentationTransformFromSvg(svgMarkup));
     const rebuilt = await buildCartonBundle();
     if (rebuilt.modelJson.sha256 !== bundle.modelJson.sha256 || rebuilt.semanticSvg.sha256 !== bundle.semanticSvg.sha256) {
       const error = new Error("PBD_CARTON_RESTORE_HASH_MISMATCH");
@@ -7899,7 +7909,6 @@ function installPbdHostProtocol() {
       sessionId = String(data.sessionId);
       hostOrigin = event.origin === "null" ? "*" : event.origin;
       initialized = true;
-      applyHostModeUi();
       // This is an acknowledgement of host:init, not a second bootstrap
       // event. The host must not answer it with another host:init.
       post("plugin:ready", { pluginId: "packaging-box-designer", pluginVersion: PBD.APP_VERSION || "1.2.0" });

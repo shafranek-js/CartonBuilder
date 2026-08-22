@@ -81,7 +81,7 @@ describe('getSnapOffset', () => {
       end: { x: 0, y: 10 },
       center: { x: 0, y: 0 },
       radius: 10,
-      clockwise: true,
+      clockwise: false,
     };
     const arcTargets = {
       lines: { x: [], y: [] },

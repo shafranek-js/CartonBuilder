@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -9,11 +8,16 @@ import {
   formatNumber,
   getExportFilename,
 } from '../../src/export/svgExport.js';
+import {
+  createTechnicalSvgExport,
+  validateTechnicalSvgProvenance,
+} from '../../src/export/technicalSvgExport.js';
 import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import { AppError } from '../../src/errors.js';
 import { validateSvgV4Export } from '../../src/workflow/export/svgMetadata.mjs';
+import { sha256Async, utf8ByteLength } from '../../src/workflow/workflow/crypto.js';
 import { scanSvgSecurity } from '../../src/workflow/workflow/security.js';
 
 const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/workflow/fixtures');
@@ -34,6 +38,25 @@ function decodeMetadata(block) {
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&amp;', '&'));
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function withExistingProvenance(markup, quote = '"') {
+  const provenance = `<metadata data-schema-version=${quote}cartonbuilder.technical-svg-provenance.v1${quote} id=${quote}cartonbuilder-export-provenance${quote}>{}</metadata>`;
+  const pbdEnd = markup.indexOf('</metadata>') + '</metadata>'.length;
+  return `${markup.slice(0, pbdEnd)}${provenance}${markup.slice(pbdEnd)}`;
+}
+
+async function documentWithCanonicalMarkup(name, markup) {
+  const bundle = cloneJson(loadTechnicalFixture(name));
+  bundle.semanticSvg.markup = markup;
+  bundle.semanticSvg.byteLength = utf8ByteLength(markup);
+  bundle.semanticSvg.sha256 = await sha256Async(markup);
+  bundle.semanticSvg.assetId = `svg-${bundle.semanticSvg.sha256.slice(0, 16)}`;
+  return TechnicalCartonDocument.create(bundle);
 }
 
 function createCompleteModel() {
@@ -76,7 +99,7 @@ describe('SVG export', () => {
       const bundle = loadTechnicalFixture(name);
       const document = await TechnicalCartonDocument.create(bundle);
       const model = createTechnicalBoxModelAdapter(document);
-      const exported = createExportSvg(model);
+      const exported = await createTechnicalSvgExport(model);
       const identity = document.getSourceIdentity();
       const pbdMetadata = metadataBlock(exported, 'cartonbuilder-metadata');
       const provenanceMetadata = metadataBlock(exported, 'cartonbuilder-export-provenance');
@@ -105,7 +128,7 @@ describe('SVG export', () => {
         integrity: {
           modelSha256: bundle.modelJson.sha256,
           semanticSvgAssetId: bundle.semanticSvg.assetId,
-          sourceSemanticSvgSha256: createHash('sha256').update(bundle.semanticSvg.markup).digest('hex'),
+          sourceSemanticSvgSha256: await sha256Async(bundle.semanticSvg.markup),
         },
         status: { referenceOnly: true, productionCertified: false },
       });
@@ -113,7 +136,11 @@ describe('SVG export', () => {
       expect(provenance.status).toEqual({ referenceOnly: true, productionCertified: false });
 
       expect(exported.replace(provenanceMetadata, '')).toBe(bundle.semanticSvg.markup);
-      expect(createExportSvg(model)).toBe(exported);
+      expect(bundle.semanticSvg.byteLength).toBe(utf8ByteLength(bundle.semanticSvg.markup));
+      expect(bundle.semanticSvg.sha256).toBe(await sha256Async(bundle.semanticSvg.markup));
+      expect(bundle.semanticSvg.assetId).toBe(`svg-${bundle.semanticSvg.sha256.slice(0, 16)}`);
+      expect(provenance.integrity.sourceSemanticSvgSha256).toBe(bundle.semanticSvg.sha256);
+      expect(validateTechnicalSvgProvenance(exported, provenance).provenance).toEqual(provenance);
       expect(validateSvgV4Export(exported).valid).toBe(true);
       expect(scanSvgSecurity(exported)).toEqual([]);
       expect(document.getDielinePrimitives().filter((primitive) => primitive.kind === 'ARC')).toHaveLength(expectedArcCounts[name]);
@@ -127,6 +154,104 @@ describe('SVG export', () => {
       ]) expect(exported).toContain(marker);
     });
   }
+
+  it('rejects canonical markup changed without changing the declared SHA and creates no output', async () => {
+    const document = await TechnicalCartonDocument.create(loadTechnicalFixture('rte'));
+    const adapter = createTechnicalBoxModelAdapter(document);
+    const canonical = adapter.getCanonicalSemanticSvg();
+    const markup = canonical.markup.replace('</svg>', ' \n</svg>');
+    const mutatedCanonical = {
+      ...canonical,
+      markup,
+      byteLength: utf8ByteLength(markup),
+    };
+    let output;
+
+    await expect(createTechnicalSvgExport({
+      mode: 'technical',
+      getCanonicalSemanticSvg: () => mutatedCanonical,
+      getSourceIdentity: () => document.getSourceIdentity(),
+    })).rejects.toMatchObject({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'canonical-svg-sha256-mismatch' },
+    });
+    expect(output).toBeUndefined();
+  });
+
+  it.each(['"', "'"])('accepts a rehashed bundle with existing provenance long enough to reject it structurally (%s quotes)', async (quote) => {
+    const source = loadTechnicalFixture('rte');
+    const markup = withExistingProvenance(source.semanticSvg.markup, quote);
+    const document = await documentWithCanonicalMarkup('rte', markup);
+    const adapter = createTechnicalBoxModelAdapter(document);
+
+    await expect(createTechnicalSvgExport(adapter)).rejects.toMatchObject({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'canonical-svg-already-has-provenance' },
+    });
+  });
+
+  it('rejects an incorrect canonical byte length before export', async () => {
+    const document = await TechnicalCartonDocument.create(loadTechnicalFixture('rte'));
+    const adapter = createTechnicalBoxModelAdapter(document);
+    const canonical = adapter.getCanonicalSemanticSvg();
+
+    await expect(createTechnicalSvgExport({
+      mode: 'technical',
+      getCanonicalSemanticSvg: () => ({ ...canonical, byteLength: canonical.byteLength + 1 }),
+      getSourceIdentity: () => document.getSourceIdentity(),
+    })).rejects.toMatchObject({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'canonical-svg-byte-length-mismatch' },
+    });
+  });
+
+  it('rejects an incorrect content-addressed canonical asset id', async () => {
+    const document = await TechnicalCartonDocument.create(loadTechnicalFixture('rte'));
+    const adapter = createTechnicalBoxModelAdapter(document);
+    const canonical = adapter.getCanonicalSemanticSvg();
+
+    await expect(createTechnicalSvgExport({
+      mode: 'technical',
+      getCanonicalSemanticSvg: () => ({ ...canonical, assetId: 'svg-0000000000000000' }),
+      getSourceIdentity: () => document.getSourceIdentity(),
+    })).rejects.toMatchObject({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'canonical-svg-asset-id-mismatch' },
+    });
+  });
+
+  it('rejects a source identity SHA that does not match the canonical bytes', async () => {
+    const document = await TechnicalCartonDocument.create(loadTechnicalFixture('rte'));
+    const adapter = createTechnicalBoxModelAdapter(document);
+    const identity = document.getSourceIdentity();
+
+    await expect(createTechnicalSvgExport({
+      mode: 'technical',
+      getCanonicalSemanticSvg: () => adapter.getCanonicalSemanticSvg(),
+      getSourceIdentity: () => ({ ...identity, svgSha256: 'f'.repeat(64) }),
+    })).rejects.toMatchObject({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'source-svg-sha256-mismatch' },
+    });
+  });
+
+  it('rejects provenance whose parsed JSON differs from the built object', async () => {
+    const document = await TechnicalCartonDocument.create(loadTechnicalFixture('rte'));
+    const adapter = createTechnicalBoxModelAdapter(document);
+    const exported = await createTechnicalSvgExport(adapter);
+    const provenanceMetadata = metadataBlock(exported, 'cartonbuilder-export-provenance');
+    const provenance = decodeMetadata(provenanceMetadata);
+    const tamperedMetadata = provenanceMetadata.replace(
+      '&quot;cartonType&quot;:&quot;RTE&quot;',
+      '&quot;cartonType&quot;:&quot;STE&quot;',
+    );
+    const tampered = exported.replace(provenanceMetadata, tamperedMetadata);
+
+    expect(() => validateTechnicalSvgProvenance(tampered, provenance)).toThrowError(expect.objectContaining({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'provenance-mismatch' },
+    }));
+  });
 
   it('keeps canonical semantic SVG access read-only and fails closed without it', async () => {
     const bundle = loadTechnicalFixture('rte');
@@ -143,11 +268,14 @@ describe('SVG export', () => {
       mode: 'technical',
       getCanonicalSemanticSvg: () => null,
       getSourceIdentity: () => sourceIdentity,
-    })).toThrow(AppError);
+    })).toThrowError(expect.objectContaining({
+      code: 'technicalSvgExportInvalid',
+      parameters: { reason: 'technical-svg-export-must-use-async-path' },
+    }));
     expect(() => createExportSvg({
       mode: 'technical',
       getCanonicalSemanticSvg: () => ({ ...adapter.getCanonicalSemanticSvg(), markup: '<svg />' }),
       getSourceIdentity: () => sourceIdentity,
-    })).toThrowError(expect.objectContaining({ code: 'technicalSvgExportInvalid' }));
+    })).toThrow(AppError);
   });
 });

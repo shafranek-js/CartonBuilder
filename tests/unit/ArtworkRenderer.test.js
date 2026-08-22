@@ -12,6 +12,7 @@ import {
 } from '../../src/artwork/ArtworkRenderer.js';
 import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
+import { getDielineSegments } from '../../src/model/dieline.js';
 
 const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/workflow/fixtures');
 const expectedArcCounts = { rte: 19, ste: 20, tt_sl123: 21 };
@@ -45,6 +46,11 @@ class FakeSvgNode {
 
 function descendants(node) {
   return node.children.flatMap((child) => [child, ...descendants(child)]);
+}
+
+function arcFlags(pathData) {
+  return [...String(pathData || '').matchAll(/A\S+ \S+ 0 ([01]) ([01]) /g)]
+    .map((match) => ({ largeArc: Number(match[1]), sweep: Number(match[2]) }));
 }
 
 function createArtwork(rotation = 0) {
@@ -122,8 +128,22 @@ describe('ArtworkRenderer crop geometry', () => {
         && /^dieline-(?:cut|fold)$/.test(node.getAttribute('class') || '')
         && node.getAttribute('d')?.includes('A')
       ));
-      expect(maskPath?.getAttribute('d')).toContain('A');
+      const { cut, fold } = getDielineSegments(model);
+      const sourceArcs = [...cut, ...fold].filter((segment) => segment.kind === 'ARC');
+      const renderedFlags = arcPaths.flatMap((node) => arcFlags(node.getAttribute('d')));
+      expect(renderedFlags).toEqual(sourceArcs.map((arc) => ({
+        largeArc: 0,
+        sweep: arc.clockwise ? 0 : 1,
+      })));
       expect(arcPaths).toHaveLength(expectedArcCounts[name]);
+
+      const maskArcs = model.getElements()
+        .flatMap((panel) => panel.contour.segments || [])
+        .filter((segment) => segment.kind === 'ARC');
+      expect(arcFlags(maskPath?.getAttribute('d'))).toEqual(maskArcs.map((arc) => ({
+        largeArc: 0,
+        sweep: arc.clockwise ? 0 : 1,
+      })));
     });
   }
 });

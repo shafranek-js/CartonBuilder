@@ -2,6 +2,7 @@ import { createExportSvg, formatNumber, getExportFilename } from '../export/svgE
 import { getUserErrorMessage, t } from '../i18n.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { DEFAULT_BOARD_CONSTRUCTION } from '../model/BoardConstruction.js';
+import { normalizeQuickBoxState } from '../model/quickCustomNet.js';
 import { createPresetPicker } from './PresetPicker.js';
 import { createBoxNetRenderer } from './renderer.js';
 
@@ -13,8 +14,6 @@ export function createBoxNetApp({
   onDimensionReset = () => {},
   onLayoutReset = () => {},
   onBoardConstructionChange = () => {},
-  onConstructionChange = () => {},
-  hasArtwork = () => false,
   onChange = () => {},
 }) {
   const svg = documentRef.getElementById('workspace');
@@ -32,17 +31,6 @@ export function createBoxNetApp({
     depth: documentRef.getElementById('boxDepth'),
   };
   const boardCaliperInput = documentRef.getElementById('boardCaliper');
-  const constructionTemplateInput = documentRef.getElementById('constructionTemplate');
-  const constructionParameters = documentRef.getElementById('constructionParameters');
-  const constructionStatus = documentRef.getElementById('constructionStatus');
-  const constructionDisclaimer = documentRef.getElementById('constructionDisclaimer');
-  const constructionResetButton = documentRef.getElementById('constructionResetDefaults');
-  const constructionInputs = {
-    glueTabWidthMm: documentRef.getElementById('constructionGlue'),
-    tuckTabDepthMm: documentRef.getElementById('constructionTuck'),
-    dustFlapReachMm: documentRef.getElementById('constructionDust'),
-    lockEarMm: documentRef.getElementById('constructionEar'),
-  };
 
   let lastDimensions = { ...model.dimensions };
   let toastTimer = null;
@@ -81,76 +69,22 @@ export function createBoxNetApp({
     if (boardCaliperInput) boardCaliperInput.value = formatNumber(model.board?.caliperMm ?? DEFAULT_BOARD_CONSTRUCTION.caliperMm);
   }
 
-  function restoreConstructionInputs() {
-    const construction = model.construction || { templateId: 'legacy-six-panel', parameters: {} };
-    if (constructionTemplateInput) constructionTemplateInput.value = construction.templateId;
-    const isParametric = construction.templateId === 'ste' || construction.templateId === 'rte';
-    if (constructionParameters) constructionParameters.hidden = !isParametric;
-    if (constructionDisclaimer) constructionDisclaimer.hidden = !isParametric;
-    if (constructionStatus) {
-      constructionStatus.textContent = isParametric
-        ? `${construction.templateId.toUpperCase()} · ${model.getElements().length} elements`
-        : 'Legacy six-panel net';
-    }
-    for (const [key, input] of Object.entries(constructionInputs)) {
-      if (input) {
-        const value = Number(construction.parameters?.[key]);
-        input.value = Number.isFinite(value) ? formatNumber(value) : '';
-      }
-    }
-  }
-
-  function applyConstruction(templateId, parameters = {}, { silent = false } = {}) {
-    const current = model.construction?.templateId || 'legacy-six-panel';
-    if (templateId !== current && hasArtwork() && !windowRef.confirm(
-      'Changing construction keeps artwork transforms but changes the dieline. Continue?',
-    )) {
-      restoreConstructionInputs();
-      return false;
-    }
-    try {
-      model.setConstruction(templateId, parameters);
-      restoreConstructionInputs();
-      onConstructionChange(model.construction);
-      render();
-      onChange();
-      if (!silent) announce(`${templateId.toUpperCase()} construction applied.`);
-      return true;
-    } catch (error) {
-      restoreConstructionInputs();
-      if (!silent) showToast(getUserErrorMessage(error, 'invalidDimensions'));
-      return false;
-    }
-  }
-
   const presetPicker = presetTriggerBtn && presetPopover
     ? createPresetPicker({
         triggerButton: presetTriggerBtn,
         popoverContainer: presetPopover,
         model,
         onApplyPreset: (preset) => {
-          if (preset.netState) {
-            try {
-              const restored = BoxNetModel.fromJSON(preset.netState);
-              model.panels = restored.panels;
-              model.rootId = restored.rootId;
-              model.dimensions = restored.dimensions;
-              model.board = restored.board;
-              model.construction = restored.construction;
-              model.elements = restored.elements;
-              model.creationSequence = restored.creationSequence;
-            } catch {
-              model.updateDimensions(preset.dimensions);
-            }
-          } else {
-            model.updateDimensions(preset.dimensions);
-          }
+          const normalized = preset.netState
+            ? normalizeQuickBoxState(preset.netState).box
+            : null;
+          const restored = normalized ? BoxNetModel.fromJSON(normalized) : null;
+          if (restored) model.restore(restored.toJSON());
+          else model.reset(preset.dimensions);
           lastDimensions = { ...model.dimensions };
           restoreDimensionInputs();
           restoreBoardInput();
-          restoreConstructionInputs();
           onBoardConstructionChange(model.board);
-          onConstructionChange(model.construction);
           onDimensionReset(preset.dimensions);
           render();
           onChange();
@@ -173,7 +107,6 @@ export function createBoxNetApp({
 
       model.updateDimensions(nextDimensions);
       lastDimensions = { ...model.dimensions };
-      restoreConstructionInputs();
       onDimensionReset(nextDimensions);
       render();
       onChange();
@@ -318,25 +251,6 @@ export function createBoxNetApp({
     });
   }
 
-  constructionTemplateInput?.addEventListener('change', () => {
-    const templateId = constructionTemplateInput.value;
-    const parameters = model.construction?.parameters || {};
-    applyConstruction(templateId, parameters);
-  });
-  constructionResetButton?.addEventListener('click', () => {
-    const templateId = model.construction?.templateId || 'legacy-six-panel';
-    applyConstruction(templateId, {});
-  });
-  for (const [key, input] of Object.entries(constructionInputs)) {
-    input?.addEventListener('change', () => {
-      if (!model.construction || model.construction.templateId === 'legacy-six-panel') return;
-      applyConstruction(model.construction.templateId, {
-        ...model.construction.parameters,
-        [key]: Number(input.value),
-      });
-    });
-  }
-
   const dimensionIcons = {
     width: documentRef.querySelector('.width-icon'),
     height: documentRef.querySelector('.height-icon'),
@@ -446,9 +360,7 @@ export function createBoxNetApp({
     lastDimensions = { ...DEFAULT_BOX_DIMENSIONS };
     restoreDimensionInputs();
     restoreBoardInput();
-    restoreConstructionInputs();
     onBoardConstructionChange(model.board);
-    onConstructionChange(model.construction);
     onLayoutReset();
     render();
     onChange();
@@ -474,19 +386,16 @@ export function createBoxNetApp({
       lastDimensions = { ...model.dimensions };
       restoreDimensionInputs();
       restoreBoardInput();
-      restoreConstructionInputs();
       onBoardConstructionChange(model.board);
-      onConstructionChange(model.construction);
       render();
     },
     loadState(state) {
-      model.restore(state);
+      const normalized = normalizeQuickBoxState(state).box;
+      model.restore(normalized);
       lastDimensions = { ...model.dimensions };
       restoreDimensionInputs();
       restoreBoardInput();
-      restoreConstructionInputs();
       onBoardConstructionChange(model.board);
-      onConstructionChange(model.construction);
       render();
     },
     exportSvg,
@@ -501,7 +410,6 @@ export function createBoxNetApp({
   scheduleRender(render);
   restoreDimensionInputs();
   restoreBoardInput();
-  restoreConstructionInputs();
 
   return publicApi;
 }

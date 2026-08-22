@@ -10,6 +10,9 @@ import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
 import { sanitizeBoardConstruction } from '../model/BoardConstruction.js';
 import { sanitizeConstruction } from '../model/ConstructionTemplates.js';
+import {
+  normalizeQuickProjectSnapshot,
+} from '../model/quickCustomNet.js';
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from '../render/RenderSettings.js';
 import { sanitizeBoardAppearance } from '../render/BoardAppearance.js';
 import { validateRenderAssets } from '../render/renderAssets.js';
@@ -422,23 +425,22 @@ export function migrateProjectSnapshot(input) {
     }
   }
 
+  if (snapshot.cartonSource?.mode === 'quick') {
+    try {
+      snapshot = normalizeQuickProjectSnapshot(snapshot).snapshot;
+    } catch (error) {
+      throw new AppError('projectIncomplete', {}, { cause: error });
+    }
+  }
+
   const cartonSource = snapshot.cartonSource;
   if (cartonSource.mode === 'quick') {
     if (!cartonSource.box || typeof cartonSource.box !== 'object') {
       throw new AppError('projectIncomplete');
     }
-    cartonSource.box = {
-      ...cartonSource.box,
-      board: sanitizeBoardConstruction(cartonSource.box.board, cartonSource.box.dimensions),
-    };
-    cartonSource.box.construction = sanitizeConstruction(
-      cartonSource.box.construction,
-      cartonSource.box.dimensions,
-      cartonSource.box.board,
-    );
-
-    // Validate domain state before any live model is mutated.
     try {
+      // normalizeQuickProjectSnapshot above validates and canonicalizes the
+      // Quick state before any live model is mutated.
       BoxNetModel.fromJSON(cartonSource.box);
     } catch (error) {
       throw new AppError('projectIncomplete', {}, { cause: error });

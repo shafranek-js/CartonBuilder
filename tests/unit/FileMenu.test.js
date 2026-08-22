@@ -45,4 +45,25 @@ describe('FileMenu component', () => {
 
     expect(triggerButton.addEventListener).toHaveBeenCalledWith('click', expect.any(Function));
   });
+
+  it('disables persistence commands until a workflow is selected', () => {
+    createFileMenu({
+      triggerButton,
+      popoverContainer,
+      canPersistProject: () => false,
+      windowRef: mockWindow,
+      documentRef: mockDocument,
+    });
+
+    const triggerClick = triggerButton.addEventListener.mock.calls
+      .find(([eventName]) => eventName === 'click')[1];
+    triggerClick({ stopPropagation: vi.fn() });
+
+    expect(popoverContainer.innerHTML).toMatch(/id="menuSaveProjectBtn" disabled/);
+    expect(popoverContainer.innerHTML).toMatch(/id="menuPlaceArtworkBtn" disabled/);
+    expect(popoverContainer.innerHTML).toMatch(/id="menuExportPngBtn" disabled/);
+    expect(popoverContainer.innerHTML).toMatch(/id="menuExportSvgBtn" disabled/);
+    expect(popoverContainer.innerHTML).toMatch(/id="menuNewProjectBtn"(?! disabled)/);
+    expect(popoverContainer.innerHTML).toMatch(/id="menuOpenProjectBtn"(?! disabled)/);
+  });
 });

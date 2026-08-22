@@ -61,7 +61,7 @@ export function runPrepressPreflight({ boxModel, artworks = [], settings = null,
     }
   }
   const legacy = boxModel.construction?.templateId === 'legacy-six-panel';
-  if (legacy && prepress.mode === 'production-assist') warnings.push(issue('Warning', 'legacy-manual-allowances', 'Legacy Custom Net requires manual production allowance review.'));
+  if (legacy && prepress.mode === 'production-assist') warnings.push(issue('Warning', 'legacy-manual-allowances', 'Custom Net requires manual production allowance review.'));
   manualReview.push(issue('Manual review', 'safe-area-content', 'Verify text, barcodes and critical content stay inside the safe area.', { safeMm: prepress.safeMm }));
   manualReview.push(issue('Manual review', 'color-proof', 'Output preserves source color spaces and is not a contract color proof.'));
   manualReview.push(issue('Manual review', 'separations-overprint', 'Verify CMYK/spot separations, ICC metadata and overprint flags in the source artwork.'));

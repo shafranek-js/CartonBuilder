@@ -1,4 +1,5 @@
 import { getDatabase, PRESETS_STORE } from './db.js';
+import { normalizeQuickBoxState } from '../model/quickCustomNet.js';
 
 const LOCAL_STORAGE_KEY = 'carton_builder_user_presets';
 
@@ -17,7 +18,7 @@ export const BUILT_IN_PRESETS = Object.freeze([
   },
   {
     id: 'preset-tuck',
-    name: 'Small Tuck Box',
+    name: 'Small Box',
     dimensions: { width: 80, height: 50, depth: 25 },
     isBuiltIn: true,
   },
@@ -64,18 +65,37 @@ function saveLocalStoragePresets(presets) {
   }
 }
 
+function normalizePreset(preset) {
+  const netState = preset?.netState
+    ? normalizeQuickBoxState(preset.netState).box
+    : null;
+  return {
+    ...preset,
+    netState,
+    construction: netState?.construction || null,
+  };
+}
+
+function normalizePresetList(presets) {
+  return (Array.isArray(presets) ? presets : []).map(normalizePreset);
+}
+
 export async function getUserPresets() {
   try {
     const database = await getPresetDatabase();
     const presets = await database.getAll(PRESETS_STORE);
     if (presets && presets.length > 0) {
-      saveLocalStoragePresets(presets);
-      return presets;
+      const normalized = normalizePresetList(presets);
+      saveLocalStoragePresets(normalized);
+      await Promise.all(normalized.map((preset) => database.put(PRESETS_STORE, preset)));
+      return normalized;
     }
   } catch {
     // fallback to localStorage
   }
-  return loadLocalStoragePresets();
+  const normalized = normalizePresetList(loadLocalStoragePresets());
+  saveLocalStoragePresets(normalized);
+  return normalized;
 }
 
 export async function savePreset(presetData) {
@@ -83,6 +103,7 @@ export async function savePreset(presetData) {
   const defaultName = `${width || 150} × ${height || 90} × ${depth || 40} mm`;
   const name = presetData.name?.trim() || defaultName;
 
+  const netState = presetData.netState ? normalizeQuickBoxState(presetData.netState).box : null;
   const preset = {
     id: presetData.id || `preset-user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name,
@@ -91,8 +112,8 @@ export async function savePreset(presetData) {
       height: Number(height) || 90,
       depth: Number(depth) || 40,
     },
-    netState: presetData.netState || null,
-    construction: presetData.construction || presetData.netState?.construction || null,
+    netState,
+    construction: netState?.construction || null,
     isBuiltIn: false,
     createdAt: presetData.createdAt || new Date().toISOString(),
   };
@@ -134,14 +155,17 @@ export function exportPresetsJson(presets) {
   const data = {
     version: 2,
     exportedAt: new Date().toISOString(),
-    presets: presets.map((p) => ({
-      id: p.id,
-      name: p.name,
-      dimensions: p.dimensions,
-      netState: p.netState || null,
-      construction: p.construction || p.netState?.construction || null,
-      createdAt: p.createdAt || new Date().toISOString(),
-    })),
+    presets: presets.map((source) => {
+      const p = normalizePreset(source);
+      return {
+        id: p.id,
+        name: p.name,
+        dimensions: p.dimensions,
+        netState: p.netState || null,
+        construction: p.construction || p.netState?.construction || null,
+        createdAt: p.createdAt || new Date().toISOString(),
+      };
+    }),
   };
   return JSON.stringify(data, null, 2);
 }

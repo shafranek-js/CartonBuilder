@@ -30,6 +30,10 @@ function buildSpotOverprintPdf() {
 }
 
 async function buildReferenceNet(page) {
+  const quick = page.locator('button[data-workflow-mode="quick"]');
+  if (!(await quick.isVisible())) await page.locator('.step[data-step-target="workflow"]').click();
+  if (await quick.getAttribute('aria-pressed') !== 'true' || !(await page.locator('#boxStep').isVisible())) await quick.click();
+  await expect(page.locator('#boxStep')).toBeVisible();
   const activate = async (label) => {
     const action = page.getByRole('button', { name: label });
     await action.focus();

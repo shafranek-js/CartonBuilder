@@ -116,28 +116,26 @@ describe('QuickCartonDocument parity & contract', () => {
     expect(restoredModel.dimensions).toEqual(boxModel.dimensions);
   });
 
-  it('works with construction templates (RTE, STE)', () => {
-    const steModel = new BoxNetModel(
+  it.each(['ste', 'rte'])('normalizes %s compatibility construction to Quick Custom Net', (templateId) => {
+    const sourceModel = new BoxNetModel(
       { width: 100, height: 150, depth: 50 },
       { caliperMm: 0.5 },
-      { templateId: 'ste', parameters: {} }
+      { templateId, parameters: {} },
     );
-    const steDoc = new QuickCartonDocument(steModel);
+    const doc = new QuickCartonDocument(sourceModel);
 
-    expect(steDoc.mode).toBe('quick');
-    expect(steDoc.getBounds()).toEqual(steModel.getBounds());
-    expect(steDoc.getArtworkSurfaces().length).toBe(steModel.getElements().length);
-
-    const rteModel = new BoxNetModel(
-      { width: 100, height: 150, depth: 50 },
-      { caliperMm: 0.5 },
-      { templateId: 'rte', parameters: {} }
-    );
-    const rteDoc = new QuickCartonDocument(rteModel);
-
-    expect(rteDoc.mode).toBe('quick');
-    expect(rteDoc.getBounds()).toEqual(rteModel.getBounds());
-    expect(rteDoc.getArtworkSurfaces().length).toBe(rteModel.getElements().length);
+    expect(doc.mode).toBe('quick');
+    expect(doc.dimensions).toEqual(sourceModel.dimensions);
+    expect(doc.board).toEqual(sourceModel.board);
+    expect(doc.boxModel.construction).toEqual({
+      templateId: 'legacy-six-panel',
+      templateVersion: 1,
+      parameters: {},
+    });
+    expect(doc.getArtworkSurfaces().map((surface) => surface.id).sort()).toEqual([
+      'back', 'bottom', 'front', 'left', 'right', 'top',
+    ]);
+    expect(doc.boxModel.getElements().every((element) => element.role === 'body')).toBe(true);
   });
 
   it('creates QuickCartonDocument via createCartonDocument factory', async () => {

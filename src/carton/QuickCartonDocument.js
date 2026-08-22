@@ -8,6 +8,7 @@ import { CartonDocument } from './CartonDocument.js';
 import { getDielineSegments } from '../model/dieline.js';
 import { AppError } from '../errors.js';
 import { BoxNetModel } from '../model/BoxNetModel.js';
+import { normalizeQuickBoxState } from '../model/quickCustomNet.js';
 
 export class QuickCartonDocument extends CartonDocument {
   /**
@@ -18,7 +19,11 @@ export class QuickCartonDocument extends CartonDocument {
     if (!boxModel || !(boxModel instanceof BoxNetModel)) {
       throw new AppError('invalidBoxModel');
     }
-    this._boxModel = boxModel;
+    if (boxModel.construction?.templateId === 'ste' || boxModel.construction?.templateId === 'rte') {
+      this._boxModel = BoxNetModel.fromJSON(normalizeQuickBoxState(boxModel.toJSON()).box);
+    } else {
+      this._boxModel = boxModel;
+    }
   }
 
   get mode() {

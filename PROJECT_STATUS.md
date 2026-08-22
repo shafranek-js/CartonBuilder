@@ -95,6 +95,9 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
 - PBD строит JSON и canonical SVG из одного current model и отправляет один
   hash-protected bundle. CartonBuilder независимо повторяет validation и hash
   comparison.
+- Flip Horizontal/Vertical и Rotate 90° доступны во встроенном PBD. Выбранный
+  presentation transform входит в `pbd.svg.v4`, восстанавливается из autosave
+  и применяется к той же technical geometry в Place Artwork.
 - Поддержаны три текущих technical fixture family: RTE, STE и TT_SL123/A55.
 
 ### 2.4. Безопасная замена технической модели
@@ -119,6 +122,8 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
   PNG/JPEG/PDF используются обоими workflow.
 - Technical facade передаёт точные LINE/ARC contours, CUT/FOLD и OPEN_CUT без
   выпрямления канонической экспортной геометрии.
+- Facade воспроизводит PBD SVG presentation plane, включая Y-проекцию,
+  Flip/Rotate, преобразованные bounds и корректное направление ARC.
 - SVG viewport и masks используют настоящие SVG arc commands; raster export
   вызывает Canvas `arc()`, PDF переводит ARC в точное число cubic Bézier pieces.
 - Реализован snapping к ближайшей точке ARC с ограничением диапазоном дуги.
@@ -137,6 +142,33 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
 - `capabilities.foldPreview=true`, но `capabilities.technicalRender=false`.
   Наличие Viewer package ещё не означает, что Technical Preview подключён к
   Step 3.
+
+### 2.7. Stage 4A — Technical SVG metadata and provenance
+
+- Technical SVG export теперь использует canonical `semanticSvg.markup` без DOM
+  serialization: перед вставкой provenance проверяются фактическая UTF-8 длина,
+  SHA-256 и content-addressed `assetId`, а также обе source-identity связи.
+- Security scan и структурный XML parse требуют ровно один PBD metadata и ноль
+  существующих provenance; после вставки проверяются ровно один provenance,
+  schema version, JSON и полное совпадение распарсенного объекта с построенным.
+- Technical SVG download route асинхронный, Quick `createExportSvg()` остаётся
+  синхронным и поведенчески неизменным. Stage 4A закрыт только в этой границе;
+  весь Этап 4 и Release 1 gate остаются открытыми.
+
+### 2.8. Stage 4B — Technical front-relative artwork coordinates
+
+- Technical Place Artwork показывает read-only `Front X`/`Front Y` в mm для
+  reference point макета относительно top-left origin точно спроецированного
+  semantic surface `body.front`. Global X/Y остаются редактируемыми и
+  persisted без изменений.
+- Frame предоставляется technical adapter как cloned read-only facade API;
+  missing/invalid `body.front` даёт `—` без fallback. Relative coordinates
+  вычисляются только в UI и не попадают в `ArtworkModel`, project schema,
+  archive или exporter.
+- Покрыты identity, H/V flip и CW/CCW rotation, RTE/STE/TT_SL123, reference
+  point changes, global moves, autosave/reload и скрытие панели в Quick.
+  Stage 4B закрыт только в этой UI-coordinate границе; весь Этап 4 и Release
+  1 gate остаются открытыми.
 
 ## 3. Ключевые технические решения
 
@@ -209,19 +241,22 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
 
 ### 6.1. Остаток Technical Place Artwork перед следующим release gate
 
-- Generic technical SVG export сохраняет ARC/LINE geometry, но пока не
-  переносит полный canonical PBD metadata/provenance block. Это нельзя отмечать
-  как выполненный пункт Этапа 4.
-- Artwork UI хранит global millimetre coordinates, но не показывает отдельное
-  положение относительно semantic panel `body.front`.
+- Stage 4A metadata/provenance в technical SVG export завершён: exporter
+  проверяет фактические canonical SVG bytes, вставляет один deterministic
+  provenance block и проходит SVG v4/security validation. Это не закрывает весь
+  Этап 4 и не является Release 1 gate.
+- Artwork UI хранит global millimetre coordinates и дополнительно показывает
+  read-only положение reference point относительно semantic panel `body.front`;
+  relative values не persisted.
 - ARC nearest-point snapping реализован. Отдельные semantic endpoint,
   line/arc intersection, panel-centre и panel-boundary targets не имеют полного
   подтверждённого набора implementation/acceptance tests.
 - DPI/coverage остаются общими Artwork checks; исключение glue/locking
   surfaces из semantic printable coverage не подтверждено отдельным technical
   preflight implementation/test.
-- Public technical exports покрыты unit tests, однако download-level E2E для
-  SVG/PDF всех трёх fixture family стоит добавить до закрытия Release 1.
+- Technical SVG download-level E2E для RTE, STE и TT_SL123 подтверждает один PBD
+  metadata и один provenance; оставшиеся flat PDF/artwork requirements и их
+  acceptance остаются открытыми до Release 1.
 
 ### 6.2. Preview, Render и production boundaries
 
@@ -286,12 +321,10 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
 
 ## 8. Последовательность следующих шагов
 
-1. **Закрыть остаток Этапа 4 / Release 1:**
-   - перенос PBD metadata/provenance в technical SVG export;
-   - front-relative coordinate display;
+1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A и 4B завершены отдельно):**
    - endpoint/intersection/panel semantic snapping;
    - technical printable-region coverage/DPI;
-   - download-level SVG/PDF E2E для RTE, STE и TT_SL123;
+   - оставшиеся flat PDF/artwork requirements и download-level acceptance;
    - повторить Quick full regression, technical autosave/reopen и archive
      round-trip.
 2. **Завершить Этап 5 CartonFoldViewer runtime:** добавить global flat-net UV,

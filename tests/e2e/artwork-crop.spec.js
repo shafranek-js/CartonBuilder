@@ -9,6 +9,10 @@ async function activate(page, label) {
 }
 
 async function buildReferenceNet(page) {
+  const quick = page.locator('button[data-workflow-mode="quick"]');
+  if (!(await quick.isVisible())) await page.locator('.step[data-step-target="workflow"]').click();
+  if (await quick.getAttribute('aria-pressed') !== 'true' || !(await page.locator('#boxStep').isVisible())) await quick.click();
+  await expect(page.locator('#boxStep')).toBeVisible();
   await activate(page, 'Add Base Panel to the bottom edge of Front Panel');
   await activate(page, 'Add Top Panel to the top edge of Front Panel');
   await activate(page, 'Add Back Panel to the top edge of Top Panel');
@@ -224,7 +228,8 @@ test('snaps artwork resize to a dieline line, highlights it, and supports Ctrl b
   const targetScreen = await page.evaluate((currentY) => {
     const state = window.cartonBuilderApp.getState();
     const artwork = window.cartonBuilderApp.artwork.artwork;
-    const candidates = state.box.panels.flatMap((panel) => [panel.x, panel.x + panel.width]);
+    const box = state.cartonSource?.box || state.box;
+    const candidates = box.panels.flatMap((panel) => [panel.x, panel.x + panel.width]);
     const targetX = candidates.reduce((best, value) => (
       Math.abs(value - artwork.bounds.maxX) < Math.abs(best - artwork.bounds.maxX) ? value : best
     ), candidates[0]);

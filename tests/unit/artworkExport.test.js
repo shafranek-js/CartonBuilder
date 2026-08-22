@@ -22,7 +22,8 @@ import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxMod
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import { arcToCubicSegments, getDielineSegments } from '../../src/model/dieline.js';
 import { runPrepressPreflight } from '../../src/prepress/prepressPreflight.js';
-import { createExportSvg, createPrepressSvg } from '../../src/export/svgExport.js';
+import { createPrepressSvg } from '../../src/export/svgExport.js';
+import { createTechnicalSvgExport } from '../../src/export/technicalSvgExport.js';
 
 const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/workflow/fixtures');
 const expectedArcCounts = { rte: 19, ste: 20, tt_sl123: 21 };
@@ -165,9 +166,9 @@ describe('artwork export', () => {
     const dieline = getDielineSegments(model);
     const allPrimitives = [...dieline.cut, ...dieline.fold];
     const sourceArcs = document.getDielinePrimitives().filter((primitive) => primitive.kind === 'ARC').length;
-    const openCuts = document.getDielinePrimitives().filter((primitive) => primitive.role === 'OPEN_CUT');
+    const openCuts = allPrimitives.filter((primitive) => primitive.role === 'OPEN_CUT');
 
-    const svg = createExportSvg(model);
+    const svg = await createTechnicalSvgExport(model);
     const provenance = svg.match(/<metadata id="cartonbuilder-export-provenance"[^>]*>[\s\S]*?<\/metadata>/)?.[0];
     expect(provenance).toBeTruthy();
     expect(svg.replace(provenance, '')).toBe(loadTechnicalFixture(name).semanticSvg.markup);
@@ -250,10 +251,19 @@ describe('artwork export', () => {
     }
 
     const panelArcs = model.getElements().flatMap((panel) => panel.contour.segments || [])
-      .filter((segment) => segment.kind === 'ARC').length;
-    const dielineArcs = getDielineSegments(model).cut.concat(getDielineSegments(model).fold)
-      .filter((segment) => segment.kind === 'ARC').length;
-    expect(calls.filter(([type]) => type === 'arc')).toHaveLength(panelArcs + dielineArcs);
+      .filter((segment) => segment.kind === 'ARC');
+    const dieline = getDielineSegments(model);
+    const dielineArcs = dieline.cut.concat(dieline.fold)
+      .filter((segment) => segment.kind === 'ARC');
+    const arcCalls = calls.filter(([type]) => type === 'arc');
+    const sourceArcs = panelArcs.concat(dielineArcs);
+    expect(arcCalls).toHaveLength(sourceArcs.length);
+    for (const [index, arc] of sourceArcs.entries()) {
+      const [, , , , startAngle, endAngle, counterclockwise] = arcCalls[index];
+      expect(counterclockwise).toBe(arc.clockwise);
+      expect(Math.sign(endAngle - startAngle)).toBe(arc.clockwise ? -1 : 1);
+      expect(Math.abs(endAngle - startAngle)).toBeLessThanOrEqual(Math.PI);
+    }
   });
 
   it.each(['rte', 'ste', 'tt_sl123'])('blocks exact technical prepress exports for %s', async (name) => {

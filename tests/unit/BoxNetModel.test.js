@@ -32,6 +32,26 @@ describe('BoxNetModel', () => {
       parentId: null,
     });
     expect(model.isComplete).toBe(false);
+    expect(model.construction).toEqual({
+      templateId: 'legacy-six-panel',
+      templateVersion: 1,
+      parameters: {},
+    });
+  });
+
+  it('resets Quick to an empty Custom Net without construction parameters', () => {
+    const model = createReferenceNet({ width: 120, height: 80, depth: 30 });
+
+    model.reset({ width: 210, height: 110, depth: 45 }, { caliperMm: 0.6 });
+
+    expect(model.dimensions).toEqual({ width: 210, height: 110, depth: 45 });
+    expect(model.board).toEqual({ caliperMm: 0.6 });
+    expect(model.panelCount).toBe(1);
+    expect(model.construction).toEqual({
+      templateId: 'legacy-six-panel',
+      templateVersion: 1,
+      parameters: {},
+    });
   });
 
   it.each([

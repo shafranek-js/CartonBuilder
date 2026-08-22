@@ -1,5 +1,7 @@
 import { getMaxBoardCaliperMm, sanitizeBoardConstruction } from './BoardConstruction.js';
 
+// Compatibility-only parser/generator for persisted Technical/legacy states.
+// Quick Layout exposes manual Custom Net and must not select STE/RTE here.
 export const CONSTRUCTION_TEMPLATE_IDS = Object.freeze([
   'legacy-six-panel',
   'ste',
