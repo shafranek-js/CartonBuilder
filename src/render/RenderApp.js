@@ -361,6 +361,7 @@ export function createRenderApp({
   let activeViewPresetId = getActiveRenderViewPresetId();
   let viewUndoTimer = null;
   let renderUndoTimer = null;
+  let exportDialogDraftKind = null;
   let backgroundAsset = null;
   let environmentAsset = null;
   let environmentAssetLoadGeneration = 0;
@@ -591,6 +592,11 @@ export function createRenderApp({
     return (getArtworks?.() || []).some((entry) => (
       entry?.visible !== false && entry?.model?.hasArtwork
     ));
+  }
+
+  function refreshArtworkVisibility() {
+    if (disposed || hasVisibleRenderArtwork()) return true;
+    return handleMissingArtwork();
   }
 
   function clearRenderSurface() {
@@ -981,15 +987,23 @@ export function createRenderApp({
     return true;
   }
 
+  function getExportDialogKind() {
+    if (elements.exportDialog?.open && elements.exportKind?.value) {
+      return elements.exportKind.value;
+    }
+    return exportDialogDraftKind ?? state.output.kind;
+  }
+
   function updateExportPreflight() {
     if (!elements.exportPreflight) return null;
     const output = state.output;
+    const kind = getExportDialogKind();
     const hasFinishes = (getArtworks?.() || []).some((entry) => (
       entry?.visible !== false && entry?.outputRole !== 'print' && entry?.finish
     ));
     lastPreflight = runRenderExportPreflight({
-      kind: output.kind,
-      format: output.kind === 'sequence' ? output.sequence.format : output.format,
+      kind,
+      format: kind === 'sequence' ? output.sequence.format : output.format,
       settings: state,
       diagnostics: renderer?.getDiagnostics?.() || {},
       rendererAvailable: Boolean(renderer),
@@ -1022,32 +1036,37 @@ export function createRenderApp({
   function updateExportDialog() {
     const output = state.output;
     if (!elements.exportFormat) return;
-    if (elements.exportKind) elements.exportKind.value = output.kind;
-    elements.exportFormat.value = output.format;
-    elements.exportSizing.value = output.sizingMode;
-    elements.exportWidth.value = String(output.widthPx);
-    elements.exportHeight.value = String(output.heightPx);
-    elements.exportUnit.value = output.printUnit;
-    elements.exportPrintWidth.value = String(output.printWidth);
-    elements.exportPrintHeight.value = String(output.printHeight);
-    elements.exportPpi.value = String(output.ppi);
-    elements.exportJpegQuality.value = String(output.jpegQuality);
-    elements.exportJpegQualityValue.value = `${Math.round(output.jpegQuality * 100)}%`;
-    if (elements.exportSequenceFrames) elements.exportSequenceFrames.value = String(output.sequence.frames);
-    if (elements.exportSequenceLongEdge) elements.exportSequenceLongEdge.value = String(output.sequence.longEdge);
-    if (elements.exportSequenceFormat) elements.exportSequenceFormat.value = output.sequence.format;
-    if (elements.exportGlbTextureSize) elements.exportGlbTextureSize.value = String(output.glb.textureSize);
-    if (elements.exportGlbMaterialMode) elements.exportGlbMaterialMode.value = output.glb.materialMode;
-    if (elements.exportGlbIncludeCamera) elements.exportGlbIncludeCamera.checked = output.glb.includeCamera;
-    if (elements.exportLockAspect) elements.exportLockAspect.checked = output.lockAspect;
-    const kind = output.kind;
+    const dialogOpen = Boolean(elements.exportDialog?.open);
+    const kind = getExportDialogKind();
+    const format = dialogOpen ? elements.exportFormat.value : output.format;
+    const sizingMode = dialogOpen ? elements.exportSizing.value : output.sizingMode;
+    if (!dialogOpen) {
+      if (elements.exportKind) elements.exportKind.value = kind;
+      elements.exportFormat.value = output.format;
+      elements.exportSizing.value = output.sizingMode;
+      elements.exportWidth.value = String(output.widthPx);
+      elements.exportHeight.value = String(output.heightPx);
+      elements.exportUnit.value = output.printUnit;
+      elements.exportPrintWidth.value = String(output.printWidth);
+      elements.exportPrintHeight.value = String(output.printHeight);
+      elements.exportPpi.value = String(output.ppi);
+      elements.exportJpegQuality.value = String(output.jpegQuality);
+      elements.exportJpegQualityValue.value = `${Math.round(output.jpegQuality * 100)}%`;
+      if (elements.exportSequenceFrames) elements.exportSequenceFrames.value = String(output.sequence.frames);
+      if (elements.exportSequenceLongEdge) elements.exportSequenceLongEdge.value = String(output.sequence.longEdge);
+      if (elements.exportSequenceFormat) elements.exportSequenceFormat.value = output.sequence.format;
+      if (elements.exportGlbTextureSize) elements.exportGlbTextureSize.value = String(output.glb.textureSize);
+      if (elements.exportGlbMaterialMode) elements.exportGlbMaterialMode.value = output.glb.materialMode;
+      if (elements.exportGlbIncludeCamera) elements.exportGlbIncludeCamera.checked = output.glb.includeCamera;
+      if (elements.exportLockAspect) elements.exportLockAspect.checked = output.lockAspect;
+    }
     if (elements.exportImageOptions) elements.exportImageOptions.hidden = kind !== 'image';
     if (elements.exportSequenceOptions) elements.exportSequenceOptions.hidden = kind !== 'sequence';
     if (elements.exportGlbOptions) elements.exportGlbOptions.hidden = kind !== 'glb';
-    const printVisible = output.sizingMode === 'print';
-    const pixelsVisible = output.sizingMode === 'pixels';
+    const printVisible = sizingMode === 'print';
+    const pixelsVisible = sizingMode === 'pixels';
     const jpegQualityField = elements.exportJpegQuality?.closest('#renderJpegQualityField');
-    if (jpegQualityField) jpegQualityField.hidden = kind !== 'image' || output.format !== 'jpg';
+    if (jpegQualityField) jpegQualityField.hidden = kind !== 'image' || format !== 'jpg';
     const printGroup = elements.exportPrintWidth?.closest('.render-export-print');
     const pixelsGroup = elements.exportWidth?.closest('.render-export-pixels');
     if (printGroup) printGroup.hidden = kind !== 'image' || !printVisible;
@@ -1078,6 +1097,7 @@ export function createRenderApp({
   function openExportDialog(format = state.output.format, kind = 'image') {
     if (!hasVisibleRenderArtwork()) return handleMissingArtwork();
     if (!elements.exportDialog?.showModal) return exportImage(format);
+    exportDialogDraftKind = kind;
     state.output.kind = kind;
     elements.exportFormat.value = format;
     updateExportDialog();
@@ -1508,10 +1528,22 @@ export function createRenderApp({
   async function activate() {
     if (disposed) return false;
     active = true;
+    const artworkDeadline = Date.now() + 750;
+    while (!hasVisibleRenderArtwork() && active && !disposed && Date.now() < artworkDeadline) {
+      await nextFrame();
+    }
+    if (!hasVisibleRenderArtwork()) {
+      handleMissingArtwork();
+      return false;
+    }
     loadNamedPresets();
     loadViewPresets();
     updateControls();
     await syncScene();
+    if (!hasVisibleRenderArtwork()) {
+      handleMissingArtwork();
+      return false;
+    }
     windowRef.setTimeout(() => loadPresetThumbnails(), 0);
     windowRef.requestAnimationFrame(() => renderer?.resize());
     windowRef.requestAnimationFrame(updateViewportOverlay);
@@ -2257,9 +2289,7 @@ export function createRenderApp({
   elements.png.addEventListener('click', () => openExportDialog('png'));
   elements.jpg.addEventListener('click', () => openExportDialog('jpg'));
   elements.exportKind?.addEventListener('change', (event) => {
-    const next = clone(state);
-    next.output.kind = event.target.value;
-    state = sanitizeRenderSettings(next);
+    exportDialogDraftKind = event.target.value;
     updateExportDialog();
   });
   elements.exportSizing?.addEventListener('change', (event) => {
@@ -2390,6 +2420,10 @@ export function createRenderApp({
     else if (next.output.kind === 'sequence') await exportTurntableAsset();
     else await exportImage(format);
   });
+  elements.exportDialog?.addEventListener('close', () => {
+    exportDialogDraftKind = null;
+    updateExportDialog();
+  });
   elements.back?.addEventListener('click', onBackToPreview);
   elements.retry.addEventListener('click', () => syncScene({ force: true }));
   const handleWindowResize = () => {
@@ -2421,6 +2455,7 @@ export function createRenderApp({
     setEnvironmentMapFile,
     clearEnvironmentMap,
     setBoardCaliper,
+    refreshArtworkVisibility,
     getBoardAppearance() {
       return cloneBoardAppearance(boardAppearance);
     },

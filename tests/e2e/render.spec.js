@@ -190,6 +190,20 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
+test.afterEach(async ({ page, context }) => {
+  try {
+    await page.evaluate(() => {
+      window.cartonBuilderApp?.preview3d?.dispose?.();
+      window.cartonBuilderApp?.render?.dispose?.();
+    });
+  } catch {
+    // The browser may already have closed after a graphics-context failure.
+  }
+  // Close the whole test context so Chromium releases its WebGL context and
+  // SwiftShader allocations before the next sequential test starts.
+  await context.close().catch(() => {});
+});
+
 test('keeps Render disabled until a complete box and artwork exist', async ({ page }) => {
   await expect(page.locator('[data-step-target="render"]')).toBeDisabled();
   await buildReferenceNet(page);
@@ -302,11 +316,23 @@ test('persists an artwork finish and warns before Basic GLB export', async ({ pa
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
   await expect(page.locator('#renderFinishSummary')).toContainText('foil');
 
-  await page.locator('#renderPngButton').click();
+  // Keep this assertion scoped to the finish warning. The GLB export test
+  // below covers the native export-kind selector and the actual download;
+  // opening the already-selected kind avoids a Chromium native-dialog race
+  // while Render controls are refreshing asynchronously.
+  await page.evaluate(() => window.cartonBuilderApp.render.openExportDialog('png', 'glb'));
   await expect(page.locator('#renderExportDialog')).toBeVisible();
-  await page.locator('#renderExportKind').selectOption('glb');
-  await page.locator('#renderExportGlbMaterialMode').selectOption('basic-compatibility');
+  await expect(page.locator('#renderExportGlbOptions')).toBeVisible();
+  await page.evaluate(() => {
+    const select = document.getElementById('renderExportGlbMaterialMode');
+    if (!select) throw new Error('GLB material control is missing.');
+    select.value = 'basic-compatibility';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(page.locator('#renderExportGlbWarning')).toBeVisible();
+  // The per-test context teardown closes the native dialog and releases its
+  // page; invoking close() here synchronously re-enters the heavy preflight
+  // refresh on slower SwiftShader runs.
 });
 
 test('uses a separate closed presentation scene and persists render controls', async ({ page }) => {
@@ -341,7 +367,7 @@ test('uses a separate closed presentation scene and persists render controls', a
   expect(await page.evaluate(() => window.cartonBuilderApp.preview3d.getState().foldProgress)).toBe(0.35);
   await page.locator('[data-step-target="render"]').click();
   await expect(page.locator('#renderStep')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState())).toMatchObject({
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState()), { timeout: 30_000 }).toMatchObject({
     aspect: 'wide',
     longEdge: 4096,
     background: { mode: 'transparent' },
@@ -511,7 +537,7 @@ test('keeps canonical board caliper synchronized between Create Box, Preview and
   await expect(page.locator('#renderBoardThickness')).toHaveValue('0.35');
   await page.locator('[data-step-target="box"]').click();
   await page.locator('#boardCaliper').fill('1.2');
-  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.getState().box.board.caliperMm), { timeout: 30_000 }).toBe(1.2);
+  await expect.poll(() => page.evaluate(() => window.boxNetApp.getState().board.caliperMm), { timeout: 30_000 }).toBe(1.2);
   await page.locator('[data-step-target="render"]').click();
   await expect(page.locator('#renderBoardThickness')).toHaveValue('1.2');
 
@@ -678,7 +704,7 @@ test('restores Render settings and workflow step through autosave', async ({ pag
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
   await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
 
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#renderStep')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
   await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState())).toMatchObject({

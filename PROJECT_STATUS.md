@@ -385,3 +385,20 @@ loader, global UV, artwork atlas, headless GLB/disposal и embedded host protoco
 6. После каждого bounded slice выполнить focused tests, полный unit gate,
    relevant Playwright последовательно после build, `plugins:verify`,
    `graphify update .`, `git diff --check` и проверить exact Git status.
+
+## Stage 7A — RenderSceneSource foundation (2026-08-23)
+
+The shared Render source boundary is now present in
+`src/render/RenderSceneSource.js`. `LegacyRenderSceneSource` adapts the
+existing `BoxScene` without duplicating Quick geometry, fold transforms,
+materials, UVs or export logic. `WebGLCartonRenderer` keeps its public API and
+routes the render surface, artwork replacement, camera operations,
+portable-scene export, diagnostics and idempotent disposal through the adapter.
+
+Focused source-contract and render regressions pass. Full Render/browser gates
+remain open until the required sequential unit, Render E2E, smoke, plugin,
+build and diff checks are completed. Technical Render remains disabled;
+`technicalRender=false`, `referenceOnly=true` and `productionCertified=false`
+are unchanged.
+
+Next bounded slice: **Stage 7B — TechnicalRenderSceneSource**.

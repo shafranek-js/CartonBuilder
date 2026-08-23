@@ -1002,7 +1002,10 @@ artworkApp = createArtworkApp({
     if (renderRefresh && typeof renderRefresh.then === 'function') refreshes.push(renderRefresh);
     await Promise.all(refreshes);
   },
-  onStateChanged: () => updateStepNavigationStates(),
+  onStateChanged: () => {
+    updateStepNavigationStates();
+    renderApp?.refreshArtworkVisibility?.();
+  },
 });
 
 preview3dFacade = createLazyPreview3DFacade({

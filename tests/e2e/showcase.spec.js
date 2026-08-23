@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('exposes the Calmdownol showcase link from the app', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#previewShowcaseLink')).toHaveAttribute('href', './showcase/calmdownol/index.html');
+  await expect(page.locator('#previewShowcaseLink')).toHaveAttribute('href', 'https://shafranek-js.github.io/CartonBuilder/showcase/calmdownol/index.html');
   await expect(page.locator('#previewShowcaseLink')).toHaveAttribute('target', '_blank');
 });
 

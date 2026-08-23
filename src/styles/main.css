@@ -3330,16 +3330,6 @@ button.slider-step-btn,
   font-size: 11px;
 }
 
-.technical-proof-notice {
-  margin: 0;
-  padding: 8px 12px;
-  border-top: 1px solid #696969;
-  background: #464646;
-  color: #f0d98d;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .artwork-image {
   cursor: move;
 }
@@ -4137,9 +4127,10 @@ dialog input {
 }
 
 .render-artwork-quality-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  align-items: center;
+  gap: 6px 8px;
   width: 100%;
   padding: 8px 10px;
   border-radius: 6px;
@@ -4149,6 +4140,8 @@ dialog input {
 }
 
 .render-artwork-quality-header {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -4176,8 +4169,29 @@ dialog input {
 }
 
 .render-artwork-quality-field {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
   margin-top: 2px !important;
   margin-bottom: 0 !important;
+}
+
+.render-artwork-quality-field > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.render-artwork-quality-field select {
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 0;
+  margin-left: 0;
 }
 
 .render-finish-summary {

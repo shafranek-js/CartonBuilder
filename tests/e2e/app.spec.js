@@ -1817,12 +1817,12 @@ test('keeps model state stable during responsive resize without ResizeObserver',
   expect(await page.evaluate(() => window.boxNetApp.getState())).toEqual(stateBefore);
 });
 
-test('restores Preview mode from validated autosave and shows the technical-proof notice', async ({ page }) => {
+test('restores Preview mode from validated autosave without the technical-proof notice', async ({ page }) => {
   await openArtworkStep(page);
   await loadGeneratedPng(page);
   await page.locator('.step[data-step-target="preview"]').click();
   await expect(page.locator('#previewStep')).toBeVisible();
-  await expect(page.locator('.technical-proof-notice')).toContainText('not PDF/X certified');
+  await expect(page.locator('.technical-proof-notice')).toHaveCount(0);
 
   await expect.poll(() => page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => {

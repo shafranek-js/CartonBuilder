@@ -1,4 +1,4 @@
-import { BoxScene } from '../preview3d/BoxScene.js';
+import { LegacyRenderSceneSource } from './LegacyRenderSceneSource.js';
 import { cloneBoardAppearance, sanitizeBoardAppearance } from './BoardAppearance.js';
 import { RenderPostProcessing } from './RenderPostProcessing.js';
 import { RenderQualityManager } from './RenderQualityManager.js';
@@ -42,10 +42,11 @@ export class WebGLCartonRenderer {
     this.contextState = 'ready';
     this.contextRecoveryCount = 0;
     this.lastExport = null;
+    this.container = container;
     this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
     this.effects = structuredClone(renderSettings.effects);
     this.settleTimer = null;
-    this.scene = new BoxScene({
+    this.source = new LegacyRenderSceneSource({
       canvas,
       container,
       boxModel,
@@ -97,15 +98,20 @@ export class WebGLCartonRenderer {
       },
       onCameraChange,
     });
-    this.scene.setToneMapping('neutral');
+    // Keep the established internal scene handle while routing scene
+    // operations through the source boundary. The public renderer API is
+    // unchanged; future sources can replace this adapter without changing
+    // RenderApp or its controls.
+    this.scene = this.source;
+    this.source.setToneMapping('neutral');
     this.postProcessing = new RenderPostProcessing({
-      renderer: this.scene.renderer,
-      scene: this.scene.scene,
-      camera: this.scene.camera,
+      renderer: this.source.renderSurface.renderer,
+      scene: this.source.renderSurface.scene,
+      camera: this.source.renderSurface.camera,
       effects: this.effects,
       transparent: renderSettings.background.mode === 'transparent',
     });
-    this.scene.setRenderCallback(() => {
+    this.source.setRenderCallback(() => {
       const startedAt = this.windowRef.performance?.now?.() ?? Date.now();
       this.postProcessing.render();
       const endedAt = this.windowRef.performance?.now?.() ?? Date.now();
@@ -184,7 +190,7 @@ export class WebGLCartonRenderer {
         // BoxScene swaps between its perspective and orthographic camera
         // objects. Every post-processing pass keeps its own camera reference,
         // so rebuild the composer when that identity changes.
-        this.postProcessing.setScene(this.scene.scene, this.scene.camera);
+        this.postProcessing.setScene(this.source.renderSurface.scene, this.source.renderSurface.camera);
       }
     }
     this.currentSettings = structuredClone(settings);
@@ -207,7 +213,7 @@ export class WebGLCartonRenderer {
     const previousCameraObject = this.scene.camera;
     this.scene.setCameraState(camera);
     if (this.scene.camera !== previousCameraObject) {
-      this.postProcessing.setScene(this.scene.scene, this.scene.camera);
+      this.postProcessing.setScene(this.source.renderSurface.scene, this.source.renderSurface.camera);
     }
   }
 
@@ -237,7 +243,7 @@ export class WebGLCartonRenderer {
       this.finishSummary = getFinishSummary(sceneModel);
       this.scene.setFinishSummary?.(this.finishSummary);
     }
-    this.scene.replaceTexture(textureCanvas, materialMaps);
+    this.source.replaceArtwork(textureCanvas, materialMaps);
   }
 
   setBoardAppearance(boardAppearance) {
@@ -296,8 +302,8 @@ export class WebGLCartonRenderer {
   resize(width, height, pixelRatio) {
     this.scene.resize({ width, height, pixelRatio });
     this.postProcessing.resize(
-      width || this.scene.container.clientWidth || 1,
-      height || this.scene.container.clientHeight || 1,
+      width || this.container.clientWidth || 1,
+      height || this.container.clientHeight || 1,
     );
   }
 
@@ -354,7 +360,7 @@ export class WebGLCartonRenderer {
       contextState: this.contextState,
       contextRecoveryCount: this.contextRecoveryCount,
       lastExport: this.lastExport ? { ...this.lastExport } : null,
-      ...this.scene.getResourceInfo(),
+      ...this.source.getDiagnostics(),
       qualityState: this.qualityState,
       geometryMode: this.scene.geometryMode,
       boardAppearance: cloneBoardAppearance(this.boardAppearance),
@@ -370,7 +376,7 @@ export class WebGLCartonRenderer {
     this.windowRef.clearTimeout(this.settleTimer);
     this.qualityManager.dispose();
     this.postProcessing.dispose();
-    this.scene.setRenderCallback(null);
-    this.scene.dispose();
+    this.source.setRenderCallback(null);
+    this.source.dispose();
   }
 }
