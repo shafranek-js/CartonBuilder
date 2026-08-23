@@ -2,6 +2,19 @@ import { parseSvgPathD, svgXY, safeNodeName, polyCentroid, lineInfo, requireFini
 import { trimmedPanelPolygonGlobal } from '../geometry/panel-geometry.js';
 import { resolveCreaseProfile } from '../geometry/crease-geometry.js';
 
+function readViewBox(value, label) {
+  const values = Array.isArray(value)
+    ? value
+    : String(value || '').trim().split(/[\s,]+/).filter(Boolean);
+  if (!values.length) return null;
+  if (values.length !== 4) throw new Error(`${label} must contain four numbers`);
+  const viewBox = values.map(Number);
+  if (viewBox.some(value => !Number.isFinite(value)) || viewBox[2] <= 0 || viewBox[3] <= 0) {
+    throw new Error(`${label} must contain a finite positive-size viewBox`);
+  }
+  return viewBox;
+}
+
 export function parseSemanticCartonSvg(svgText) {
   const doc=new DOMParser().parseFromString(svgText,'image/svg+xml');
   const parseError=doc.querySelector('parsererror'); if(parseError) throw new Error('Invalid SVG/XML');
@@ -9,6 +22,9 @@ export function parseSemanticCartonSvg(svgText) {
   if(!mdEl?.textContent?.trim()) throw new Error('pbd.svg.v4 metadata is missing');
   let metadata={}; try{ metadata=JSON.parse(mdEl.textContent.trim()); }catch(e){ throw new Error('Invalid pbd.svg.v4 metadata JSON'); }
   const schema=metadata.schemaVersion || doc.documentElement.dataset.exportSchemaVersion || '';
+  const viewBox = readViewBox(metadata.canvas?.viewBox, 'metadata.canvas.viewBox')
+    || readViewBox(doc.documentElement.getAttribute('viewBox'), 'svg viewBox');
+  const canvas = viewBox ? { viewBox } : null;
   const idIndex={}; doc.querySelectorAll('[id]').forEach(el=>{ idIndex[el.getAttribute('id')]=el; });
   if(!/^pbd\.svg\.v4(?:\.|$)/i.test(schema)) throw new Error(`Unsupported SVG schema "${schema||'unknown'}". Expected pbd.svg.v4.`);
   if(metadata.capabilities?.panelGeometry===false || metadata.capabilities?.foldGraph===false) throw new Error('SVG declares that panelGeometry/foldGraph capability is unavailable');
@@ -183,5 +199,5 @@ export function parseSemanticCartonSvg(svgText) {
   }
 
   const rootOrigin=origins[rootId];
-  return {doc,metadata,sourceSchema:schema,dimensions:dims,panels,panelById,folds,specs,rootId,rootOrigin,origins,creaseProfile,interactions,openings,assembly:{stages,actions},cartonType:metadata.cartonType||'generic'};
+  return {doc,metadata,canvas,sourceSchema:schema,dimensions:dims,panels,panelById,folds,specs,rootId,rootOrigin,origins,creaseProfile,interactions,openings,assembly:{stages,actions},cartonType:metadata.cartonType||'generic'};
 }

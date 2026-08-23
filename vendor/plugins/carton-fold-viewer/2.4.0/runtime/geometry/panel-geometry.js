@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { polyCentroid } from '../pbd/path-parser.js';
+import { applyFlatNetUv } from './flat-net-uv.js';
 
 
 function lineUnitNormalIntoPolygon(poly,a,b){
@@ -75,7 +76,7 @@ export function trimmedPanelPolygonGlobal(panelId,parsed,halfWidthMm){
   return poly;
 }
 
-export function makePanelGeometry(pointsMm, thicknessMm, spec = null) {
+export function makePanelGeometry(pointsMm, thicknessMm, spec = null, flatNetUv = null) {
   const shape = new THREE.Shape();
   pointsMm.forEach((p, j) => {
     const x = p[0] * 0.001, y = p[1] * 0.001;
@@ -87,6 +88,7 @@ export function makePanelGeometry(pointsMm, thicknessMm, spec = null) {
   const g = new THREE.ExtrudeGeometry(shape, { depth, steps: 1, bevelEnabled: false, curveSegments: 2 });
   g.translate(0, 0, -depth / 2);
   g.computeVertexNormals();
+  if (flatNetUv) applyFlatNetUv(g, flatNetUv, spec?.origin || [0, 0]);
 
   const r = String(spec?.semanticRole || '').toUpperCase();
   if (r.includes('SNAP_LOCK.LOCKING') || r.includes('LOCKING_FLAP')) {

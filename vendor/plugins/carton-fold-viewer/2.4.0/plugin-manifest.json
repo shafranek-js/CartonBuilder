@@ -5,10 +5,10 @@
   "name": "CartonFoldViewer",
   "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
   "entrypoint": "index.html",
-  "sourceCommit": "ec793810ea28c456ca0e33b60fa5404408e8b778",
+  "sourceCommit": "943fcfc336300986cd97af2666538b0a27c8ad5d",
   "artifact": {
-    "byteLength": 1057372,
-    "sha256": "420f9d54f26fcc749bef9b09d38c59d26e71321c3e68027d2c64ee059aadbdae"
+    "byteLength": 1068194,
+    "sha256": "d4d9bb1db45045fd634563b5cf8b43c1478aeede84735d765c17233bead6540b"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -38,8 +38,8 @@
     },
     {
       "path": "index.html",
-      "byteLength": 1057372,
-      "sha256": "420f9d54f26fcc749bef9b09d38c59d26e71321c3e68027d2c64ee059aadbdae"
+      "byteLength": 1068194,
+      "sha256": "d4d9bb1db45045fd634563b5cf8b43c1478aeede84735d765c17233bead6540b"
     },
     {
       "path": "runtime/animation/fold-animations.js",
@@ -53,38 +53,43 @@
     },
     {
       "path": "runtime/FoldRuntime.js",
-      "byteLength": 2592,
-      "sha256": "aee888afdc081b711fa734073354465be0ce4a4912c114ac398b641ae9f1fb56"
+      "byteLength": 8809,
+      "sha256": "081e56f503424b5dc55c47b5f4397460270fb5ccf7c197111858aca055b250ac"
     },
     {
       "path": "runtime/geometry/crease-geometry.js",
-      "byteLength": 12590,
-      "sha256": "7a6a12509d3ddd1f3fb567e317729bf730bf6eb320567822714ad0225a387f60"
+      "byteLength": 12720,
+      "sha256": "6fda0f72bf4f5ef0603c538a781e106ca45618929852aa37562a1a11d32ebd62"
+    },
+    {
+      "path": "runtime/geometry/flat-net-uv.js",
+      "byteLength": 2547,
+      "sha256": "c62b501514dbb238041ffa2dfb4c348b72728d522ec222faa6e2d2ec18c631c3"
     },
     {
       "path": "runtime/geometry/materials.js",
-      "byteLength": 1034,
-      "sha256": "0214314e7ac1e0c16de046334a36be8c65a3e66911872b55e051bcc4b01525bc"
+      "byteLength": 1751,
+      "sha256": "f646e31b4da7753bac1dbd36928ad9cfba3e914059867d9ced09c956d2c6968b"
     },
     {
       "path": "runtime/geometry/panel-geometry.js",
-      "byteLength": 6501,
-      "sha256": "7ec6c2d9e23a3dd3c72f31eae41cdea63fc91f97bea909768e71f665f45ae9ff"
+      "byteLength": 6641,
+      "sha256": "95f7057b86979fe5295ea687cb7dfa3a36d5039258a0e3d89a1f43242b4b7938"
     },
     {
       "path": "runtime/index.js",
-      "byteLength": 515,
-      "sha256": "d2d5f4df20843641a42a421eb694d03e7af98e87754c93c71fbe1bbb3b136732"
+      "byteLength": 509,
+      "sha256": "e73e33585a557eb918a3ea8d686b1250e443d7f9c4f648e5f43461986250b2ab"
     },
     {
       "path": "runtime/model/model-builder.js",
-      "byteLength": 2708,
-      "sha256": "143bf818d1d47f7726be08d55866697a88d7f24d4e3248003f8b07e55dfb6c0a"
+      "byteLength": 3190,
+      "sha256": "a611565c9fdb5a9a37cacfd7c6d90ce1baa83bc4870da637ee4c5a61829be026"
     },
     {
       "path": "runtime/package-manifest.json",
-      "byteLength": 2089,
-      "sha256": "79092c8e166ecab8aa89fa4ff7242db18398036105053294a895eb0e0261872a"
+      "byteLength": 2253,
+      "sha256": "3665276d44007e534bafa8f36ae410af2161a243930b3d5bff9324c44314c996"
     },
     {
       "path": "runtime/package.json",
@@ -98,13 +103,13 @@
     },
     {
       "path": "runtime/pbd/semantic-svg.js",
-      "byteLength": 11275,
-      "sha256": "8d9372f880e564800c4c87223bcd3b0e98f3d3bc6ebceaf0dd3e8a481d448179"
+      "byteLength": 11996,
+      "sha256": "22f584fe4be2add2b0279828e4b69ff64490818d13a48e41f853d87742d6d514"
     },
     {
       "path": "runtime/utils/dispose.js",
-      "byteLength": 333,
-      "sha256": "f8e90a54658ffb9f6edc21048f72cf80f93a7375f718db3289de6c5ab35b465f"
+      "byteLength": 1082,
+      "sha256": "e0681e480317c605db92dcdad51cf075febeaa0423bc3fdf3a060907270d2a6d"
     }
   ]
 }

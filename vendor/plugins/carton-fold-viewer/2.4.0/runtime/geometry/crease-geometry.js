@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { polyCentroid } from '../pbd/path-parser.js';
+import { applyFlatNetUv } from './flat-net-uv.js';
 
 export const CREASE_MORPH_FACTORS = [0.25, 0.50, 0.75, 1.00, 1.25];
 
@@ -243,7 +244,7 @@ function creaseIndices(segments, isFlipped = false) {
   return idx;
 }
 
-export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile) {
+export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, flatNetUv = null) {
   const u = new THREE.Vector3(...fold.line.axis).normalize();
   const childC = polyCentroid(parsed.panels[fold.childPanelId].polygon);
   const mid = [(fold.line.a[0] + fold.line.b[0]) / 2, (fold.line.a[1] + fold.line.b[1]) / 2];
@@ -268,6 +269,7 @@ export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(base.positions, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(base.normals, 3));
   g.setIndex(indices);
+  if (flatNetUv) applyFlatNetUv(g, flatNetUv, parentOrigin);
   g.morphTargetsRelative = true;
 
   const mp = [], mn = [];
