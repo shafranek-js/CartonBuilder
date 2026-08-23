@@ -22,7 +22,7 @@ export function isPathSafe(baseDir, relativePath) {
     path.isAbsolute(relativePath) ||
     /^[A-Za-z]:/.test(relativePath) ||
     relativePath.startsWith("/") ||
-    relativePath.startsWith("\\")
+    relativePath.includes("\\")
   ) {
     return false;
   }
