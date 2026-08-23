@@ -1,15 +1,22 @@
 import { readFile } from 'node:fs/promises';
 
 import {
+  PDFArray,
   PDFDict,
   PDFDocument,
   PDFName,
+  PDFRawStream,
+  decodePDFRawStream,
   degrees,
   rgb,
 } from 'pdf-lib';
 import { expect, test } from '@playwright/test';
 import { sha256 } from '../../src/artwork/fileValidation.js';
+import { TechnicalCartonDocument } from '../../src/carton/TechnicalCartonDocument.js';
+import { createTechnicalBoxModelAdapter } from '../../src/carton/technicalBoxModelAdapter.js';
+import { createTechnicalPresentationProjection } from '../../src/carton/technicalPresentation.js';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
+import { arcToCubicSegments, getDielineSegments } from '../../src/model/dieline.js';
 import { createProjectArchive } from '../../src/project/projectArchive.js';
 
 async function activate(page, label, key = 'Enter') {
@@ -107,6 +114,44 @@ async function loadGeneratedVectorPdf(page, fileName = 'vector-artwork.pdf', { r
   });
   await expect(page.locator('#artworkFileName')).toHaveText(fileName, { timeout: 20_000 });
   await expect(page.locator('#processingOverlay')).toBeHidden();
+}
+
+async function inspectFlatPdfDownload(download) {
+  const bytes = await readFile(await download.path());
+  const document = await PDFDocument.load(bytes);
+  const page = document.getPage(0);
+  const resources = page.node.Resources();
+  const properties = resources.lookup(PDFName.of('Properties'), PDFDict);
+  const xObjects = resources.lookup(PDFName.of('XObject'), PDFDict);
+  const xObjectSubtypes = xObjects.entries().map(([, reference]) => {
+    const object = document.context.lookup(reference);
+    return (object?.dict || object)?.get(PDFName.of('Subtype'))?.asString() || null;
+  });
+  const contents = page.node.lookup(PDFName.of('Contents'), PDFArray);
+  let content = '';
+  for (let index = 0; index < contents.size(); index += 1) {
+    const stream = document.context.lookup(contents.get(index));
+    content += stream instanceof PDFRawStream
+      ? new TextDecoder().decode(decodePDFRawStream(stream).decode())
+      : stream.getUnencodedContentsString();
+  }
+  return {
+    bytes,
+    document,
+    page,
+    properties,
+    xObjectSubtypes,
+    content,
+  };
+}
+
+async function loadTechnicalFixtureBoxModel(cartonType) {
+  const fixture = JSON.parse(await readFile(
+    new URL(`../../src/workflow/fixtures/${cartonType.toLowerCase()}-workflow.v1.json`, import.meta.url),
+    'utf8',
+  ));
+  const document = await TechnicalCartonDocument.create(fixture);
+  return createTechnicalBoxModelAdapter(document);
 }
 
 function decodeXmlText(value) {
@@ -969,6 +1014,155 @@ test('technical SVG export preserves canonical metadata and provenance for RTE, 
     expect(exported).toContain('data-semantic-layer="regions"');
     expect(exported).toContain('data-semantic-layer="folds"');
   }
+});
+
+const expectedTechnicalPdfGeometry = {
+  RTE: { widthMm: 374.4, heightMm: 312.3, primitiveCount: 90, cutCount: 78, arcCount: 19, foldCount: 12, openCutCount: 12 },
+  STE: { widthMm: 379.32, heightMm: 319.68, primitiveCount: 90, cutCount: 78, arcCount: 20, foldCount: 12, openCutCount: 12 },
+  TT_SL123: { widthMm: 374.4, heightMm: 273.6995, primitiveCount: 84, cutCount: 72, arcCount: 21, foldCount: 12, openCutCount: 8 },
+};
+
+for (const cartonType of ['RTE', 'STE', 'TT_SL123']) {
+  test(`technical flat PDF export downloads exact Dieline OCG and artwork for ${cartonType}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    const semanticCounts = expectedTechnicalPdfGeometry[cartonType];
+    const frame = await createTechnicalArtworkProject(page, `technical-flat-pdf-${cartonType}.png`, cartonType);
+    const technicalBoxModel = await loadTechnicalFixtureBoxModel(cartonType);
+    const presentationTransform = (await frame.locator('#canvas svg').getAttribute('data-presentation-transform'))
+      .split(',').map(Number);
+    expect(technicalBoxModel.getPresentationTransform()).toEqual({
+      a: presentationTransform[0],
+      b: presentationTransform[1],
+      c: presentationTransform[2],
+      d: presentationTransform[3],
+    });
+    const expectedDieline = getDielineSegments(technicalBoxModel);
+    const expectedCutCubicCount = expectedDieline.cut
+      .reduce((count, segment) => count + (segment.kind === 'ARC' ? arcToCubicSegments(segment).length : 0), 0);
+    const expectedFoldCubicCount = expectedDieline.fold
+      .reduce((count, segment) => count + (segment.kind === 'ARC' ? arcToCubicSegments(segment).length : 0), 0);
+    const openCutSegments = expectedDieline.cut.filter((segment) => segment.role === 'OPEN_CUT');
+    expect(expectedDieline.cut).toHaveLength(semanticCounts.cutCount);
+    expect(expectedDieline.fold).toHaveLength(semanticCounts.foldCount);
+    expect([...expectedDieline.cut, ...expectedDieline.fold]
+      .filter((segment) => segment.kind === 'ARC')).toHaveLength(semanticCounts.arcCount);
+    expect(openCutSegments).toHaveLength(semanticCounts.openCutCount);
+    const downloadPromise = page.waitForEvent('download');
+    await (await openMenuExport(page, '2d', '#menuExportPdfBtn')).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('carton-artwork.pdf');
+    const inspected = await inspectFlatPdfDownload(download);
+
+    expect(inspected.bytes.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(Number.isFinite(inspected.page.getWidth())).toBe(true);
+    expect(Number.isFinite(inspected.page.getHeight())).toBe(true);
+    expect(inspected.page.getWidth()).toBeGreaterThan(0);
+    expect(inspected.page.getHeight()).toBeGreaterThan(0);
+    expect(inspected.page.getWidth()).toBeCloseTo(semanticCounts.widthMm * (72 / 25.4), 4);
+    expect(inspected.page.getHeight()).toBeCloseTo(semanticCounts.heightMm * (72 / 25.4), 4);
+    expect(inspected.properties.entries().map(([name]) => name.asString())).toEqual(['/Dieline']);
+    expect(inspected.xObjectSubtypes).toContain('/Image');
+    expect(inspected.content).toContain('/OC /Dieline BDC');
+    expect(inspected.content).toContain('/CutContourCS CS');
+    expect(inspected.content).toContain('Do');
+    const dielineContent = inspected.content.slice(
+      inspected.content.indexOf('/OC /Dieline BDC'),
+      inspected.content.indexOf('EMC', inspected.content.indexOf('/OC /Dieline BDC')),
+    );
+    const foldMarker = dielineContent.match(/\[[^\]]+\]\s+0\s+d/);
+    expect(foldMarker).toBeTruthy();
+    const cutContent = dielineContent.slice(0, foldMarker.index);
+    const foldContent = dielineContent.slice(foldMarker.index + foldMarker[0].length);
+    expect((cutContent.match(/\bS\b/g) || []).length).toBe(semanticCounts.cutCount);
+    expect((foldContent.match(/\bS\b/g) || []).length).toBe(semanticCounts.foldCount);
+    expect((dielineContent.match(/\bS\b/g) || []).length).toBe(semanticCounts.primitiveCount);
+    expect((cutContent.match(/\bc\b/g) || []).length).toBe(expectedCutCubicCount);
+    expect((foldContent.match(/\bc\b/g) || []).length).toBe(expectedFoldCubicCount);
+    expect((dielineContent.match(/\bc\b/g) || []).length)
+      .toBe(expectedCutCubicCount + expectedFoldCubicCount);
+    const cutStrokePaths = cutContent
+      .split(/\bS\b/)
+      .slice(0, -1)
+      .map((strokePath) => {
+        const starts = [...strokePath.matchAll(/[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s+[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s+m/g)];
+        const start = starts.at(-1);
+        return start ? strokePath.slice(start.index).trim() : null;
+      })
+      .filter(Boolean);
+    expect(cutStrokePaths).toHaveLength(semanticCounts.cutCount);
+
+    const geometryBounds = technicalBoxModel.getBounds();
+    const projectedOpenCutSegments = openCutSegments.map((segment) => {
+      const cubicPieces = segment.kind === 'ARC' ? arcToCubicSegments(segment) : [];
+      const end = cubicPieces.at(-1)?.end || segment.end;
+      const toPdfPoint = (point) => ({
+        x: (point.x - geometryBounds.minX) * (72 / 25.4),
+        y: (geometryBounds.maxY - point.y) * (72 / 25.4),
+      });
+      return {
+        start: toPdfPoint(segment.start),
+        end: toPdfPoint(end),
+        cubicCount: cubicPieces.length,
+      };
+    });
+    const openCutStrokePaths = cutStrokePaths.slice(-projectedOpenCutSegments.length);
+    expect(openCutStrokePaths).toHaveLength(projectedOpenCutSegments.length);
+    const expectedOpenCutCubicCount = projectedOpenCutSegments
+      .reduce((count, segment) => count + segment.cubicCount, 0);
+    const actualOpenCutCubicCount = openCutStrokePaths
+      .reduce((count, strokePath) => count + (strokePath.match(/\bc\b/g) || []).length, 0);
+    expect(actualOpenCutCubicCount).toBe(expectedOpenCutCubicCount);
+    projectedOpenCutSegments.forEach((segment, index) => {
+      const strokePath = openCutStrokePaths[index];
+      expect((strokePath.match(/\bc\b/g) || []).length).toBe(segment.cubicCount);
+      expect(strokePath).toContain(`${segment.start.x} ${segment.start.y} m`);
+      expect(strokePath).toContain(`${segment.end.x} ${segment.end.y}`);
+    });
+    expect(inspected.content.indexOf('Do')).toBeLessThan(inspected.content.indexOf('/OC /Dieline BDC'));
+    expect(inspected.content).not.toContain('/Bleed');
+    expect(inspected.content).not.toContain('/Safe');
+    expect(inspected.content).not.toContain('/Artwork');
+    expect(inspected.content).not.toContain('/Knife');
+    expect(inspected.content).not.toContain('/FoldLine');
+  });
+}
+
+test('technical flat PDF keeps vector artwork as a Form XObject with crop, rotation and flips', async ({ page }) => {
+  test.setTimeout(90_000);
+  await chooseWorkflow(page, 'technical');
+  await expect(page.locator('#technicalHostValidation')).toHaveText(
+    'Structural VALID · Geometry VALID · Contract VALID',
+    { timeout: 20_000 },
+  );
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await loadGeneratedVectorPdf(page, 'technical-vector-flat.pdf');
+  await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    model.applyCrop({
+      x: model.unrotatedWidthMm * 0.18,
+      y: model.unrotatedHeightMm * 0.12,
+      width: model.unrotatedWidthMm * 0.62,
+      height: model.unrotatedHeightMm * 0.68,
+    });
+    model.rotateQuarterTurns(1);
+    model.flipHorizontal();
+    model.flipVertical();
+    window.cartonBuilderApp.artwork.render();
+  });
+  expect(await page.evaluate(() => ({
+    flipX: window.cartonBuilderApp.artwork.artwork.flipX,
+    flipY: window.cartonBuilderApp.artwork.artwork.flipY,
+  }))).toEqual({ flipX: true, flipY: true });
+
+  const downloadPromise = page.waitForEvent('download');
+  await (await openMenuExport(page, '2d', '#menuExportPdfBtn')).click();
+  const download = await downloadPromise;
+  const inspected = await inspectFlatPdfDownload(download);
+  expect(inspected.xObjectSubtypes).toContain('/Form');
+  expect(inspected.xObjectSubtypes).not.toContain('/Image');
+  expect(inspected.content).toMatch(/-\d+(?:\.\d+)? 0 0 -\d+(?:\.\d+)? 0 0 cm/);
+  expect(inspected.content.indexOf('Do')).toBeLessThan(inspected.content.indexOf('/OC /Dieline BDC'));
 });
 
 for (const cartonType of ['RTE', 'STE']) {

@@ -28,6 +28,7 @@ const POINTS_PER_MM = 72 / 25.4;
 const EXPORT_DPI = 300;
 const MAX_RASTER_EDGE = 32767;
 const MAX_RASTER_PIXELS = 64_000_000;
+const GEOMETRY_TOLERANCE = 1e-7;
 
 function panelPoints(panel) {
   return Array.isArray(panel.polygon) && panel.polygon.length >= 3
@@ -362,15 +363,139 @@ function rotatedOrigin(centerX, centerY, width, height, angleDegrees) {
   };
 }
 
+function finitePoint(point) {
+  return Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y));
+}
+
+function validArc(segment) {
+  if (!finitePoint(segment?.center) || !finitePoint(segment?.start) || !finitePoint(segment?.end)) return false;
+  const { radius, delta } = getArcAngles(segment);
+  if (!Number.isFinite(radius) || radius <= 0 || !Number.isFinite(delta) || delta <= 0 || delta > Math.PI * 2 + GEOMETRY_TOLERANCE) return false;
+  return Math.abs(Math.hypot(segment.start.x - segment.center.x, segment.start.y - segment.center.y) - radius) <= GEOMETRY_TOLERANCE
+    && Math.abs(Math.hypot(segment.end.x - segment.center.x, segment.end.y - segment.center.y) - radius) <= GEOMETRY_TOLERANCE;
+}
+
+function validSegment(segment) {
+  if (!['LINE', 'ARC'].includes(segment?.kind) || !finitePoint(segment.start) || !finitePoint(segment.end)) return false;
+  return segment.kind !== 'ARC' || validArc(segment);
+}
+
+function validClosedContour(panel) {
+  if (panel?.contour?.closed === false) return false;
+  if (panel?.contour && (!Array.isArray(panel.contour.segments) || panel.contour.segments.length === 0)) return false;
+  let segments;
+  try {
+    segments = getPanelContourSegments(panel);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(segments) || segments.length < 3 || segments.some((segment) => !validSegment(segment))) return false;
+  for (let index = 1; index < segments.length; index += 1) {
+    if (Math.hypot(
+      Number(segments[index - 1].end.x) - Number(segments[index].start.x),
+      Number(segments[index - 1].end.y) - Number(segments[index].start.y),
+    ) > GEOMETRY_TOLERANCE) return false;
+  }
+  return Math.hypot(
+    Number(segments[segments.length - 1].end.x) - Number(segments[0].start.x),
+    Number(segments[segments.length - 1].end.y) - Number(segments[0].start.y),
+  ) <= GEOMETRY_TOLERANCE;
+}
+
+function validDielineSegments(segments) {
+  return Array.isArray(segments) && segments.every((segment) => validSegment(segment));
+}
+
+function invalidPdfExport(reason) {
+  throw new AppError('pdfExportInvalid', { reason });
+}
+
+function validatePdfExportInput(boxModel, entries) {
+  if (!boxModel || typeof boxModel.getBounds !== 'function') invalidPdfExport('invalid-box-model');
+  let bounds;
+  try {
+    bounds = boxModel.getBounds();
+  } catch {
+    invalidPdfExport('invalid-box-bounds');
+  }
+  if (!bounds || ![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, bounds.width, bounds.height].every(Number.isFinite)
+    || bounds.width <= 0 || bounds.height <= 0) invalidPdfExport('invalid-box-bounds');
+  let panels;
+  try {
+    panels = typeof boxModel.getElements === 'function' ? boxModel.getElements() : boxModel.getPanels?.();
+  } catch {
+    invalidPdfExport('invalid-panel-contour');
+  }
+  if (!Array.isArray(panels) || !panels.length || panels.some((panel) => !validClosedContour(panel))) {
+    invalidPdfExport('invalid-panel-contour');
+  }
+  let dieline;
+  try {
+    dieline = getDielineSegments(boxModel);
+  } catch {
+    invalidPdfExport('invalid-dieline');
+  }
+  if (!validDielineSegments(dieline?.cut) || !validDielineSegments(dieline?.fold)
+    || (boxModel.mode === 'technical' && !(dieline.cut.length && dieline.fold.length))) {
+    invalidPdfExport('invalid-dieline');
+  }
+
+  for (const entry of entries) {
+    const artwork = entry?.model;
+    const source = artwork?.source;
+    if (!source || !entry.originalBlob || typeof entry.originalBlob.arrayBuffer !== 'function' || entry.originalBlob.size <= 0) {
+      invalidPdfExport('artwork-source-missing');
+    }
+    if (!['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'].includes(source.mimeType)) {
+      invalidPdfExport('unsupported-artwork-source');
+    }
+    if (!artwork || ![artwork.centerXmm, artwork.centerYmm, artwork.unrotatedWidthMm, artwork.unrotatedHeightMm, artwork.rotation, artwork.opacity].every(Number.isFinite)
+      || artwork.unrotatedWidthMm <= 0 || artwork.unrotatedHeightMm <= 0 || artwork.opacity < 0 || artwork.opacity > 1) {
+      invalidPdfExport('invalid-artwork-transform');
+    }
+    if (artwork.crop) {
+      const crop = artwork.crop;
+      if (!['x', 'y', 'width', 'height'].every((key) => Number.isFinite(crop[key]))
+        || crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0
+        || crop.x + crop.width > artwork.unrotatedWidthMm + GEOMETRY_TOLERANCE
+        || crop.y + crop.height > artwork.unrotatedHeightMm + GEOMETRY_TOLERANCE) {
+        invalidPdfExport('invalid-artwork-crop');
+      }
+    }
+  }
+}
+
+function artworkPdfTransform(artwork, bounds) {
+  const width = artwork.unrotatedWidthMm * POINTS_PER_MM;
+  const height = artwork.unrotatedHeightMm * POINTS_PER_MM;
+  const signedWidth = artwork.flipX ? -width : width;
+  const signedHeight = artwork.flipY ? -height : height;
+  const centerX = (artwork.centerXmm - bounds.minX) * POINTS_PER_MM;
+  const centerY = (bounds.maxY - artwork.centerYmm) * POINTS_PER_MM;
+  const pdfRotation = -artwork.rotation;
+  return {
+    width: signedWidth,
+    height: signedHeight,
+    origin: rotatedOrigin(centerX, centerY, signedWidth, signedHeight, pdfRotation),
+    rotate: degrees(pdfRotation),
+  };
+}
+
 function addArtworkCropClip(page, artwork, bounds) {
   if (!artwork.crop) return;
   const radians = artwork.rotation * Math.PI / 180;
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
-  const left = -artwork.unrotatedWidthMm / 2 + artwork.crop.x;
-  const top = -artwork.unrotatedHeightMm / 2 + artwork.crop.y;
-  const right = left + artwork.crop.width;
-  const bottom = top + artwork.crop.height;
+  const visibleRect = artwork.visibleLocalRect || {
+    x: artwork.flipX ? artwork.unrotatedWidthMm - artwork.crop.x - artwork.crop.width : artwork.crop.x,
+    y: artwork.flipY ? artwork.unrotatedHeightMm - artwork.crop.y - artwork.crop.height : artwork.crop.y,
+    width: artwork.crop.width,
+    height: artwork.crop.height,
+  };
+  const left = -artwork.unrotatedWidthMm / 2 + visibleRect.x;
+  const top = -artwork.unrotatedHeightMm / 2 + visibleRect.y;
+  const right = left + visibleRect.width;
+  const bottom = top + visibleRect.height;
   const corners = [
     [left, top],
     [right, top],
@@ -465,9 +590,14 @@ export async function createPdfExport({
   boxModel,
   artworks,
 }) {
-  const entries = (artworks || [])
-    .filter((entry) => entry?.model?.hasArtwork && (entry.visible !== false) && entry.originalBlob);
+  const candidates = (artworks || [])
+    .filter((entry) => entry?.model?.hasArtwork
+      && (entry.visible !== false)
+      && entry.outputRole !== 'finish');
+  const entries = candidates.filter((entry) => entry.originalBlob);
   if (!entries.length) throw new AppError('artworkRequired');
+  if (entries.length !== candidates.length) invalidPdfExport('artwork-source-missing');
+  validatePdfExportInput(boxModel, entries);
   const pdfDocument = await PDFDocument.create();
   if (boxModel.construction?.templateId && boxModel.construction.templateId !== 'legacy-six-panel') {
     pdfDocument.setSubject('Structural mockup — production allowances not applied.');
@@ -481,40 +611,39 @@ export async function createPdfExport({
   addPanelClip(page, boxModel, bounds);
   for (const entry of entries) {
     const artwork = entry.model;
-    const centerX = (artwork.centerXmm - bounds.minX) * POINTS_PER_MM;
-    const centerY = (bounds.maxY - artwork.centerYmm) * POINTS_PER_MM;
-    const width = artwork.unrotatedWidthMm * POINTS_PER_MM;
-    const height = artwork.unrotatedHeightMm * POINTS_PER_MM;
-    const pdfRotation = -artwork.rotation;
-    const origin = rotatedOrigin(centerX, centerY, width, height, pdfRotation);
+    const transform = artworkPdfTransform(artwork, bounds);
     page.pushOperators(pushGraphicsState());
     addArtworkCropClip(page, artwork, bounds);
 
-    if (artwork.source.mimeType === 'application/pdf') {
-      const [embeddedPage] = await pdfDocument.embedPdf(
-        await entry.originalBlob.arrayBuffer(),
-        [artwork.source.pageIndex || 0],
-      );
-      page.drawPage(embeddedPage, {
-        x: origin.x,
-        y: origin.y,
-        width,
-        height,
-        rotate: degrees(pdfRotation),
-        opacity: artwork.opacity,
-      });
-    } else {
-      const embeddedImage = artwork.source.mimeType === 'image/png'
-        ? await pdfDocument.embedPng(await entry.originalBlob.arrayBuffer())
-        : await pdfDocument.embedJpg(await entry.originalBlob.arrayBuffer());
-      page.drawImage(embeddedImage, {
-        x: origin.x,
-        y: origin.y,
-        width,
-        height,
-        rotate: degrees(pdfRotation),
-        opacity: artwork.opacity,
-      });
+    try {
+      const sourceBytes = await entry.originalBlob.arrayBuffer();
+      if (!sourceBytes?.byteLength) invalidPdfExport('invalid-artwork-source');
+      if (artwork.source.mimeType === 'application/pdf') {
+        const [embeddedPage] = await pdfDocument.embedPdf(sourceBytes, [artwork.source.pageIndex || 0]);
+        page.drawPage(embeddedPage, {
+          x: transform.origin.x,
+          y: transform.origin.y,
+          width: transform.width,
+          height: transform.height,
+          rotate: transform.rotate,
+          opacity: artwork.opacity,
+        });
+      } else {
+        const embeddedImage = artwork.source.mimeType === 'image/png'
+          ? await pdfDocument.embedPng(sourceBytes)
+          : await pdfDocument.embedJpg(sourceBytes);
+        page.drawImage(embeddedImage, {
+          x: transform.origin.x,
+          y: transform.origin.y,
+          width: transform.width,
+          height: transform.height,
+          rotate: transform.rotate,
+          opacity: artwork.opacity,
+        });
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      invalidPdfExport('invalid-artwork-source');
     }
     page.pushOperators(popGraphicsState());
   }

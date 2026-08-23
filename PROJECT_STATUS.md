@@ -190,11 +190,13 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
   distance ranking, global move hysteresis для semantic и legacy LINE/ARC,
   proportional coordinate path и Technical side/corner/crop E2E. Предыдущие
   acceptance checks проходили, но не покрывали эти ветки; после исправлений
-  Stage 4C закрыта в этой semantic-snapping границе. Technical printable
-  coverage/DPI, оставшиеся flat PDF/artwork требования, весь остальной Этап 4
-  и Release 1 gate остаются открытыми. Preview и Render не подключались.
+  Stage 4C закрыта в этой semantic-snapping границе. На границе Stage 4C
+  Technical printable coverage/DPI ещё оставался открытым; его отдельная
+  diagnostic-часть принята в Stage 4D ниже. Оставшиеся flat PDF/artwork
+  требования, весь остальной Этап 4 и Release 1 gate остаются открытыми.
+  Preview и Render не подключались.
 
-### 2.10. Stage 4D — Technical printable-region coverage and DPI preflight (implementation present; acceptance open)
+### 2.10. Stage 4D — Technical printable-region coverage and DPI preflight (diagnostic boundary accepted)
 
 - `src/artwork/technicalArtworkPreflight.js` добавляет чистый детерминированный
   report для Technical: exact semantic roles классифицируются как printable,
@@ -203,12 +205,13 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
   `BODY.SIDE_SEAM.GLUE_FLAP`; TT_SL123 дополнительно исключает четыре
   `CLOSURE.BOTTOM.SNAP_LOCK.*`; body panels, major/dust flaps и tuck tongues
   остаются printable. Label не используется как fallback.
-- Coverage проверяется по canonical LINE/ARC contour: ARC временно
-  аппроксимируется только внутри preflight с максимальным шагом `π/96`,
-  `1e-5 mm` join/radius tolerance и `1e-6 mm` coverage tolerance. Scanline
-  union учитывает пересечения surface/artwork footprints, поэтому внутренние
-  gaps и ARC bulge не маскируются bbox/endpoints; повреждённый contour даёт
-  `unknown`.
+- Coverage проверяется по canonical LINE/ARC contour. ARC flattening с
+  максимальным шагом `π/96` используется только для diagnostic validation;
+  само покрытие использует аналитические circle/line intersections и точные
+  ARC boundary/scanline checks. Применяются `1e-5 mm` join/radius tolerance и
+  `1e-6 mm` coverage tolerance. Внутренние gaps и ARC bulge не маскируются
+  bbox/endpoints; если покрытие нельзя доказать или contour повреждён, результат
+  fail-closed как `unknown`.
 - Visible print layers учитывают global position, crop, independent/proportional
   scale, rotation и flips; hidden, finish и пустые/invalid layers не считаются
   покрытием. Raster quality использует effective DPI: `<300` — warning,
@@ -219,11 +222,46 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
   попадает в schema/archive/export. Quick `getExportWarnings()` не изменён.
   Existing `technical-prepress-unavailable` и
   `technicalPrepressUnavailable` guards сохранены.
-- Stage 4D implementation присутствует только для diagnostic
-  printable-region/DPI preflight; acceptance остаётся открытой до повторной
-  проверки после code-review corrections. Это не включает technical
+- Stage 4D принят только в границе diagnostic printable-region/DPI preflight
+  после focused и полного повторного gate. Это не включает technical
   prepress/production-assist, flat PDF/artwork acceptance, Preview, Render,
   converter/material/physical evidence, весь Release 1 gate или весь Этап 4.
+
+### 2.11. Stage 4E — Technical flat PDF/artwork (accepted)
+
+- `createPdfExport()` сохраняет точные panel contours и Dieline OCG после
+  artwork, встраивает исходный vector PDF как Form XObject и исходные PNG/JPEG
+  как Image XObjects. Position, independent scale, rotation, horizontal/vertical
+  flips, crop clipping, opacity и layer order представлены signed affine
+  transform без изменения `ArtworkModel`, source blobs, PBD bytes, SVG или
+  provenance.
+- Перед созданием PDF fail-closed проверяются bounds, closed LINE/ARC panel
+  contours, non-empty CUT and FOLD primitives, source MIME/blob и artwork
+  transform/crop.
+  `contour.closed === false`, пустой Technical dieline и смешанный набор valid +
+  missing source blob отклоняются до создания PDF; единственный missing source
+  blob сохраняет `artworkRequired`. Повреждённый непустой source blob также
+  отклоняется как `pdfExportInvalid`; finish/hidden layers не попадают в обычный
+  flat PDF.
+- Добавлены unit-проверки Form/Image XObjects, исходных PNG/JPEG dimensions,
+  flip/crop/rotation/independent-scale, opacity/order/visibility/finish,
+  no-mutation, invalid-input rejection и шесть reviewer regressions.
+  Focused `artworkExport.test.js`: **26/26 PASS**; Technical download-level
+  checks для RTE/STE/TT_SL123 подтверждают physical page, один Dieline OCG,
+  artwork XObject, отдельные exact CUT и FOLD stroke counts, сумму primitive
+  counts, exact projected cubic-piece counts отдельно для всех CUT/FOLD ARC и
+  в `cutContent` каждый canonical OPEN_CUT start/end; vector
+  crop/rotation/flip path также проверяется. Expected geometry строится через
+  production pipeline `TechnicalCartonDocument` →
+  `createTechnicalBoxModelAdapter()` → `getDielineSegments()`.
+- После исправления последнего reviewer acceptance gap полный повторный gate:
+  unit **571/571 PASS**, `app.spec.js` **56/56 PASS**, crop E2E **10/10 PASS**,
+  smoke E2E **7/7 PASS**, Technical PDF E2E **4/4 PASS**,
+  `plugins:verify` и production build (**394 modules**) — **PASS**.
+- Stage 4E принят в границе Technical flat PDF/artwork. Technical Preview,
+  Render и production-assist/prepress по-прежнему fail-closed. Это не
+  переобъявляет завершёнными весь Этап 4, Release 1 или внешние
+  converter/material/physical evidence.
 
 ## 3. Ключевые технические решения
 
@@ -266,21 +304,23 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
 
 ## 5. Подтверждённые проверки
 
-Последняя полная проверка до текущего code-review correction была выполнена в
-dirty worktree
-ветки `codex/dual-workflow-stage1`:
+Последняя полная проверка после Stage 4E reviewer corrections выполнена в dirty
+working tree ветки `codex/dual-workflow-stage1` при HEAD `12bc388`:
 
 | Проверка | Результат |
 |---|---|
-| `npm run test:unit` | `77/77` files, `553/553` tests PASS |
-| Technical preflight unit | `9/9` PASS |
+| `npm run test:unit` | `77/77` files, `571/571` tests PASS |
+| Technical preflight unit | `13/13` PASS; combined relevant slice `68/68` PASS |
+| Technical flat PDF unit | `26/26` PASS |
 | Technical printable/DPI Playwright | `5/5` PASS |
-| Full `tests/e2e/app.spec.js` | `52/52` PASS |
+| Technical flat PDF Playwright | `4/4` PASS |
+| Full `tests/e2e/app.spec.js` | `56/56` PASS |
+| `tests/e2e/artwork-crop.spec.js` | `10/10` PASS |
 | `npm run plugins:verify` | `2/2` vendored plugins PASS |
 | `npm run build` | PASS, 394 modules transformed |
 | `npm run test:e2e:smoke` | `7/7` PASS |
 | `git diff --check` | PASS (CRLF warnings only) |
-| Graphify | Обновлён: 4,035 nodes, 7,517 edges, 230 communities |
+| Graphify | Обновлён: 4,059 nodes, 7,591 edges, 233 communities |
 
 Exact ARC fixture expectations зафиксированы независимо от fixture parser:
 RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoints
@@ -314,12 +354,13 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
   исключает glue/locking surfaces, проверяет LINE/ARC contours и transient
   artwork footprints, а DPI report различает raster/vector/unknown. После
   code-review исправлены ARC fail-closed coverage, invalid facade, invalid DPI
-  и contributor reporting; focused regression проходит, но Stage 4D
-  acceptance остаётся открытой до полного повторного gate. Это не снимает
-  production-assist guard и не является flat PDF/artwork acceptance.
+  и contributor reporting; focused и полный повторный gate пройдены, поэтому
+  Stage 4D закрыт в этой diagnostic-границе. Это не снимает production-assist
+  guard и не является flat PDF/artwork acceptance.
 - Technical SVG download-level E2E для RTE, STE и TT_SL123 подтверждает один PBD
-  metadata и один provenance; оставшиеся flat PDF/artwork requirements и их
-  acceptance остаются открытыми до Release 1.
+  metadata и один provenance. Stage 4E flat PDF/artwork принят после строгой
+  download-level проверки всех CUT/FOLD ARC cubic pieces и полного повторного
+  gate. Это не закрывает весь Этап 4 или Release 1.
 
 ### 6.2. Preview, Render и production boundaries
 
@@ -384,11 +425,10 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
 
 ## 8. Последовательность следующих шагов
 
-1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A–4C завершены отдельно; Stage 4D acceptance open):**
-   - повторить полный Stage 4D acceptance gate после code-review correction;
-   - оставшиеся flat PDF/artwork requirements и download-level acceptance;
-   - повторить Quick full regression, technical autosave/reopen и archive
-     round-trip.
+1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A–4E приняты в своих отдельных границах):**
+   - сверить оставшиеся требования Этапа 4 и Release 1 вне уже принятых границ;
+   - не снимать fail-closed guards Technical Preview, Render и
+     production-assist/prepress без их отдельных этапов и evidence.
 2. **Завершить Этап 5 CartonFoldViewer runtime:** добавить global flat-net UV,
    `setArtworkAtlas`, embedded host protocol, headless GLB export и resource
    disposal/stress tests. Не менять canonical JSON/SVG из 3D runtime.

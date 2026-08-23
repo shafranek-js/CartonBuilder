@@ -64,6 +64,48 @@ async function readPdfPageContents(bytes) {
   return text;
 }
 
+async function inspectPdf(bytes) {
+  const document = await PDFDocument.load(bytes);
+  const page = document.getPage(0);
+  const resources = page.node.Resources();
+  const xObjects = resources.lookupMaybe(PDFName.of('XObject'), PDFDict);
+  const objects = xObjects
+    ? xObjects.entries().map(([name, ref]) => {
+      const object = document.context.lookup(ref);
+      const dictionary = object?.dict || object;
+      const subtype = dictionary?.get?.(PDFName.of('Subtype'))?.asString?.() || null;
+      const number = (key) => {
+        const value = dictionary?.get?.(PDFName.of(key));
+        return value instanceof PDFNumber ? value.asNumber() : null;
+      };
+      return {
+        name: name.asString(),
+        subtype,
+        width: number('Width'),
+        height: number('Height'),
+      };
+    })
+    : [];
+  return {
+    document,
+    page,
+    content: await readPdfPageContents(bytes),
+    objects,
+  };
+}
+
+function createSourceJpeg() {
+  return Uint8Array.from(Buffer.from(
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AX//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Af/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEABj8Cf//Z',
+    'base64',
+  ));
+}
+
+async function exportPdfBytes(boxModel, artworks) {
+  const exported = await createPdfExport({ boxModel, artworks });
+  return new Uint8Array(await exported.arrayBuffer());
+}
+
 function completeBox() {
   const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
   model.addPanel('front', 'bottom');
@@ -136,8 +178,8 @@ describe('artwork export', () => {
       artworks: [{ model: artwork, visible: true, originalBlob: sourceBlob }],
     });
     const bytes = new Uint8Array(await exported.arrayBuffer());
-    const document = await PDFDocument.load(bytes);
-    const page = document.getPage(0);
+    const inspected = await inspectPdf(bytes);
+    const { document, page } = inspected;
     const bounds = box.getBounds();
     const pointsPerMm = 72 / 25.4;
 
@@ -153,6 +195,205 @@ describe('artwork export', () => {
     const separation = colorSpaces.lookup(PDFName.of('CutContourCS'), PDFArray);
     expect(separation.lookup(0, PDFName).asString()).toBe('/Separation');
     expect(separation.lookup(1, PDFName).asString()).toBe('/CutContour');
+
+    expect(inspected.objects.filter((object) => object.subtype === '/Form')).toHaveLength(1);
+    expect(inspected.objects.filter((object) => object.subtype === '/Image')).toHaveLength(0);
+    expect(inspected.content).toContain('Do');
+    expect(inspected.content.indexOf('Do')).toBeLessThan(inspected.content.indexOf('/Dieline BDC'));
+    expect(artwork.toJSON()).toEqual(expect.objectContaining({ crop: expect.any(Object) }));
+  });
+
+  it('embeds PNG and JPEG sources as image XObjects with their original pixel dimensions', async () => {
+    const box = completeBox();
+    for (const [mimeType, bytes] of [
+      ['image/png', createSourcePng()],
+      ['image/jpeg', createSourceJpeg()],
+    ]) {
+      const sourceBlob = new Blob([bytes], { type: mimeType });
+      const artwork = createTechnicalArtwork(box.getBounds(), sourceBlob, {
+        mimeType,
+        fileName: `source.${mimeType === 'image/png' ? 'png' : 'jpg'}`,
+        widthPx: 1,
+        heightPx: 1,
+      });
+      const inspected = await inspectPdf(await exportPdfBytes(box, [artwork]));
+      const images = inspected.objects.filter((object) => object.subtype === '/Image');
+      expect(images).toHaveLength(1);
+      expect(images[0]).toEqual(expect.objectContaining({ width: 1, height: 1 }));
+    }
+  });
+
+  it('applies independent scale, crop, rotation and both signed flip axes without mutating the model', async () => {
+    const box = completeBox();
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(box.getBounds(), sourceBlob, {
+      widthPx: 1,
+      heightPx: 1,
+    });
+    artwork.model.applyCrop({
+      x: artwork.model.unrotatedWidthMm * 0.15,
+      y: artwork.model.unrotatedHeightMm * 0.2,
+      width: artwork.model.unrotatedWidthMm * 0.55,
+      height: artwork.model.unrotatedHeightMm * 0.5,
+    });
+    artwork.model.setScaleX(0.7);
+    artwork.model.setScaleY(0.35);
+    artwork.model.rotateQuarterTurns(1);
+    artwork.model.flipHorizontal();
+    artwork.model.flipVertical();
+    const before = artwork.model.toJSON();
+    const inspected = await inspectPdf(await exportPdfBytes(box, [artwork]));
+    expect(inspected.objects.filter((object) => object.subtype === '/Image')).toHaveLength(1);
+    expect(inspected.content).toMatch(/-\d+(?:\.\d+)? 0 0 -\d+(?:\.\d+)? 0 0 cm/);
+    expect(inspected.content).toContain('Do');
+    expect(artwork.model.toJSON()).toEqual(before);
+  });
+
+  it('keeps visible print layers in order, excludes hidden and finish layers, and preserves opacity', async () => {
+    const box = completeBox();
+    const png = new Blob([createSourcePng()], { type: 'image/png' });
+    const first = createTechnicalArtwork(box.getBounds(), png, { fileName: 'first.png' });
+    const second = createTechnicalArtwork(box.getBounds(), png, { fileName: 'second.png' });
+    second.model.setOpacity(0.4);
+    const hidden = createTechnicalArtwork(box.getBounds(), png, { fileName: 'hidden.png' });
+    const finish = createTechnicalArtwork(box.getBounds(), png, { fileName: 'finish.png' });
+    const inspected = await inspectPdf(await exportPdfBytes(box, [
+      { ...first, outputRole: 'print' },
+      { ...second, outputRole: 'print' },
+      { ...hidden, visible: false, outputRole: 'print' },
+      { ...finish, outputRole: 'finish' },
+    ]));
+    expect(inspected.objects.filter((object) => object.subtype === '/Image')).toHaveLength(2);
+    expect(inspected.content.match(/Do/g)).toHaveLength(2);
+    const extGState = inspected.page.node.Resources().lookup(PDFName.of('ExtGState'), PDFDict);
+    const alphaValues = extGState.entries().map(([, ref]) => {
+      const state = inspected.document.context.lookup(ref);
+      const value = state?.get?.(PDFName.of('ca'));
+      return value instanceof PDFNumber ? value.asNumber() : null;
+    });
+    expect(alphaValues).toContain(0.4);
+    expect(inspected.content.indexOf('Do')).toBeLessThan(inspected.content.lastIndexOf('Do'));
+  });
+
+  it.each([
+    ['invalid-panel-contour', (box) => {
+      const getElements = box.getElements.bind(box);
+      box.getElements = () => [{
+        ...getElements()[0],
+        contour: { segments: [{ kind: 'LINE', start: { x: 0, y: 0 }, end: { x: 1, y: 1 } }] },
+      }];
+    }],
+    ['unsupported-artwork-source', (box, artwork) => {
+      artwork.model.source.mimeType = 'image/gif';
+    }],
+    ['invalid-artwork-source', (box, artwork) => {
+      artwork.originalBlob = new Blob(['not a valid image'], { type: 'image/png' });
+    }],
+    ['invalid-artwork-transform', (box, artwork) => {
+      artwork.model.opacity = Number.NaN;
+    }],
+    ['invalid-artwork-crop', (box, artwork) => {
+      artwork.model.crop = { x: -1, y: 0, width: 1, height: 1 };
+    }],
+  ])('rejects %s before producing a PDF', async (reason, mutate) => {
+    const box = completeBox();
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(box.getBounds(), sourceBlob);
+    mutate(box, artwork);
+    await expect(createPdfExport({ boxModel: box, artworks: [artwork] }))
+      .rejects.toMatchObject({ code: 'pdfExportInvalid', parameters: { reason } });
+  });
+
+  it('keeps the artwork-required error when the only active layer has no source blob', async () => {
+    const box = completeBox();
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(box.getBounds(), sourceBlob);
+    artwork.originalBlob = null;
+
+    await expect(createPdfExport({ boxModel: box, artworks: [artwork] }))
+      .rejects.toMatchObject({ code: 'artworkRequired' });
+  });
+
+  it('rejects a missing source blob instead of silently omitting the active layer', async () => {
+    const box = completeBox();
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const valid = createTechnicalArtwork(box.getBounds(), sourceBlob, { id: 'valid-layer' });
+    const missing = createTechnicalArtwork(box.getBounds(), sourceBlob, { id: 'missing-layer' });
+    missing.originalBlob = null;
+
+    await expect(createPdfExport({ boxModel: box, artworks: [valid, missing] }))
+      .rejects.toMatchObject({
+        code: 'pdfExportInvalid',
+        parameters: { reason: 'artwork-source-missing' },
+      });
+  });
+
+  it('rejects an explicitly open panel contour', async () => {
+    const box = completeBox();
+    const getElements = box.getElements.bind(box);
+    box.getElements = () => [{
+      ...getElements()[0],
+      contour: { closed: false, segments: getElements()[0].polygon.map((start, index, points) => ({
+        kind: 'LINE',
+        start,
+        end: points[(index + 1) % points.length],
+      })) },
+    }];
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(box.getBounds(), sourceBlob);
+
+    await expect(createPdfExport({ boxModel: box, artworks: [artwork] }))
+      .rejects.toMatchObject({
+        code: 'pdfExportInvalid',
+        parameters: { reason: 'invalid-panel-contour' },
+      });
+  });
+
+  it('rejects an empty Technical dieline before producing a PDF', async () => {
+    const { model } = await createTechnicalModel('rte');
+    model.getDielinePrimitives = () => [];
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob);
+
+    await expect(createPdfExport({ boxModel: model, artworks: [artwork] }))
+      .rejects.toMatchObject({
+        code: 'pdfExportInvalid',
+        parameters: { reason: 'invalid-dieline' },
+      });
+  });
+
+  it('rejects a Technical dieline that contains CUT but no FOLD', async () => {
+    const { model } = await createTechnicalModel('rte');
+    const cutOnly = model.getDielinePrimitives().filter((primitive) => (
+      primitive.classification !== 'fold' && primitive.role !== 'FOLD_BOUNDARY'
+    ));
+    expect(cutOnly.length).toBeGreaterThan(0);
+    model.getDielinePrimitives = () => cutOnly;
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob);
+
+    await expect(createPdfExport({ boxModel: model, artworks: [artwork] }))
+      .rejects.toMatchObject({
+        code: 'pdfExportInvalid',
+        parameters: { reason: 'invalid-dieline' },
+      });
+  });
+
+  it('rejects a Technical dieline that contains FOLD but no CUT', async () => {
+    const { model } = await createTechnicalModel('rte');
+    const foldOnly = model.getDielinePrimitives().filter((primitive) => (
+      primitive.classification === 'fold' || primitive.role === 'FOLD_BOUNDARY'
+    ));
+    expect(foldOnly.length).toBeGreaterThan(0);
+    model.getDielinePrimitives = () => foldOnly;
+    const sourceBlob = new Blob([createSourcePng()], { type: 'image/png' });
+    const artwork = createTechnicalArtwork(model.getBounds(), sourceBlob);
+
+    await expect(createPdfExport({ boxModel: model, artworks: [artwork] }))
+      .rejects.toMatchObject({
+        code: 'pdfExportInvalid',
+        parameters: { reason: 'invalid-dieline' },
+      });
   });
 
   it.each(['rte', 'ste', 'tt_sl123'])('preserves technical ARC and OPEN_CUT geometry in SVG and PDF for %s', async (name) => {
