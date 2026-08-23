@@ -676,12 +676,24 @@
       <section class="workflow-step preview-step" id="previewStep" hidden>
         <div class="preview-toolbar">
           <span class="preview-warning" id="previewWarning" role="status" aria-live="polite"></span>
-          <button id="openRenderButton" type="button" data-i18n="openRender">Render</button>
-          <button id="export3dHtmlButton" type="button" data-i18n="export3dHtml">Export HTML</button>
-          <button id="publish3dHtmlButton" type="button" data-i18n="publishHtml">Publish link</button>
-          <a class="preview-showcase-link" id="previewShowcaseLink" href="./showcase/calmdownol/index.html" target="_blank" rel="noopener" data-i18n="viewShowcase">View live example</a>
+          <div id="quickPreviewActions" class="preview-toolbar-actions">
+            <button id="openRenderButton" type="button" data-i18n="openRender">Render</button>
+            <button id="export3dHtmlButton" type="button" data-i18n="export3dHtml">Export HTML</button>
+            <button id="publish3dHtmlButton" type="button" data-i18n="publishHtml">Publish link</button>
+            <a class="preview-showcase-link" id="previewShowcaseLink" href="./showcase/calmdownol/index.html" target="_blank" rel="noopener" data-i18n="viewShowcase">View live example</a>
+          </div>
         </div>
         <p class="technical-proof-notice" data-i18n="technicalProofNotice">Technical proof: the PDF is 1:1 with a CutContour dieline, but it is not PDF/X certified. Verify it with your printer before production.</p>
+        <section id="technicalPreviewPanel" class="technical-preview-panel" hidden aria-label="Technical Preview" data-i18n-aria-label="technicalPreviewTitle">
+          <header class="technical-preview-toolbar">
+            <strong data-i18n="technicalPreviewTitle">Technical Preview · reference-only</strong>
+            <span id="technicalViewerStatus" class="technical-viewer-status" role="status" aria-live="polite" data-i18n="technicalViewerLoading">Waiting for CartonFoldViewer…</span>
+            <span id="technicalViewerModelInfo" class="technical-viewer-model-info" role="status" aria-live="polite"></span>
+          </header>
+          <p id="technicalViewerNotice" class="technical-preview-notice" data-i18n="technicalViewerNotice">Reference-only preview. This model is not production certified.</p>
+          <iframe id="technicalViewerFrame" class="technical-viewer-frame" title="CartonFoldViewer Technical Preview" sandbox="allow-scripts" data-src="./plugins/carton-fold-viewer/2.4.0/index.html"></iframe>
+        </section>
+        <div id="quickPreviewContent">
         <div class="preview-main-row">
           <div class="preview-canvas-wrap preview-3d-panel" id="preview3dPanel" aria-busy="false">
             <canvas id="preview3dCanvas" role="img" tabindex="0" aria-label="Interactive folded carton preview" data-i18n-aria-label="preview3dCanvasLabel"></canvas>
@@ -882,6 +894,7 @@
               </div>
             </details>
           </aside>
+        </div>
         </div>
       </section>
 

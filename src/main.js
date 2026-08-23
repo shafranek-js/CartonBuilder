@@ -12,6 +12,7 @@ import {
   rectanglesOverlap,
 } from './model/geometry.js';
 import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
+import { composeArtworkTexture } from './preview3d/textureComposer.js';
 import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
 import { createFileMenu } from './ui/FileMenu.js';
@@ -31,6 +32,7 @@ import { TechnicalCartonDocument } from './carton/TechnicalCartonDocument.js';
 import { createCartonDocument } from './carton/createCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from './carton/technicalBoxModelAdapter.js';
 import { createPbdHost } from './host/pbdHostProtocol.js';
+import { createViewerHost } from './host/viewerHostProtocol.js';
 import { FROZEN_PBD_ARTIFACT_SHA256 } from './workflow/index.js';
 import {
   canPersistWorkflow,
@@ -328,6 +330,8 @@ const panelDock = createPanelDock({
 let artworkApp;
 let preview3dFacade;
 let renderApp;
+let viewerHost;
+let technicalPreviewGeneration = 0;
 let technicalDocument = null;
 let technicalAssets = null;
 let activeCartonModel = model;
@@ -368,6 +372,13 @@ const technicalWorkflowEditor = document.getElementById('technicalWorkflowEditor
 const technicalHostFrame = document.getElementById('technicalHostFrame');
 const technicalHostStatus = document.getElementById('technicalHostStatus');
 const technicalHostValidation = document.getElementById('technicalHostValidation');
+const technicalPreviewPanel = document.getElementById('technicalPreviewPanel');
+const technicalViewerFrame = document.getElementById('technicalViewerFrame');
+const technicalViewerStatus = document.getElementById('technicalViewerStatus');
+const technicalViewerModelInfo = document.getElementById('technicalViewerModelInfo');
+const quickPreviewActions = document.getElementById('quickPreviewActions');
+const quickPreviewContent = document.getElementById('quickPreviewContent');
+const openRenderButton = document.getElementById('openRenderButton');
 const presetTriggerBtn = document.getElementById('presetTriggerBtn');
 
 function technicalSourceSnapshot() {
@@ -397,6 +408,10 @@ function technicalAssetBlobs(documentRef = technicalDocument) {
 }
 
 function setActiveCartonModel(nextModel, nextDocument = null) {
+  if (viewerHost && (technicalDocument !== nextDocument || nextModel?.mode !== 'technical')) {
+    technicalPreviewGeneration += 1;
+    viewerHost.dispose({ cancelActive: true });
+  }
   activeCartonModel = nextModel || model;
   technicalDocument = nextDocument;
   const caliperMm = Number(activeCartonModel.board?.caliperMm);
@@ -444,6 +459,149 @@ function ensurePbdHost() {
     onError: (error) => updateTechnicalHostStatus(error?.message || error?.code || t('technicalPluginError'), 'error'),
   });
   return pbdHost;
+}
+
+function updateTechnicalViewerStatus(message, level = '') {
+  if (!technicalViewerStatus) return;
+  technicalViewerStatus.textContent = message;
+  technicalViewerStatus.dataset.level = level;
+}
+
+function viewerCanvasToBinary(canvas, label) {
+  if (!canvas) throw new Error(`${label} canvas is missing.`);
+  if (typeof canvas.convertToBlob === 'function') {
+    return canvas.convertToBlob({ type: 'image/png' }).then(async (blob) => {
+      if (!blob) throw new Error(`${label} canvas did not produce a blob.`);
+      return { data: await blob.arrayBuffer(), mimeType: 'image/png' };
+    });
+  }
+  if (typeof canvas.toBlob !== 'function') throw new Error(`${label} canvas cannot be exported.`);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        reject(new Error(`${label} canvas did not produce a blob.`));
+        return;
+      }
+      try {
+        resolve({ data: await blob.arrayBuffer(), mimeType: 'image/png' });
+      } catch (error) {
+        reject(error);
+      }
+    }, 'image/png');
+  });
+}
+
+function ensureViewerHost() {
+  if (viewerHost || !technicalViewerFrame) return viewerHost;
+  viewerHost = createViewerHost({
+    iframe: technicalViewerFrame,
+    locale: document.documentElement.lang || 'en',
+    expectedPluginOrigin: 'null',
+    capabilities: {
+      artwork2d: false,
+      flatExport: false,
+      foldPreview: true,
+      technicalRender: false,
+      referenceOnly: true,
+      productionCertified: false,
+    },
+    onReady: () => updateTechnicalViewerStatus(t('technicalViewerReady'), 'success'),
+    onModelLoaded: ({ cartonType, panelIds = [], animationNames = [] } = {}) => {
+      if (technicalViewerModelInfo) {
+        technicalViewerModelInfo.textContent = `${cartonType || 'technical'} · ${panelIds.length} panels · ${animationNames.length} animations`;
+      }
+      updateTechnicalViewerStatus(t('technicalViewerLoaded'), 'success');
+    },
+    onGlbExported: ({ byteLength } = {}) => {
+      if (byteLength) updateTechnicalViewerStatus(`${t('technicalViewerExported')} ${byteLength} B`, 'success');
+    },
+    onError: (error) => updateTechnicalViewerStatus(error?.message || error?.code || t('technicalViewerError'), 'error'),
+    onCancelled: () => updateTechnicalViewerStatus(t('technicalViewerCancelled')),
+  });
+  return viewerHost;
+}
+
+async function createTechnicalViewerPayload() {
+  if (!technicalDocument || cartonModelBridge.mode !== 'technical') {
+    throw new Error('Technical Preview requires an accepted technical dieline.');
+  }
+  const canonicalSvg = technicalDocument.getCanonicalSemanticSvg();
+  const artworks = artworkApp?.getArtworks?.() || [];
+  const composed = await composeArtworkTexture({
+    boxModel: cartonModelBridge,
+    artworks,
+    documentRef: document,
+    purpose: 'preview',
+    includeFinishMaps: true,
+    materialProfile: 'matte',
+  });
+  const artworkAtlas = await viewerCanvasToBinary(composed.canvas, 'Artwork atlas');
+  const maps = {};
+  for (const key of ['alpha', 'normal', 'roughness', 'metalness']) {
+    if (composed.materialMaps?.[key]) maps[key] = await viewerCanvasToBinary(composed.materialMaps[key], `${key} artwork map`);
+  }
+  let artworkMetadata = null;
+  try {
+    artworkMetadata = JSON.parse(artworkApp?.getArtworksJson?.() || 'null');
+  } catch {
+    artworkMetadata = null;
+  }
+  const sourceIdentity = technicalDocument.getSourceIdentity();
+  return {
+    semanticSvg: {
+      text: canonicalSvg.markup,
+      byteLength: canonicalSvg.byteLength,
+      sha256: canonicalSvg.sha256,
+    },
+    artworkAtlas,
+    maps,
+    name: `${sourceIdentity.cartonType || 'technical'}-technical.svg`,
+    finishMetadata: {
+      cartonType: sourceIdentity.cartonType || null,
+      sourceIdentity,
+      artworks: artworkMetadata,
+      atlas: {
+        width: composed.width,
+        height: composed.height,
+        dpi: composed.dpi,
+        mapKeys: Object.keys(maps),
+      },
+    },
+  };
+}
+
+function disposeTechnicalPreview() {
+  technicalPreviewGeneration += 1;
+  viewerHost?.dispose?.({ cancelActive: true });
+  updateTechnicalViewerStatus(t('technicalViewerLoading'));
+  if (technicalViewerModelInfo) technicalViewerModelInfo.textContent = '';
+}
+
+async function refreshTechnicalPreview() {
+  const generation = ++technicalPreviewGeneration;
+  const host = ensureViewerHost();
+  if (!host) return false;
+  host.start();
+  updateTechnicalViewerStatus(t('technicalViewerLoadingModel'));
+  try {
+    const payload = await createTechnicalViewerPayload();
+    if (generation !== technicalPreviewGeneration || workflowMode !== 'technical' || currentStep !== 'preview') return false;
+    await host.load(payload);
+    return generation === technicalPreviewGeneration;
+  } catch (error) {
+    if (generation === technicalPreviewGeneration) {
+      updateTechnicalViewerStatus(error?.message || t('technicalViewerError'), 'error');
+    }
+    return false;
+  }
+}
+
+function updateTechnicalPreviewUi() {
+  const technical = workflowMode === 'technical' && currentStep === 'preview';
+  if (technicalPreviewPanel) technicalPreviewPanel.hidden = !technical;
+  if (quickPreviewContent) quickPreviewContent.hidden = technical;
+  if (quickPreviewActions) quickPreviewActions.hidden = workflowMode === 'technical';
+  if (openRenderButton) openRenderButton.disabled = workflowMode === 'technical';
 }
 
 function technicalValidationIsReady() {
@@ -504,6 +662,7 @@ function applyWorkflowModeUi() {
     presetTriggerBtn.title = !workflowChosen ? t('workflowSelectionRequired') : 'Box Presets Library';
   }
   if (workflowChosen && workflowMode === 'technical') ensurePbdHost()?.start();
+  updateTechnicalPreviewUi();
   updateStepNavigationStates();
 }
 
@@ -590,7 +749,7 @@ async function acceptTechnicalCarton() {
 async function transitionToStep(step) {
   if (startupRestoring) return false;
   if (step !== 'workflow' && !workflowChosen) return false;
-  if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
+  if (workflowMode === 'technical' && step === 'render') return false;
   if (step === 'artwork' && workflowMode === 'technical' && !(await acceptTechnicalCarton())) return false;
   showStep(step);
   return true;
@@ -611,19 +770,22 @@ function updateStepNavigationStates() {
   if (workflowBtn) workflowBtn.disabled = startupRestoring;
   if (boxBtn) boxBtn.disabled = !workflowChosen;
   if (artworkBtn) artworkBtn.disabled = !workflowChosen || !isBoxComplete;
-  const technicalPreviewReady = workflowMode !== 'technical';
-  if (previewBtn) previewBtn.disabled = !workflowChosen || !isBoxComplete || !hasArtwork || !technicalPreviewReady;
-  if (renderBtn) renderBtn.disabled = !workflowChosen || !isBoxComplete || !hasArtwork || !technicalPreviewReady;
+  const previewReady = workflowChosen && isBoxComplete && hasArtwork;
+  const renderReady = previewReady && workflowMode !== 'technical';
+  if (previewBtn) previewBtn.disabled = !previewReady;
+  if (renderBtn) renderBtn.disabled = !renderReady;
 
   if (artworkBtn) artworkBtn.classList.toggle('unlocked', isBoxComplete);
-  if (previewBtn) previewBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork && technicalPreviewReady);
-  if (renderBtn) renderBtn.classList.toggle('unlocked', isBoxComplete && hasArtwork && technicalPreviewReady);
+  if (previewBtn) previewBtn.classList.toggle('unlocked', previewReady);
+  if (renderBtn) renderBtn.classList.toggle('unlocked', renderReady);
+  if (openRenderButton) openRenderButton.disabled = !renderReady;
 }
 
 function showStep(step) {
   if (startupRestoring && step === 'workflow') return false;
   if (step !== 'workflow' && !workflowChosen) return false;
-  if (workflowMode === 'technical' && (step === 'preview' || step === 'render')) return false;
+  if (workflowMode === 'technical' && step === 'render') return false;
+  if (!(workflowMode === 'technical' && step === 'preview')) disposeTechnicalPreview();
   currentStep = step;
   const workflowStep = document.getElementById('workflowStep');
   if (workflowStep) workflowStep.hidden = step !== 'workflow';
@@ -633,6 +795,7 @@ function showStep(step) {
   renderStep.hidden = step !== 'render';
 
   updateStepNavigationStates();
+  updateTechnicalPreviewUi();
 
   const stepOrder = ['workflow', 'box', 'artwork', 'preview', 'render'];
   const currentIndex = stepOrder.indexOf(step);
@@ -645,13 +808,15 @@ function showStep(step) {
       target === 'workflow'
         ? workflowChosen
         : target === 'box'
-        ? (workflowMode === 'technical'
+          ? (workflowMode === 'technical'
           ? Boolean(technicalDocument?.isComplete || technicalValidationIsReady())
           : model.isComplete)
         : target === 'artwork'
           ? Boolean(artworkApp?.artwork?.hasArtwork)
           : target === 'preview' || target === 'render'
-            ? model.isComplete && Boolean(artworkApp?.artwork?.hasArtwork)
+            ? (workflowMode === 'technical'
+              ? Boolean(technicalDocument?.isComplete || technicalValidationIsReady())
+              : model.isComplete) && Boolean(artworkApp?.artwork?.hasArtwork)
             : false
     );
 
@@ -672,9 +837,14 @@ function showStep(step) {
     requestAnimationFrame(() => artworkApp?.render());
   } else if (step === 'preview') {
     renderApp?.deactivate();
-    requestAnimationFrame(() => {
-      preview3dFacade?.activate();
-    });
+    if (workflowMode === 'technical') {
+      preview3dFacade?.suspend();
+      requestAnimationFrame(() => { void refreshTechnicalPreview(); });
+    } else {
+      requestAnimationFrame(() => {
+        preview3dFacade?.activate();
+      });
+    }
   } else if (step === 'render') {
     preview3dFacade?.suspend();
     requestAnimationFrame(() => {
@@ -746,7 +916,7 @@ artworkApp = createArtworkApp({
     const cartonComplete = workflowMode === 'technical' ? Boolean(technicalDocument?.isComplete) : model.isComplete;
     if (snapshot.workflowStep === 'render' && hasArtwork && cartonComplete && workflowMode !== 'technical') {
       targetStep = 'render';
-    } else if (snapshot.workflowStep === 'preview' && hasArtwork && workflowMode !== 'technical') {
+    } else if (snapshot.workflowStep === 'preview' && hasArtwork && cartonComplete) {
       targetStep = 'preview';
     } else if (snapshot.workflowStep === 'artwork' && (cartonComplete || hasArtwork)) {
       targetStep = 'artwork';
@@ -771,13 +941,19 @@ artworkApp = createArtworkApp({
   canPersistProject: () => canPersistWorkflow(workflowChosen),
   restoreCartonDocument: restoreTechnicalCarton,
   getPreview3dState: () => preview3dFacade?.getState?.() || null,
+  getTechnicalPreviewState: () => viewerHost?.getState?.() || null,
   operationProgress,
   onRenderStateChanged: () => artworkApp?.scheduleSave(),
   onArtworkQualityChanged: async ({ kind } = {}) => {
     const refreshes = [];
     if (kind === 'preview') {
-      const previewRefresh = preview3dFacade?.refreshArtwork?.();
-      if (previewRefresh && typeof previewRefresh.then === 'function') refreshes.push(previewRefresh);
+      if (workflowMode === 'technical' && currentStep === 'preview') {
+        const technicalRefresh = refreshTechnicalPreview();
+        if (technicalRefresh && typeof technicalRefresh.then === 'function') refreshes.push(technicalRefresh);
+      } else if (workflowMode !== 'technical') {
+        const previewRefresh = preview3dFacade?.refreshArtwork?.();
+        if (previewRefresh && typeof previewRefresh.then === 'function') refreshes.push(previewRefresh);
+      }
     }
     const renderRefresh = renderApp?.refreshArtwork?.();
     if (renderRefresh && typeof renderRefresh.then === 'function') refreshes.push(renderRefresh);
@@ -839,6 +1015,11 @@ window.cartonBuilderApp = {
   showStep: transitionToStep,
   artwork: artworkApp,
   preview3d: preview3dFacade,
+  technicalPreview: {
+    getState: () => viewerHost?.getState?.() || null,
+    refresh: refreshTechnicalPreview,
+    dispose: disposeTechnicalPreview,
+  },
   render: renderApp,
   testHooks: {
     setTechnicalReplacementFaultInjector(injector = null) {
@@ -933,6 +1114,7 @@ window.addEventListener('beforeunload', () => {
   preview3dFacade.dispose();
   renderApp.dispose();
   pbdHost?.dispose?.();
+  viewerHost?.dispose?.({ cancelActive: true });
 });
 
 export { model };

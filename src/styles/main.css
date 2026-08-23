@@ -1496,7 +1496,7 @@ button.workflow-mode-card {
 
 .preview-step {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
   padding: 0 16px 14px;
 }
@@ -2703,6 +2703,88 @@ input[type="checkbox"].sr-only::after {
   padding: 8px 16px;
   border-bottom: 1px solid var(--panel-border, #444444);
   color: #fff;
+}
+
+.preview-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+#quickPreviewActions[hidden] {
+  display: none;
+}
+
+#quickPreviewContent {
+  min-height: 0;
+  overflow: hidden;
+}
+
+#quickPreviewContent[hidden] {
+  display: none;
+}
+
+.technical-preview-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--panel-border, #5a5a5a);
+  border-radius: 8px;
+  background: #232323;
+}
+
+.technical-preview-panel[hidden] {
+  display: none;
+}
+
+.technical-preview-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border, #5a5a5a);
+  color: #fff;
+}
+
+.technical-viewer-status,
+.technical-viewer-model-info {
+  color: #d8d8d8;
+  font-size: 11px;
+}
+
+.technical-viewer-status {
+  flex: 1 1 220px;
+}
+
+.technical-viewer-status[data-level="error"] {
+  color: #ffaaa5;
+}
+
+.technical-viewer-status[data-level="success"] {
+  color: var(--accent, #afca42);
+}
+
+.technical-preview-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border, #5a5a5a);
+  background: #464646;
+  color: #f0d98d;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.technical-viewer-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  border: 0;
+  background: #111;
 }
 
 .preview-showcase-link {

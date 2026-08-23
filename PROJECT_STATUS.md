@@ -6,12 +6,12 @@
 >
 > Ветка: `codex/dual-workflow-stage1`
 >
-> Базовый HEAD: `bc8c3baa50daab84e5d6bc1281c375e8ead23afe`
+> Базовый HEAD: `58d9200 docs(status): update Stage 5D handoff`
 >
-> Последний commit: `bc8c3ba feat(export): complete technical flat PDF artwork`
+> Последний commit: `58d9200 docs(status): update Stage 5D handoff`
 >
-> Git до обновления этого handoff: clean; после обновления ожидается только
-> modified `PROJECT_STATUS.md` до отдельного commit.
+> Рабочее дерево содержит незакоммиченный Stage 6A slice; `vendor/plugins/` и
+> producer repository не изменялись.
 
 Это основной документ для продолжения integration-ветки. Подробный план:
 `docs/17. dual-workflow-plugin-integration-plan.md`; накопительные evidence и
@@ -29,17 +29,19 @@ UI для Place Artwork, Preview и Render, но разные источники
   границе: выбор workflow, PBD host, Technical Place Artwork, persistence,
   canonical SVG и flat PDF export приняты.
 - Quick workflow остаётся рабочим и использует только Custom Net.
-- Technical Preview и Technical Render намеренно заблокированы до Этапов 5–8;
-  Quick Preview/Render не используются как подмена технического backend.
-- Следующая активная цель — завершить Этап 5 в CartonFoldViewer runtime, после
-  чего подключить его как Technical Preview в Этапе 6.
+- Stage 6A подключает Technical Preview через отдельный sandboxed
+  CartonFoldViewer iframe; Quick Preview остаётся на существующем Preview3D
+  пути. Technical Render по-прежнему заблокирован.
+- Следующая активная цель — versioned persistence animation/progress/camera и
+  оставшиеся Stage 6 visual/GLB/resource gates.
 - Все technical profiles остаются `referenceOnly=true` и
   `productionCertified=false`. Текущая приёмка не является физической или
   производственной сертификацией конструкции.
 
 Release 1 подтверждён для RTE, STE и TT_SL123/A55: guarded transition,
 Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
-1:1 flat PDF export. Preview и Render для Technical по-прежнему disabled.
+1:1 flat PDF export. Stage 6A Technical Preview является reference-only и не
+включает Technical Render или production certification.
 
 ## 2. Завершённые задачи
 
@@ -146,11 +148,28 @@ Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
   и sandbox `allow-scripts`; внешние network requests запрещены CSP.
 - RTE, STE и A55/TT_SL123 строятся, складываются и раскладываются в vendored
   Viewer.
-- ESM headless foundation уже предоставляет semantic SVG parse/build,
-  `loadSemanticSvg`, animation selection, `setFoldProgress`, getters и
-  `dispose`.
-- `foldPreview=true`, но `technicalRender=false`. Наличие Viewer package само
-  по себе не подключает Technical Preview в Step 3.
+- ESM headless foundation предоставляет canonical semantic SVG parse/build,
+  `loadSemanticSvgText`, animation selection, `setFoldProgress`, `exportGlb`,
+  `setArtworkAtlas`, getters и идемпотентный `dispose`.
+- Embedded `carton-workflow.v1` protocol проверяет opaque origin, source,
+  session/load IDs, limits и SHA-256; `foldPreview=true`, но
+  `technicalRender=false`.
+
+### 2.6. Technical Preview — Stage 6A
+
+- `src/host/viewerHostProtocol.js` — отдельный host adapter для `host:init`,
+  `viewer:load`, `host:cancel`, ready/model-loaded/GLB/error/cancelled events.
+- Step 3 маршрутизирует Quick в существующий Preview3D, а Technical — в
+  `./plugins/carton-fold-viewer/2.4.0/index.html` с `sandbox="allow-scripts"`.
+  Viewer получает canonical SVG bytes, composed artwork atlas, optional finish
+  maps, source metadata и locale; default GLB не загружается.
+- Уход со Step 3, смена technical model и `beforeunload` вызывают cancel/dispose.
+  UI явно показывает reference-only/not-production-certified статус; capability
+  `technicalRender=false` и `productionCertified=false` не повышаются.
+- Добавлены `tests/unit/viewerHostProtocol.test.js` и
+  `tests/e2e/technicalPreview.spec.js`. Focused E2E покрывает RTE, STE,
+  TT_SL123/A55, panel IDs, animations, GLB handshake, CSP/offline policy,
+  Quick Preview и lifecycle.
 
 ## 3. Ключевые технические решения
 
@@ -177,6 +196,7 @@ Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
 | Handoff/plan/evidence | `PROJECT_STATUS.md`, `docs/17. dual-workflow-plugin-integration-plan.md`, `docs/18. integration-manifest.md` |
 | Workflow UI/bootstrap | `index.html`, `src/main.js`, `src/styles/main.css`, `src/workflow/workflowSelectionState.js`, `src/ui/FileMenu.js` |
 | Technical host/contracts | `src/host/pbdHostProtocol.js`, `src/workflow/`, `schemas/`, `vendor/plugins/plugins.manifest.json` |
+| Technical Preview host | `src/host/viewerHostProtocol.js`, `src/main.js`, `tests/unit/viewerHostProtocol.test.js`, `tests/e2e/technicalPreview.spec.js` |
 | Carton domain/projection | `src/carton/TechnicalCartonDocument.js`, `src/carton/technicalBoxModelAdapter.js`, `src/carton/technicalPresentation.js`, `src/carton/frontRelativeCoordinates.js` |
 | Quick Custom Net | `src/carton/QuickCartonDocument.js`, `src/model/quickCustomNet.js`, `src/model/ConstructionTemplates.js` |
 | Artwork/geometry | `src/artwork/ArtworkApp.js`, `ArtworkRenderer.js`, `snap.js`, `technicalArtworkPreflight.js`, `src/model/dieline.js` |
@@ -195,13 +215,14 @@ Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
 
 ## 5. Подтверждённые проверки
 
-Повторно запущено на HEAD `bc8c3ba` 2026-08-23:
+Повторно запущено на HEAD `58d9200` плюс незакоммиченный Stage 6A slice
+2026-08-23:
 
 | Проверка | Результат |
 |---|---|
 | `npm run plugins:verify` | PASS; 2 vendored plugins, schemas/hashes/CSP/offline scan |
-| `npm run test:unit` | 77/77 files, 571/571 tests PASS |
-| `npm run build` | PASS; Vite 394 modules |
+| `npm run test:unit` | 78/78 files, 573/573 tests PASS |
+| `npm run build` | PASS; Vite 395 modules |
 
 Полный post-review acceptance, выполненный на содержимом commit `bc8c3ba` до
 его фиксации:
@@ -216,6 +237,14 @@ Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
 | `graphify update .` | PASS; graph current for committed code |
 | `git diff --check` | PASS; CRLF conversion warnings only |
 
+Stage 6A verification:
+
+| Проверка | Результат |
+|---|---|
+| `tests/unit/viewerHostProtocol.test.js` | 2/2 PASS |
+| `tests/e2e/technicalPreview.spec.js --workers=1` | 2/2 PASS; RTE, STE, TT_SL123/A55, sandbox/CSP/offline, Quick path |
+| `npm run test:e2e:smoke` | 7/7 PASS |
+
 Fixture expectations: RTE 19 ARC, STE 20 ARC, TT_SL123 21 ARC. SVG provenance,
 PDF CUT/FOLD/OPEN_CUT, autosave/reopen and archive integrity проверяются
 независимо от визуального smoke.
@@ -229,29 +258,21 @@ PDF CUT/FOLD/OPEN_CUT, autosave/reopen and archive integrity проверяют�
 
 ## 6. Известные проблемы и открытые границы
 
-### 6.1. Этап 5 Viewer runtime ещё не завершён
+### 6.1. Этап 5 Viewer runtime
 
-Headless foundation не предоставляет полный утверждённый API/поведение:
-
-- нет global flat-net UV из canonical SVG coordinates и continuity через crease
-  ribbons;
-- нет `setArtworkAtlas(canvasOrBitmap, maps)` и texture-only update path;
-- нет headless `exportGlb()`;
-- нет embedded host protocol с ready/load/error/GLB events;
-- нет полного resource/disposal acceptance для artwork/geometry replacement.
-
-`loadSemanticSvg` существует, но при реализации публичного Stage 5 API нужно
-согласовать утверждённое имя `loadSemanticSvgText(svgText, name)` без создания
-второго parser/model path.
+Stage 5A–5D закрыты в producer и синхронизированы в CartonBuilder: canonical
+loader, global UV, artwork atlas, headless GLB/disposal и embedded host protocol
+проверены для RTE, STE и TT_SL123/A55. Producer-side изменения для Stage 6A не
+требуются.
 
 ### 6.2. Technical Preview, Render и production
 
-- Step 3 и Step 4 disabled для Technical в `src/main.js`; это ожидаемое
-  fail-closed состояние до Этапов 6–8.
+- Stage 6A Technical Preview подключён в Step 3 через reference-only Viewer.
+  Step 4 Technical Render остаётся disabled; Quick Preview/Render не изменены.
 - Project schema пока не хранит Technical Viewer animation/progress/camera
   state; изменение потребует versioned migration и archive tests.
-- Technical Render ждёт общего `RenderSceneSource`, global UV/artwork atlas и
-  отдельного visual/export acceptance. `technicalRender=false` сохраняется.
+- Technical Render ждёт общего `RenderSceneSource` и отдельного visual/export
+  acceptance. `technicalRender=false` сохраняется.
 - Production-assist/prepress для Technical не разрешён. Physical dieline,
   converter/material profiles и folded samples не сертифицированы.
 
@@ -290,24 +311,14 @@ Headless foundation не предоставляет полный утвержд�
 
 ## 8. Следующие шаги
 
-1. **Этап 5 — завершить CartonFoldViewer runtime в producer repository.**
-   - Зафиксировать один public headless API: `loadSemanticSvgText`,
-     `setArtworkAtlas`, `setFoldProgress`, `exportGlb`, `dispose`.
-   - Добавить global flat-net UV и crease-ribbon continuity из canonical SVG.
-   - Добавить artwork atlas/finish maps с texture-only updates.
-   - Реализовать embedded mode и versioned host events.
-   - Закрыть RTE/STE/A55 seams, animation, GLB reopen и resource disposal tests.
-   - Собрать Viewer, выполнить `plugins:sync:viewer`, затем
-     `plugins:verify`, unit/build/smoke. Не патчить vendored artifact вручную.
-2. **Этап 6 — Technical Preview.**
-   - Маршрутизировать Step 3: Quick → existing Preview3D, Technical → Viewer.
-   - Передавать canonical SVG, composed artwork atlas, finish metadata и locale.
-   - Versioned-сохранение animation/progress/camera state в project schema.
-   - Artwork change обновляет только textures; geometry change полностью
-     dispose/rebuild Viewer scene.
-   - Закрыть 2D↔3D panel-ID visual gate, GLB gate и 20-cycle resource gate;
-     только затем разблокировать Technical Preview.
-3. **Этапы 7–8 — Technical Render.**
+1. **Этап 6B — Technical Preview completion.**
+   - Добавить versioned-сохранение animation/progress/camera state в project
+     schema и archive tests.
+   - Закрыть 2D↔3D panel-ID visual gate, GLB gate и 20-cycle resource gate для
+     host-integrated flow.
+   - Сохранить texture-only artwork updates и полный dispose/rebuild при смене
+     technical geometry.
+2. **Этапы 7–8 — Technical Render.**
    - Выделить общий `RenderSceneSource`, сохранив существующий Render UI/studio.
    - Подключить Technical geometry, global UV, artwork и finish maps.
    - Включать `technicalRender=true` только после visual/export acceptance.
