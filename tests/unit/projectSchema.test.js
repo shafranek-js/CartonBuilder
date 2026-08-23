@@ -335,6 +335,36 @@ describe('project schema', () => {
     expect(valid.artworkBlobs).toEqual([]);
   });
 
+  it('migrates and validates versioned Technical Viewer state fail-closed', async () => {
+    const { snapshot } = await createBundle();
+    const migrated = migrateProjectSnapshot(snapshot);
+    expect(migrated.technicalViewer).toBeNull();
+
+    const technical = {
+      ...migrated,
+      cartonSource: {
+        mode: 'technical',
+        source: { modelSchemaVersion: 'pbd.model.v1', svgSchemaVersion: 'pbd.svg.v4' },
+        modelSha256: 'a'.repeat(64),
+        svgSha256: 'b'.repeat(64),
+      },
+      workflowSelection: 'technical',
+      technicalViewer: {
+        version: 1,
+        animationName: 'assembly',
+        foldProgress: 0.65,
+        camera: {
+          projection: 'perspective', heading: 20, elevation: 30,
+          horizontalPan: 0, verticalPan: 0, distanceFactor: 4,
+          frameHeightFactor: 0, fov: 42, verticalCorrection: false,
+        },
+      },
+    };
+    expect(migrateProjectSnapshot(technical).technicalViewer.foldProgress).toBe(0.65);
+    expect(() => migrateProjectSnapshot({ ...technical, technicalViewer: { version: 1, foldProgress: 2 } }))
+      .toThrow();
+  });
+
   it('migrates flat separation visibility into process and spot plates', async () => {
     const { snapshot } = await createBundle();
     snapshot.schemaVersion = 11;

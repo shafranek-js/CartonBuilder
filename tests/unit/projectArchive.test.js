@@ -123,6 +123,16 @@ function createTechnicalFixture(name = 'rte') {
         semanticSvgAssetId: bundle.semanticSvg.assetId,
         capabilities: bundle.capabilities,
       },
+      technicalViewer: {
+        version: 1,
+        animationName: 'assembly',
+        foldProgress: 0.42,
+        camera: {
+          projection: 'perspective', heading: 18, elevation: 29,
+          horizontalPan: 0, verticalPan: 0, distanceFactor: 4,
+          frameHeightFactor: 0, fov: 42, verticalCorrection: false,
+        },
+      },
       artworks: [],
       activeArtworkIndex: -1,
       render: structuredClone(DEFAULT_RENDER_SETTINGS),
@@ -262,6 +272,7 @@ describe('.carton project archive', () => {
 
     expect(restored.snapshot.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(restored.snapshot.cartonSource.mode).toBe('technical');
+    expect(restored.snapshot.technicalViewer).toMatchObject({ version: 1, animationName: 'assembly', foldProgress: 0.42 });
     expect(restored.technicalAssets.modelBlob).toBeInstanceOf(Blob);
     expect(restored.technicalAssets.svgBlob).toBeInstanceOf(Blob);
     expect(new Uint8Array(await restored.technicalAssets.modelBlob.arrayBuffer()))

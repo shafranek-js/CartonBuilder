@@ -1,3 +1,5 @@
+import { normalizeTechnicalViewerState } from '../project/technicalViewerState.js';
+
 const CONTRACT_VERSION = 'carton-workflow.v1';
 const PLUGIN_ID = 'carton-fold-viewer';
 const PLUGIN_VERSION = '2.4.0';
@@ -8,9 +10,13 @@ export const VIEWER_PROTOCOL_VERSION = CONTRACT_VERSION;
 export const VIEWER_MESSAGE_TYPES = Object.freeze({
   INIT: 'host:init',
   LOAD: 'viewer:load',
+  STATE: 'host:state',
+  ARTWORK: 'host:artwork',
   CANCEL: 'host:cancel',
   READY: 'plugin:ready',
   MODEL_LOADED: 'viewer:model-loaded',
+  STATE_UPDATED: 'viewer:state',
+  ARTWORK_UPDATED: 'viewer:artwork',
   GLB_EXPORTED: 'viewer:glb-exported',
   ERROR: 'plugin:error',
   CANCELLED: 'viewer:cancelled',
@@ -32,6 +38,8 @@ const INCOMING_TYPES = new Set([
   VIEWER_MESSAGE_TYPES.GLB_EXPORTED,
   VIEWER_MESSAGE_TYPES.ERROR,
   VIEWER_MESSAGE_TYPES.CANCELLED,
+  VIEWER_MESSAGE_TYPES.STATE_UPDATED,
+  VIEWER_MESSAGE_TYPES.ARTWORK_UPDATED,
 ]);
 
 function isRecord(value) {
@@ -194,6 +202,8 @@ export function createViewerHost({
   onGlbExported = () => {},
   onError = () => {},
   onCancelled = () => {},
+  onState = () => {},
+  onArtworkUpdated = () => {},
 } = {}) {
   if (!iframe?.contentWindow) throw new Error('Viewer host iframe is required.');
   if (!windowRef?.addEventListener) throw new Error('Viewer host window is required.');
@@ -205,9 +215,12 @@ export function createViewerHost({
     allowedOrigin: getOrigin(windowRef),
     limits: null,
     loadId: null,
+    viewerState: null,
   };
   let pendingLoad = null;
   let pendingCancel = null;
+  let pendingState = null;
+  let pendingArtwork = null;
   let readyWaiters = [];
 
   function report(error) {
@@ -264,6 +277,7 @@ export function createViewerHost({
     state.allowedOrigin = getOrigin(windowRef);
     state.limits = negotiateLimits(payloadLimits);
     state.loadId = null;
+    state.viewerState = null;
     post(VIEWER_MESSAGE_TYPES.INIT, {
       sessionId: state.sessionId,
       contractVersion: CONTRACT_VERSION,
@@ -329,6 +343,29 @@ export function createViewerHost({
     request.resolve(result);
   }
 
+  function acceptViewerState(payload) {
+    if (!isRecord(payload) || payload.loadId !== state.loadId || !isRecord(payload.state)) {
+      report(createError('viewer-load-id-mismatch', 'state', 'viewer state does not match the active viewer load.'));
+      return false;
+    }
+    try {
+      const viewerState = normalizeTechnicalViewerState(payload.state, { allowNull: false });
+      const changed = JSON.stringify(state.viewerState) !== JSON.stringify(viewerState);
+      state.viewerState = viewerState;
+      if (changed) onState({ loadId: payload.loadId, state: structuredClone(viewerState) });
+      if (pendingState?.loadId === payload.loadId) {
+        const request = pendingState;
+        pendingState = null;
+        windowRef.clearTimeout?.(request.timeoutId);
+        request.resolve(viewerState);
+      }
+      return true;
+    } catch (error) {
+      report(createError('viewer-state-invalid', 'state', error.message));
+      return false;
+    }
+  }
+
   function handleMessage(event) {
     if (!acceptEvent(event)) return;
     const data = event.data;
@@ -368,6 +405,25 @@ export function createViewerHost({
         return;
       }
       onModelLoaded({ ...payload });
+      if (payload.state !== undefined) acceptViewerState(payload);
+      return;
+    }
+    if (data.type === VIEWER_MESSAGE_TYPES.STATE_UPDATED) {
+      acceptViewerState(payload);
+      return;
+    }
+    if (data.type === VIEWER_MESSAGE_TYPES.ARTWORK_UPDATED) {
+      if (!isRecord(payload) || payload.loadId !== state.loadId) {
+        report(createError('viewer-load-id-mismatch', 'artwork', 'viewer:artwork does not match the active viewer load.'));
+        return;
+      }
+      onArtworkUpdated(payload);
+      if (pendingArtwork?.loadId === payload.loadId) {
+        const request = pendingArtwork;
+        pendingArtwork = null;
+        windowRef.clearTimeout?.(request.timeoutId);
+        request.resolve(payload);
+      }
       return;
     }
     if (data.type === VIEWER_MESSAGE_TYPES.GLB_EXPORTED) {
@@ -379,6 +435,10 @@ export function createViewerHost({
       rejectLoad(error);
       pendingCancel?.reject(error);
       pendingCancel = null;
+      pendingState?.reject(error);
+      pendingState = null;
+      pendingArtwork?.reject(error);
+      pendingArtwork = null;
       return;
     }
     if (data.type === VIEWER_MESSAGE_TYPES.CANCELLED) {
@@ -407,6 +467,7 @@ export function createViewerHost({
     artworkAtlas,
     maps = {},
     finishMetadata = null,
+    state: viewerState = null,
     name = 'technical-carton.svg',
     loadId = createId('technical-load'),
     exportGlb = true,
@@ -437,6 +498,7 @@ export function createViewerHost({
       artworkAtlas: normalizedAtlas,
       maps: normalizedMaps,
       exportGlb: exportGlb !== false,
+      ...(viewerState == null ? {} : { state: normalizeTechnicalViewerState(viewerState, { allowNull: false }) }),
       ...(finishMetadata == null ? {} : { finishMetadata: structuredClone(finishMetadata) }),
     };
     if (jsonByteLength({ contractVersion: CONTRACT_VERSION, type: VIEWER_MESSAGE_TYPES.LOAD, sessionId: state.sessionId, payload }) > state.limits.maxMessageBytes) {
@@ -448,6 +510,61 @@ export function createViewerHost({
       pendingLoad = { resolve, reject, timeoutId };
       if (!post(VIEWER_MESSAGE_TYPES.LOAD, payload, transfer)) {
         rejectLoad(createError('viewer-message-too-large', 'payload-validation', 'Could not send viewer:load.'));
+      }
+    });
+  }
+
+  async function setState(viewerState, { loadId = state.loadId, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+    await waitForReady({ timeoutMs });
+    if (!loadId || loadId !== state.loadId) throw createError('viewer-load-id-mismatch', 'state', 'No matching active viewer load exists.');
+    if (pendingState) throw createError('viewer-state-in-progress', 'state', 'A Viewer state update is already in progress.');
+    const normalized = normalizeTechnicalViewerState(viewerState, { allowNull: false });
+    const payload = { loadId, state: normalized };
+    if (jsonByteLength({ contractVersion: CONTRACT_VERSION, type: VIEWER_MESSAGE_TYPES.STATE, sessionId: state.sessionId, payload }) > state.limits.maxMessageBytes) {
+      throw createError('viewer-message-too-large', 'payload-validation', 'Viewer state exceeds maxMessageBytes.');
+    }
+    return new Promise((resolve, reject) => {
+      const timeoutId = windowRef.setTimeout?.(() => {
+        pendingState = null;
+        reject(createError('viewer-state-timeout', 'state', 'Viewer did not acknowledge state in time.'));
+      }, timeoutMs);
+      pendingState = { loadId, resolve, reject, timeoutId };
+      if (!post(VIEWER_MESSAGE_TYPES.STATE, payload)) {
+        pendingState = null;
+        windowRef.clearTimeout?.(timeoutId);
+        reject(createError('viewer-message-send-failed', 'state', 'Could not send host:state.'));
+      }
+    });
+  }
+
+  async function setArtworkAtlas(artworkAtlas, maps = {}, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+    await waitForReady({ timeoutMs });
+    if (!state.loadId) throw createError('viewer-load-id-mismatch', 'artwork', 'No matching active viewer load exists.');
+    if (!isRecord(maps)) throw createError('viewer-maps-invalid', 'payload-validation', 'Viewer artwork maps must be an object.');
+    const normalizedAtlas = await createBinaryDescriptor(artworkAtlas, 'artworkAtlas', state.limits);
+    const normalizedMaps = {};
+    const transfer = [normalizedAtlas.data];
+    let totalBytes = normalizedAtlas.byteLength;
+    for (const [key, value] of Object.entries(maps)) {
+      if (!MAP_KEYS.has(key)) throw createError('viewer-map-type-unsupported', 'payload-validation', `Unsupported artwork map: ${key}.`);
+      if (value == null) continue;
+      normalizedMaps[key] = await createBinaryDescriptor(value, `maps.${key}`, state.limits);
+      transfer.push(normalizedMaps[key].data);
+      totalBytes += normalizedMaps[key].byteLength;
+    }
+    if (totalBytes > state.limits.maxTotalBytes) throw createError('viewer-payload-too-large', 'payload-validation', 'Viewer artwork update exceeds maxTotalBytes.');
+    if (pendingArtwork) throw createError('viewer-artwork-in-progress', 'artwork', 'A Viewer artwork update is already in progress.');
+    const payload = { loadId: state.loadId, artworkAtlas: normalizedAtlas, maps: normalizedMaps };
+    return new Promise((resolve, reject) => {
+      const timeoutId = windowRef.setTimeout?.(() => {
+        pendingArtwork = null;
+        reject(createError('viewer-artwork-timeout', 'artwork', 'Viewer did not acknowledge artwork update in time.'));
+      }, timeoutMs);
+      pendingArtwork = { loadId: state.loadId, resolve, reject, timeoutId };
+      if (!post(VIEWER_MESSAGE_TYPES.ARTWORK, payload, transfer)) {
+        pendingArtwork = null;
+        windowRef.clearTimeout?.(timeoutId);
+        reject(createError('viewer-message-send-failed', 'artwork', 'Could not send host:artwork.'));
       }
     });
   }
@@ -488,12 +605,18 @@ export function createViewerHost({
     settleReady(createError('viewer-host-disposed', 'lifecycle', 'Viewer host was disposed.'));
     pendingCancel?.resolve({ reason: 'host-dispose' });
     pendingCancel = null;
+    const disposed = createError('viewer-host-disposed', 'lifecycle', 'Viewer host was disposed.');
+    pendingState?.reject(disposed);
+    pendingState = null;
+    pendingArtwork?.reject(disposed);
+    pendingArtwork = null;
     windowRef.removeEventListener?.('message', handleMessage);
     iframe.removeEventListener?.('load', beginHandshake);
     state.started = false;
     state.initialized = false;
     state.sessionId = null;
     state.loadId = null;
+    state.viewerState = null;
     state.limits = null;
     iframe.removeAttribute?.('src');
     return true;
@@ -502,6 +625,8 @@ export function createViewerHost({
   const api = {
     start,
     load,
+    setState,
+    setArtworkAtlas,
     waitForReady,
     cancel,
     dispose,

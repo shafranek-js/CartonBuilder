@@ -19,8 +19,9 @@ import { validateRenderAssets } from '../render/renderAssets.js';
 import { sanitizeArtworkFinish } from '../render/FinishConfig.js';
 import { sanitizePrepressSettings } from '../prepress/prepressState.js';
 import { validateCartonWorkflowBundle } from '../workflow/index.js';
+import { normalizeTechnicalViewerState } from './technicalViewerState.js';
 
-export const CURRENT_PROJECT_SCHEMA_VERSION = 17;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 18;
 
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
 const MIGRATIONS = new Map();
@@ -374,6 +375,20 @@ MIGRATIONS.set(16, (snapshot) => ({
       : 'quick',
 }));
 
+MIGRATIONS.set(17, (snapshot) => ({
+  ...snapshot,
+  schemaVersion: 18,
+  technicalViewer: snapshot.cartonSource?.mode === 'technical'
+    ? (() => {
+        try {
+          return normalizeTechnicalViewerState(snapshot.technicalViewer, { allowNull: false });
+        } catch (error) {
+          throw new AppError('projectIncomplete', {}, { cause: error });
+        }
+      })()
+    : null,
+}));
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -467,6 +482,13 @@ export function migrateProjectSnapshot(input) {
 
   snapshot.workflowStep = normalizeWorkflowStep(snapshot.workflowStep);
   snapshot.workflowSelection = normalizeWorkflowSelection(snapshot.workflowSelection, cartonSource);
+  try {
+    snapshot.technicalViewer = cartonSource.mode === 'technical'
+      ? normalizeTechnicalViewerState(snapshot.technicalViewer, { allowNull: false })
+      : null;
+  } catch (error) {
+    throw new AppError('projectIncomplete', {}, { cause: error });
+  }
   snapshot.render = sanitizeRenderSettings(snapshot.render);
   snapshot.prepress = sanitizePrepressSettings(snapshot.prepress);
   if (Object.hasOwn(snapshot, 'renderAppearance')) {

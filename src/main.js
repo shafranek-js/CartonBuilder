@@ -33,6 +33,7 @@ import { createCartonDocument } from './carton/createCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from './carton/technicalBoxModelAdapter.js';
 import { createPbdHost } from './host/pbdHostProtocol.js';
 import { createViewerHost } from './host/viewerHostProtocol.js';
+import { normalizeTechnicalViewerState } from './project/technicalViewerState.js';
 import { FROZEN_PBD_ARTIFACT_SHA256 } from './workflow/index.js';
 import {
   canPersistWorkflow,
@@ -332,8 +333,10 @@ let preview3dFacade;
 let renderApp;
 let viewerHost;
 let technicalPreviewGeneration = 0;
+let technicalArtworkGeneration = 0;
 let technicalDocument = null;
 let technicalAssets = null;
+let technicalViewerState = null;
 let activeCartonModel = model;
 let technicalValidation = {
   structural: 'NOT_GENERATED',
@@ -512,6 +515,14 @@ function ensureViewerHost() {
       }
       updateTechnicalViewerStatus(t('technicalViewerLoaded'), 'success');
     },
+    onState: ({ state } = {}) => {
+      try {
+        technicalViewerState = normalizeTechnicalViewerState(state, { allowNull: false });
+        artworkApp?.scheduleSave?.();
+      } catch (error) {
+        updateTechnicalViewerStatus(error.message || t('technicalViewerError'), 'error');
+      }
+    },
     onGlbExported: ({ byteLength } = {}) => {
       if (byteLength) updateTechnicalViewerStatus(`${t('technicalViewerExported')} ${byteLength} B`, 'success');
     },
@@ -521,11 +532,10 @@ function ensureViewerHost() {
   return viewerHost;
 }
 
-async function createTechnicalViewerPayload() {
+async function createTechnicalArtworkPayload() {
   if (!technicalDocument || cartonModelBridge.mode !== 'technical') {
     throw new Error('Technical Preview requires an accepted technical dieline.');
   }
-  const canonicalSvg = technicalDocument.getCanonicalSemanticSvg();
   const artworks = artworkApp?.getArtworks?.() || [];
   const composed = await composeArtworkTexture({
     boxModel: cartonModelBridge,
@@ -546,19 +556,10 @@ async function createTechnicalViewerPayload() {
   } catch {
     artworkMetadata = null;
   }
-  const sourceIdentity = technicalDocument.getSourceIdentity();
   return {
-    semanticSvg: {
-      text: canonicalSvg.markup,
-      byteLength: canonicalSvg.byteLength,
-      sha256: canonicalSvg.sha256,
-    },
     artworkAtlas,
     maps,
-    name: `${sourceIdentity.cartonType || 'technical'}-technical.svg`,
     finishMetadata: {
-      cartonType: sourceIdentity.cartonType || null,
-      sourceIdentity,
       artworks: artworkMetadata,
       atlas: {
         width: composed.width,
@@ -566,6 +567,30 @@ async function createTechnicalViewerPayload() {
         dpi: composed.dpi,
         mapKeys: Object.keys(maps),
       },
+    },
+  };
+}
+
+async function createTechnicalViewerPayload() {
+  if (!technicalDocument || cartonModelBridge.mode !== 'technical') {
+    throw new Error('Technical Preview requires an accepted technical dieline.');
+  }
+  const canonicalSvg = technicalDocument.getCanonicalSemanticSvg();
+  const artworkPayload = await createTechnicalArtworkPayload();
+  const sourceIdentity = technicalDocument.getSourceIdentity();
+  return {
+    semanticSvg: {
+      text: canonicalSvg.markup,
+      byteLength: canonicalSvg.byteLength,
+      sha256: canonicalSvg.sha256,
+    },
+    ...artworkPayload,
+    state: technicalViewerState,
+    name: `${sourceIdentity.cartonType || 'technical'}-technical.svg`,
+    finishMetadata: {
+      cartonType: sourceIdentity.cartonType || null,
+      sourceIdentity,
+      ...artworkPayload.finishMetadata,
     },
   };
 }
@@ -596,6 +621,21 @@ async function refreshTechnicalPreview() {
   }
 }
 
+async function refreshTechnicalArtwork() {
+  const generation = ++technicalArtworkGeneration;
+  const host = ensureViewerHost();
+  if (!host?.getState?.().loadId) return refreshTechnicalPreview();
+  try {
+    const payload = await createTechnicalArtworkPayload();
+    if (generation !== technicalArtworkGeneration || workflowMode !== 'technical' || currentStep !== 'preview') return false;
+    await host.setArtworkAtlas(payload.artworkAtlas, payload.maps);
+    return generation === technicalArtworkGeneration;
+  } catch (error) {
+    if (generation === technicalArtworkGeneration) updateTechnicalViewerStatus(error?.message || t('technicalViewerError'), 'error');
+    return false;
+  }
+}
+
 function updateTechnicalPreviewUi() {
   const technical = workflowMode === 'technical' && currentStep === 'preview';
   if (technicalPreviewPanel) technicalPreviewPanel.hidden = !technical;
@@ -621,6 +661,7 @@ async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAsset
     },
   );
   workflowMode = 'technical';
+  technicalViewerState = normalizeTechnicalViewerState(snapshot.technicalViewer, { allowNull: false });
   setActiveCartonModel(createTechnicalBoxModelAdapter(document), document);
   technicalAssets = {
     modelBlob: restoredAssets.modelBlob,
@@ -714,6 +755,7 @@ async function acceptTechnicalCarton() {
         });
       }
       await runTechnicalReplacementPhase('activate-model', () => {
+        technicalViewerState = null;
         setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
       });
       await runTechnicalReplacementPhase('update-technical-assets', () => {
@@ -938,6 +980,7 @@ artworkApp = createArtworkApp({
   getCartonSource: () => technicalSourceSnapshot() || { mode: 'quick', box: model.toJSON() },
   getWorkflowSelection: () => workflowMode || 'quick',
   getTechnicalAssets: () => technicalAssets,
+  getTechnicalViewerState: () => technicalViewerState,
   canPersistProject: () => canPersistWorkflow(workflowChosen),
   restoreCartonDocument: restoreTechnicalCarton,
   getPreview3dState: () => preview3dFacade?.getState?.() || null,
@@ -948,7 +991,7 @@ artworkApp = createArtworkApp({
     const refreshes = [];
     if (kind === 'preview') {
       if (workflowMode === 'technical' && currentStep === 'preview') {
-        const technicalRefresh = refreshTechnicalPreview();
+        const technicalRefresh = refreshTechnicalArtwork();
         if (technicalRefresh && typeof technicalRefresh.then === 'function') refreshes.push(technicalRefresh);
       } else if (workflowMode !== 'technical') {
         const previewRefresh = preview3dFacade?.refreshArtwork?.();

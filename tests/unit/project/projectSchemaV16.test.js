@@ -24,16 +24,16 @@ function loadFixture(name) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-describe('Project Schema v17 Migration & Discriminated Validation', () => {
+describe('Project Schema v18 Migration & Discriminated Validation', () => {
   beforeEach(async () => {
     await clearCurrentProject();
   });
 
-  it('declares CURRENT_PROJECT_SCHEMA_VERSION === 17', () => {
-    expect(CURRENT_PROJECT_SCHEMA_VERSION).toBe(17);
+  it('declares CURRENT_PROJECT_SCHEMA_VERSION === 18', () => {
+    expect(CURRENT_PROJECT_SCHEMA_VERSION).toBe(18);
   });
 
-  it('migrates legacy schema v15 project to schema v17 with quick selection', () => {
+  it('migrates legacy schema v15 project to schema v18 with quick selection', () => {
     const legacySnapshot = {
       schemaVersion: 15,
       meta: { name: 'Legacy v15' },
@@ -48,7 +48,7 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     };
 
     const migrated = migrateProjectSnapshot(legacySnapshot);
-    expect(migrated.schemaVersion).toBe(17);
+    expect(migrated.schemaVersion).toBe(18);
     expect(migrated.workflowSelection).toBe('quick');
     expect(migrated.cartonSource).toBeDefined();
     expect(migrated.cartonSource.mode).toBe('quick');
@@ -57,7 +57,7 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     expect(migrated.box).toBeUndefined(); // Top-level box removed
   });
 
-  it('keeps the transient workflow step out of persisted schema v17 snapshots', () => {
+  it('keeps the transient workflow step out of persisted schema v18 snapshots', () => {
     const migrated = migrateProjectSnapshot({
       schemaVersion: 17,
       meta: { name: 'Transient workflow choice' },
@@ -76,7 +76,7 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     expect(migrated.workflowSelection).toBe('quick');
   });
 
-  it('migrates older schema (e.g. v1, v6, v13) through full chain to schema v17', () => {
+  it('migrates older schema (e.g. v1, v6, v13) through full chain to schema v18', () => {
     const v6Snapshot = {
       schemaVersion: 6,
       meta: { name: 'Legacy v6' },
@@ -89,7 +89,7 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     };
 
     const migrated = migrateProjectSnapshot(v6Snapshot);
-    expect(migrated.schemaVersion).toBe(17);
+    expect(migrated.schemaVersion).toBe(18);
     expect(migrated.workflowSelection).toBe('quick');
     expect(migrated.cartonSource.mode).toBe('quick');
     expect(migrated.cartonSource.box).toBeDefined();
@@ -109,13 +109,13 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
       history: { undo: [], redo: [] },
     });
 
-    expect(migrated.schemaVersion).toBe(17);
+    expect(migrated.schemaVersion).toBe(18);
     expect(migrated.workflowSelection).toBe('technical');
     expect(migrated.cartonSource.mode).toBe('quick');
     expect(migrated.cartonSource.box.dimensions).toEqual({ width: 210, height: 120, depth: 55 });
   });
 
-  it('validates a schema v17 technical project snapshot', () => {
+  it('validates a schema v18 technical project snapshot', () => {
     const bundle = loadFixture('rte');
     const technicalSnapshot = {
       schemaVersion: 16,
@@ -149,13 +149,13 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     };
 
     const migrated = migrateProjectSnapshot(technicalSnapshot);
-    expect(migrated.schemaVersion).toBe(17);
+    expect(migrated.schemaVersion).toBe(18);
     expect(migrated.workflowSelection).toBe('technical');
     expect(migrated.cartonSource.mode).toBe('technical');
     expect(migrated.cartonSource.modelSha256).toBe(bundle.modelJson.sha256);
   });
 
-  it('rejects schema v17 technical snapshot with missing or invalid hash/schema', () => {
+  it('rejects schema v18 technical snapshot with missing or invalid hash/schema', () => {
     const bundle = loadFixture('rte');
     const invalidSnapshot = {
       schemaVersion: 16,
@@ -226,7 +226,7 @@ describe('Project Schema v17 Migration & Discriminated Validation', () => {
     expect(loaded.technicalAssets.svgBlob.size).toBe(bundle.semanticSvg.byteLength);
 
     const validated = await validateProjectBundle(loaded);
-    expect(validated.snapshot.schemaVersion).toBe(17);
+    expect(validated.snapshot.schemaVersion).toBe(18);
     expect(validated.snapshot.workflowSelection).toBe('technical');
     expect(validated.snapshot.cartonSource.mode).toBe('technical');
   });

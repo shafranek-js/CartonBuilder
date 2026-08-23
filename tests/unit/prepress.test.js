@@ -20,7 +20,7 @@ describe('Wave 9A prepress foundations', () => {
     const model = new BoxNetModel();
     const snapshot = { schemaVersion: 14, workflowStep: 'artwork', box: model.toJSON(), artworks: [], activeArtworkIndex: -1 };
     const migrated = migrateProjectSnapshot(snapshot);
-    expect(migrated.schemaVersion).toBe(17);
+    expect(migrated.schemaVersion).toBe(18);
     expect(migrated.prepress.mode).toBe('technical-proof');
     expect(migrated.cartonSource.box).toEqual(snapshot.box);
   });

@@ -6,12 +6,12 @@
 >
 > Ветка: `codex/dual-workflow-stage1`
 >
-> Базовый HEAD: `58d9200 docs(status): update Stage 5D handoff`
+> Базовый HEAD: `d8c6758 feat(preview): integrate technical viewer in step 3`
 >
-> Последний commit: `58d9200 docs(status): update Stage 5D handoff`
+> Последний commit: `d8c6758 feat(preview): integrate technical viewer in step 3`
 >
-> Рабочее дерево содержит незакоммиченный Stage 6A slice; `vendor/plugins/` и
-> producer repository не изменялись.
+> Рабочее дерево содержит незакоммиченный Stage 6B slice; `vendor/plugins/` не
+> редактировался вручную.
 
 Это основной документ для продолжения integration-ветки. Подробный план:
 `docs/17. dual-workflow-plugin-integration-plan.md`; накопительные evidence и
@@ -32,8 +32,10 @@ UI для Place Artwork, Preview и Render, но разные источники
 - Stage 6A подключает Technical Preview через отдельный sandboxed
   CartonFoldViewer iframe; Quick Preview остаётся на существующем Preview3D
   пути. Technical Render по-прежнему заблокирован.
-- Следующая активная цель — versioned persistence animation/progress/camera и
-  оставшиеся Stage 6 visual/GLB/resource gates.
+- Stage 6B добавляет versioned `technicalViewer` state с animation/progress/
+  normalized camera persistence, host state acknowledgements и texture-only
+  artwork updates без rebuild fold graph; Release 2 acceptance остаётся
+  открытой для отдельного broader visual/resource gate.
 - Все technical profiles остаются `referenceOnly=true` и
   `productionCertified=false`. Текущая приёмка не является физической или
   производственной сертификацией конструкции.
@@ -171,6 +173,20 @@ Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
   TT_SL123/A55, panel IDs, animations, GLB handshake, CSP/offline policy,
   Quick Preview и lifecycle.
 
+### 2.7. Technical Preview state — Stage 6B (acceptance open)
+
+- `src/host/viewerHostProtocol.js` поддерживает `host:state`/`viewer:state` и
+  `host:artwork`/`viewer:artwork`, с проверкой source/origin/session/loadId и
+  negotiated payload integrity.
+- `src/project/projectSchema.js` мигрирует schema 17 → 18 и сохраняет
+  versioned `technicalViewer` state; archive round-trip сохраняет animation,
+  fold progress и normalized camera через `normalizeCameraPresetState`.
+- Technical artwork updates используют texture-only route; смена canonical
+  technical SVG по-прежнему вызывает dispose/reload и generation guard.
+- Producer source regression проходит; producer `e22d7de` собран и vendored
+  artifact синхронизирован. Targeted Technical Preview acceptance проходит;
+  broader Release 2 visual/resource gate остаётся отдельной границей.
+
 ## 3. Ключевые технические решения
 
 - `pbd.model.v1` — единственный canonical Technical CartonModel. SVG, artwork
@@ -215,7 +231,7 @@ Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
 
 ## 5. Подтверждённые проверки
 
-Повторно запущено на HEAD `58d9200` плюс незакоммиченный Stage 6A slice
+Повторно запущено на HEAD `d8c6758` плюс незакоммиченный Stage 6B slice
 2026-08-23:
 
 | Проверка | Результат |
@@ -245,6 +261,16 @@ Stage 6A verification:
 | `tests/e2e/technicalPreview.spec.js --workers=1` | 2/2 PASS; RTE, STE, TT_SL123/A55, sandbox/CSP/offline, Quick path |
 | `npm run test:e2e:smoke` | 7/7 PASS |
 
+Stage 6B focused source verification:
+
+| Проверка | Результат |
+|---|---|
+| Producer `python tests/run_regression.py` | 13/13 PASS, включая state/artwork protocol regressions |
+| CartonBuilder focused schema/archive/host unit | 25/25 PASS |
+| CartonBuilder `npm run build` | PASS; Vite 396 modules |
+| Producer `e22d7de` artifact build and штатная viewer sync | PASS; vendored integrity verified |
+| `tests/e2e/technicalPreview.spec.js --workers=1` | 2/2 PASS; state persistence, RTE/STE/TT_SL123, Quick path, sandbox/CSP/offline |
+
 Fixture expectations: RTE 19 ARC, STE 20 ARC, TT_SL123 21 ARC. SVG provenance,
 PDF CUT/FOLD/OPEN_CUT, autosave/reopen and archive integrity проверяются
 независимо от визуального smoke.
@@ -269,8 +295,10 @@ loader, global UV, artwork atlas, headless GLB/disposal и embedded host protoco
 
 - Stage 6A Technical Preview подключён в Step 3 через reference-only Viewer.
   Step 4 Technical Render остаётся disabled; Quick Preview/Render не изменены.
-- Project schema пока не хранит Technical Viewer animation/progress/camera
-  state; изменение потребует versioned migration и archive tests.
+- Project schema stores versioned Technical Viewer animation/progress/camera
+  state; targeted browser state acceptance passes against the synchronized
+  producer artifact. Broader Release 2 visual/resource acceptance remains
+  separately governed.
 - Technical Render ждёт общего `RenderSceneSource` и отдельного visual/export
   acceptance. `technicalRender=false` сохраняется.
 - Production-assist/prepress для Technical не разрешён. Physical dieline,

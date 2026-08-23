@@ -111,6 +111,16 @@ describe('viewer host protocol', () => {
       finishMetadata: { cartonType: 'RTE', referenceOnly: true },
       name: 'rte-technical.svg',
       loadId: 'load-rte-1',
+      state: {
+        version: 1,
+        animationName: null,
+        foldProgress: 0.25,
+        camera: {
+          projection: 'perspective', heading: 20, elevation: 30,
+          horizontalPan: 0, verticalPan: 0, distanceFactor: 4,
+          frameHeightFactor: 0, fov: 42, verticalCorrection: false,
+        },
+      },
     });
     const loadMessage = await waitForMessage(harness, VIEWER_MESSAGE_TYPES.LOAD);
     expect(loadMessage.message.payload.semanticSvg.byteLength).toBe(new TextEncoder().encode(semanticSvg).byteLength);
@@ -126,6 +136,16 @@ describe('viewer host protocol', () => {
         cartonType: 'RTE',
         panelIds: ['front', 'back'],
         animationNames: ['foldProgress'],
+        state: {
+          version: 1,
+          animationName: null,
+          foldProgress: 0.25,
+          camera: {
+            projection: 'perspective', heading: 20, elevation: 30,
+            horizontalPan: 0, verticalPan: 0, distanceFactor: 4,
+            frameHeightFactor: 0, fov: 42, verticalCorrection: false,
+          },
+        },
       }),
     });
     const glb = new Uint8Array([0x67, 0x6c, 0x54, 0x46, 1, 0, 0, 0]).buffer;
@@ -146,6 +166,47 @@ describe('viewer host protocol', () => {
     expect(loaded[0]).toMatchObject({ cartonType: 'RTE', panelIds: ['front', 'back'] });
     expect(exported).toHaveLength(1);
     expect(errors).toHaveLength(0);
+
+    expect(harness.childMessages.find((entry) => entry.message.type === VIEWER_MESSAGE_TYPES.LOAD)
+      .message.payload.state.foldProgress).toBe(0.25);
+    expect(host.getState().viewerState.foldProgress).toBe(0.25);
+
+    const nextState = {
+      version: 1,
+      animationName: null,
+      foldProgress: 0.75,
+      camera: {
+        projection: 'perspective', heading: 50, elevation: 25,
+        horizontalPan: 0.1, verticalPan: -0.1, distanceFactor: 5,
+        frameHeightFactor: 0, fov: 42, verticalCorrection: false,
+      },
+    };
+    const statePromise = host.setState(nextState);
+    const stateMessage = await waitForMessage(harness, VIEWER_MESSAGE_TYPES.STATE);
+    harness.windowRef.dispatch('message', {
+      source: harness.iframe.contentWindow,
+      origin: 'null',
+      data: envelope(VIEWER_MESSAGE_TYPES.STATE_UPDATED, sessionId, {
+        loadId: 'load-rte-1',
+        state: nextState,
+      }),
+    });
+    await expect(statePromise).resolves.toMatchObject({ foldProgress: 0.75 });
+    expect(host.getState().viewerState.foldProgress).toBe(0.75);
+    expect(stateMessage.message.payload.loadId).toBe('load-rte-1');
+
+    const artworkPromise = host.setArtworkAtlas(
+      { data: new TextEncoder().encode('new-atlas').buffer, mimeType: 'image/png' },
+      { alpha: { data: new TextEncoder().encode('new-alpha').buffer, mimeType: 'image/png' } },
+    );
+    const artworkMessage = await waitForMessage(harness, VIEWER_MESSAGE_TYPES.ARTWORK);
+    harness.windowRef.dispatch('message', {
+      source: harness.iframe.contentWindow,
+      origin: 'null',
+      data: envelope(VIEWER_MESSAGE_TYPES.ARTWORK_UPDATED, sessionId, { loadId: 'load-rte-1' }),
+    });
+    await expect(artworkPromise).resolves.toMatchObject({ loadId: 'load-rte-1' });
+    expect(artworkMessage.message.payload.maps.alpha.byteLength).toBeGreaterThan(0);
   });
 
   it('rejects untrusted events, mismatched integrity and load IDs', async () => {

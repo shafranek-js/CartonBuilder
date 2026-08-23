@@ -125,6 +125,14 @@ test('loads RTE, STE and TT_SL123 in the separate Technical Preview viewer', asy
     await expect(viewer.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveCount(1);
     await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.technicalPreview.getState()))
       .toEqual(expect.objectContaining({ started: true, initialized: true, pendingLoad: false }));
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.technicalPreview.getState()))
+      .toEqual(expect.objectContaining({ viewerState: expect.objectContaining({ foldProgress: 0 }) }));
+    await viewer.locator('#slider').fill('375');
+    await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.technicalPreview.getState().viewerState.foldProgress))
+      .toBeCloseTo(0.375, 2);
+    const persistedState = await page.evaluate(() => window.cartonBuilderApp.getState().technicalViewer);
+    expect(persistedState).toMatchObject({ version: 1, foldProgress: 0.375 });
+    expect(persistedState.camera.projection).toBe('perspective');
     expect(viewerExternalRequests).toEqual([]);
 
     await page.locator('.step[data-step-target="box"]').click();

@@ -195,6 +195,7 @@ export function createArtworkApp({
   getCartonSource = () => ({ mode: 'quick', box: boxModel.toJSON() }),
   getWorkflowSelection = () => 'quick',
   getTechnicalAssets = () => null,
+  getTechnicalViewerState = () => null,
   canPersistProject = () => true,
   restoreCartonDocument = async () => null,
   onRenderStateChanged = () => {},
@@ -722,6 +723,9 @@ export function createArtworkApp({
       workflowStep,
       workflowSelection: getWorkflowSelection() === 'technical' ? 'technical' : 'quick',
       cartonSource: structuredClone(cartonSource),
+      technicalViewer: getWorkflowSelection() === 'technical'
+        ? structuredClone(getTechnicalViewerState?.() || null)
+        : null,
       artworks: artworks.map((entry) => ({
         artwork: entry.model.toJSON(),
         visible: entry.visible,
