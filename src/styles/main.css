@@ -2768,16 +2768,6 @@ input[type="checkbox"].sr-only::after {
   color: var(--accent, #afca42);
 }
 
-.technical-preview-notice {
-  margin: 0;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--panel-border, #5a5a5a);
-  background: #464646;
-  color: #f0d98d;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .technical-viewer-frame {
   display: block;
   width: 100%;

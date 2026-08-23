@@ -103,6 +103,7 @@ test('loads RTE, STE and TT_SL123 in the separate Technical Preview viewer', asy
     await page.locator('.step[data-step-target="preview"]').click();
     await expect(page.locator('#previewStep')).toBeVisible();
     await expect(page.locator('#technicalPreviewPanel')).toBeVisible();
+    await expect(page.locator('#technicalViewerNotice')).toHaveCount(0);
     await expect(page.locator('#quickPreviewContent')).toBeHidden();
     await expect(page.locator('#quickPreviewActions')).toBeHidden();
     await expect(page.locator('#openRenderButton')).toBeDisabled();

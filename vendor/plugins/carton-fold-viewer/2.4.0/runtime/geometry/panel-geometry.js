@@ -64,6 +64,44 @@ function clipPolygonByOffsetLine(poly, a, b, offsetMm) {
 }
 
 function polygonAreaAbs(poly){ let a=0; for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length];a+=p[0]*q[1]-q[0]*p[1];} return Math.abs(a)*0.5; }
+
+function assignPanelSurfaceGroups(geometry, outsideNormal = '+Z') {
+  const capGroup = geometry.groups.find((group) => group.materialIndex === 0);
+  if (!capGroup || capGroup.count < 6 || !geometry.attributes.normal) return geometry;
+
+  const normal = geometry.attributes.normal;
+  const outsideIsPositiveZ = outsideNormal !== '-Z';
+  const materialIndexForTriangle = (vertexIndex) => {
+    const isPositiveZ = normal.getZ(vertexIndex) > 0.5;
+    return isPositiveZ === outsideIsPositiveZ ? 0 : 1;
+  };
+  const capRuns = [];
+  let runStart = capGroup.start;
+  let runMaterialIndex = materialIndexForTriangle(runStart);
+  for (let offset = 3; offset < capGroup.count; offset += 3) {
+    const vertexIndex = capGroup.start + offset;
+    const materialIndex = materialIndexForTriangle(vertexIndex);
+    if (materialIndex === runMaterialIndex) continue;
+    capRuns.push({ start: runStart, count: vertexIndex - runStart, materialIndex: runMaterialIndex });
+    runStart = vertexIndex;
+    runMaterialIndex = materialIndex;
+  }
+  capRuns.push({
+    start: runStart,
+    count: capGroup.start + capGroup.count - runStart,
+    materialIndex: runMaterialIndex
+  });
+
+  const groups = [];
+  for (const group of geometry.groups) {
+    if (group === capGroup) groups.push(...capRuns);
+    else groups.push({ ...group, materialIndex: 2 });
+  }
+  geometry.clearGroups();
+  groups.forEach((group) => geometry.addGroup(group.start, group.count, group.materialIndex));
+  return geometry;
+}
+
 export function trimmedPanelPolygonGlobal(panelId,parsed,halfWidthMm){
   const original=parsed.panels[panelId].polygon.map(p=>[...p]); let poly=original;
   for(const f of Object.values(parsed.folds)){
@@ -76,7 +114,7 @@ export function trimmedPanelPolygonGlobal(panelId,parsed,halfWidthMm){
   return poly;
 }
 
-export function makePanelGeometry(pointsMm, thicknessMm, spec = null, flatNetUv = null) {
+export function makePanelGeometry(pointsMm, thicknessMm, spec = null, flatNetUv = null, outsideNormal = '+Z') {
   const shape = new THREE.Shape();
   pointsMm.forEach((p, j) => {
     const x = p[0] * 0.001, y = p[1] * 0.001;
@@ -89,6 +127,7 @@ export function makePanelGeometry(pointsMm, thicknessMm, spec = null, flatNetUv 
   g.translate(0, 0, -depth / 2);
   g.computeVertexNormals();
   if (flatNetUv) applyFlatNetUv(g, flatNetUv, spec?.origin || [0, 0]);
+  assignPanelSurfaceGroups(g, outsideNormal);
 
   const r = String(spec?.semanticRole || '').toUpperCase();
   if (r.includes('SNAP_LOCK.LOCKING') || r.includes('LOCKING_FLAP')) {

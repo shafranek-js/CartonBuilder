@@ -1,404 +1,186 @@
-# CartonBuilder — handoff dual-workflow integration
+# CartonBuilder — dual-workflow integration handoff
 
-> Дата сверки: 2026-08-23
->
-> Рабочий каталог: `C:\Projects\CartonBuilder_1-stage1`
->
-> Ветка: `codex/dual-workflow-stage1`
->
-> Базовый HEAD: `d8c6758 feat(preview): integrate technical viewer in step 3`
->
-> Последний commit: `d8c6758 feat(preview): integrate technical viewer in step 3`
->
-> Рабочее дерево содержит незакоммиченный Stage 6B slice; `vendor/plugins/` не
-> редактировался вручную.
+## Текущее состояние
 
-Это основной документ для продолжения integration-ветки. Подробный план:
-`docs/17. dual-workflow-plugin-integration-plan.md`; накопительные evidence и
-история интеграции: `docs/18. integration-manifest.md`.
+Дата сверки: 2026-08-23
+Рабочий каталог: `C:\Projects\CartonBuilder_1-stage1`
+Ветка: `codex/dual-workflow-stage1`
+HEAD: `61604bf fix(security): reject cross-platform traversal separators`
 
-## 1. Текущая цель и граница
+Этапы 0–4 и Release 1 reference-only boundary завершены. Quick workflow
+сохранён отдельно от Technical workflow. Stage 6A Technical Preview, Stage 6B
+viewer state/artwork integration и Stage 7A `RenderSceneSource` foundation
+реализованы в исходниках. Technical Render и Release 2 broader visual/resource
+acceptance остаются открытыми.
 
-Цель — сохранить полностью совместимый Quick workflow и добавить Technical
-workflow на основе Packaging Box Designer (PBD), используя общий CartonBuilder
-UI для Place Artwork, Preview и Render, но разные источники геометрии.
+Рабочее дерево после этого обновления намеренно не будет чистым:
 
-Текущий результат:
+- существующие UI-изменения удаления reference-only warning:
+  `index.html`, `src/i18n.js`, `src/styles/main.css`,
+  `tests/e2e/technicalPreview.spec.js`;
+- generated vendor/catalog changes from the approved viewer sync;
+- этот handoff-файл.
 
-- Этапы 0–4 и Release 1 gate закрыты в текущей reference-only integration
-  границе: выбор workflow, PBD host, Technical Place Artwork, persistence,
-  canonical SVG и flat PDF export приняты.
-- Quick workflow остаётся рабочим и использует только Custom Net.
-- Stage 6A подключает Technical Preview через отдельный sandboxed
-  CartonFoldViewer iframe; Quick Preview остаётся на существующем Preview3D
-  пути. Technical Render по-прежнему заблокирован.
-- Stage 6B добавляет versioned `technicalViewer` state с animation/progress/
-  normalized camera persistence, host state acknowledgements и texture-only
-  artwork updates без rebuild fold graph; Release 2 acceptance остаётся
-  открытой для отдельного broader visual/resource gate.
-- Все technical profiles остаются `referenceOnly=true` и
-  `productionCertified=false`. Текущая приёмка не является физической или
-  производственной сертификацией конструкции.
+`vendor/plugins/` обновлён только штатным `plugins:sync:viewer`, вручную не
+редактировался.
 
-Release 1 подтверждён для RTE, STE и TT_SL123/A55: guarded transition,
-Technical artwork, autosave/reopen, archive round-trip, canonical SVG export и
-1:1 flat PDF export. Stage 6A Technical Preview является reference-only и не
-включает Technical Render или production certification.
+## 1. Текущие цели и границы
+
+- Сохранить Quick workflow на существующем Custom Net/Preview3D/Render пути.
+- Поддерживать Technical workflow через canonical PBD model, canonical
+  `pbd.svg.v4` bytes и sandboxed CartonFoldViewer iframe.
+- Передавать artwork atlas, state и GLB по versioned host contracts без
+  дублирования geometry/model pipeline.
+- Подготовить общий Render source boundary, но не включать Technical Render до
+  отдельного visual/export/resource acceptance.
+- Все Technical profiles остаются `referenceOnly=true` и
+  `productionCertified=false`; `technicalRender=false`.
 
 ## 2. Завершённые задачи
 
-### 2.1. Workflow UI и Quick Layout
+- Workflow selection, guarded Technical transition, Quick compatibility,
+  persistence/archive round-trip и Technical Place Artwork.
+- Canonical Technical SVG export and provenance, semantic LINE/ARC snapping,
+  printable/DPI preflight и Stage 4E technical flat PDF/artwork export.
+- Stage 6A: Technical Preview iframe with sandbox `allow-scripts`, CSP/offline
+  policy, Quick/Technical routing, lifecycle cancel/dispose and host protocol.
+- Stage 6B: persisted animation/progress/normalized-camera `technicalViewer`
+  state, state acknowledgements, generation guards and texture-only artwork
+  updates.
+- Stage 7A: `src/render/RenderSceneSource.js` boundary with
+  `LegacyRenderSceneSource`; `WebGLCartonRenderer` delegates render surface,
+  artwork replacement, camera operations, export, diagnostics and disposal.
+- Viewer artifact `carton-fold-viewer@2.4.0` rebuilt from producer commit
+  `685e039` and transactionally synchronized.
+- Latest viewer correction: artwork atlas is applied to panel outside caps only;
+  inner caps are white paper without atlas/finish maps, and crease backfaces are
+  hidden. Canonical geometry, UVs and fold graph are unchanged.
 
-- Добавлен transient Step `0. Select Workflow` перед `1. Create Box`.
-- Новый проект не создаёт фиктивное Quick-состояние. Bootstrap restore блокирует
-  Step 0 до результата восстановления; сохранённый проект сразу открывает свой
-  workflow/step, а `New Project` возвращает нейтральный Step 0.
-- Quick/Technical cards являются native buttons с keyboard/focus,
-  `aria-pressed` и локализованными `aria-label`; stepper адаптирован до 320 px.
-- Save, Place Artwork, Export и Presets заблокированы до выбора workflow.
-- PBD загружается lazy только после выбора Technical.
-- Quick Layout больше не показывает Construction Library и устаревшие шаблоны:
-  используется только обычный Custom Net. Параметры Custom Net сохранены.
-- Quick canvas выполняет fit-to-workspace для Front panel и после каждого
-  добавления/удаления панели, поэтому весь net остаётся видимым.
-- Во встроенном PBD сохранены Flip Horizontal/Vertical и Rotate 90°; выбранная
-  presentation transform применяется к той же геометрии в Place Artwork.
+## 3. Pinned plugin artifacts
 
-### 2.2. Контракты, плагины и PBD host
-
-- Канонический пакет: `carton-workflow.v1` с `pbd.model.v1` и `pbd.svg.v4`.
-- Standalone validators и security scan fail closed проверяют schema, размеры,
-  SHA-256, XML, metadata, запрещённые элементы/атрибуты/CSS/URL, path traversal,
-  symlinks и offline policy.
-- `carton-host.v1` проверяет `event.source`, origin, session id, protocol
-  version, payload size, bundle hashes и VALID structural/geometry/contract
-  state до любой live mutation.
-- Единственный guarded переход в Technical Place Artwork — обычная навигация
-  Next/Step 2; отдельной PBD-кнопки `Ready` нет.
-- Завендорены автономные `packaging-box-designer@1.2.0` и
-  `carton-fold-viewer@2.4.0`; production build зависит только от vendored files.
-- `vendor/plugins/` нельзя редактировать вручную. Изменения делаются в producer
-  repository, затем синхронизируются `plugins:sync:pbd` или
-  `plugins:sync:viewer` и проходят integrity gate.
-
-Текущие pinned artifacts (источник истины —
-`vendor/plugins/plugins.manifest.json`):
+Source of truth: `vendor/plugins/plugins.manifest.json`.
 
 | Plugin | Source commit | Entrypoint SHA-256 | Manifest SHA-256 |
 |---|---|---|---|
 | Packaging Box Designer 1.2.0 | `1208f9188e662895cb66a3e3138fa2ac2fadc511` | `1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904` | `16a19e1b3311c008052cf3ce6e459ccdceafbb7d5facc52b5f03c649466fad87` |
-| CartonFoldViewer 2.4.0 | `ec793810ea28c456ca0e33b60fa5404408e8b778` | `420f9d54f26fcc749bef9b09d38c59d26e71321c3e68027d2c64ee059aadbdae` | `19f4555845e7fb2347b251bd281531626ccc2c11a49b0b9a5d64ac6c7856a8d6` |
+| CartonFoldViewer 2.4.0 | `685e039328f8ae3ba34faaad93d4e6c299663557` | `054dd11c2dd7d6f0f145e75fc6111e7a127b5e0ad2fcd30e2670bded63c2d480` | `fe4ff2408abc06472a8341cec6df66e0cb9b6288fb48a1e2c9402f680241a2c5` |
 
-### 2.3. Carton domain, persistence и безопасная замена
+Viewer artifact entrypoint byte length: `1,096,292`. Contracts remain
+`carton-workflow.v1`, `pbd.model.v1` and `pbd.svg.v4`; capabilities remain
+`foldPreview=true`, `technicalRender=false`, `referenceOnly=true` and
+`productionCertified=false`.
 
-- `CartonDocument`, `QuickCartonDocument`, `TechnicalCartonDocument` и factory
-  задают один discriminated carton source.
-- Project schema — v17; `.carton` archive format — v5. Technical model и SVG
-  хранятся отдельными Blob entries с hash/size validation.
-- RTE, STE и TT_SL123 проходят byte-preserving model/SVG archive round-trip и
-  tamper rejection; legacy projects мигрируют в Quick.
-- `workflowSelection` хранит намерение пользователя, но не заменяет committed
-  `cartonSource` до успешного guarded transition.
-- Technical replacement выполняется как транзакция: validate → confirm →
-  checkpoint → clear artwork → activate model → update technical assets → reset
-  Preview → reset Render → awaited final save.
-- Ошибка в любой из шести mutation phases восстанавливает project snapshot,
-  blobs, technical assets, Render assets/state и workflow step. Cancel и
-  invalid bundle не изменяют live project и checkpoint.
+## 4. Основные файлы integration
 
-### 2.4. Technical Place Artwork — Stage 4A–4E
+- `src/host/pbdHostProtocol.js` and `src/host/viewerHostProtocol.js` — source,
+  origin, session, integrity and viewer state/artwork contracts.
+- `src/carton/TechnicalCartonDocument.js`,
+  `src/carton/technicalBoxModelAdapter.js` and
+  `src/carton/technicalPresentation.js` — canonical Technical model boundary.
+- `src/project/projectSchema.js`, `src/project/projectArchive.js` and
+  `ProjectCheckpoint.js` — schema/archive/state persistence.
+- `src/render/RenderSceneSource.js` and `src/render/WebGLCartonRenderer.js` —
+  Stage 7A render source boundary.
+- `src/main.js`, `index.html`, `src/styles/main.css`, `src/i18n.js` — workflow,
+  preview and current UI boundary.
+- `vendor/plugins/carton-fold-viewer/2.4.0/` and
+  `vendor/plugins/plugins.manifest.json` — generated synchronized artifact;
+  update only via producer build plus `plugins:sync:viewer`.
+- `tests/unit/viewerHostProtocol.test.js`,
+  `tests/e2e/technicalPreview.spec.js`, `tests/e2e/preview3d.spec.js`,
+  `tests/e2e/app.spec.js` — relevant acceptance coverage.
 
-- Общий Artwork UI поддерживает PNG/JPEG/PDF, layers, crop, opacity, history,
-  move/resize/rotate/flip для Quick и Technical.
-- Technical adapter использует canonical LINE/ARC contours и semantic
-  CUT/FOLD/OPEN_CUT, точные region masks и PBD presentation plane. ARC остаётся
-  ARC в domain/viewport/SVG/raster; cubic Bézier pieces создаются только на PDF
-  boundary.
-- Исправлено направление всех ARC после Y projection/flip/rotation через
-  централизованный `technicalPresentation` и преобразование clockwise.
-- Stage 4A: Technical SVG экспортирует canonical `pbd.svg.v4` без DOM
-  reserialization, сохраняет PBD metadata и добавляет ровно один
-  deterministic provenance с source SHA-256/identity/status.
-- Stage 4B: read-only `Front X`/`Front Y` вычисляются относительно точно
-  спроецированного `body.front`, не меняя persisted global coordinates.
-- Stage 4C: transient semantic snapping покрывает endpoints, finite
-  LINE–LINE/LINE–ARC/ARC–ARC intersections, panel centers и exact LINE/ARC
-  boundaries. Move, independent/proportional resize и crop используют общий
-  zoom-normalized threshold, distance ranking, stable ids и hysteresis;
-  Ctrl/Meta bypass сохранён. Quick использует legacy snapping.
-- Stage 4D: transient printable/DPI preflight исключает glue/locking surfaces,
-  проверяет exact LINE/ARC coverage и классифицирует raster/vector/unknown.
-  Неизвестная или недоказуемая геометрия даёт `unknown`; report не сохраняется.
-- Stage 4E: flat PDF сохраняет original vector PDF как Form XObject и original
-  PNG/JPEG как Image XObject, включая crop, position, independent scale,
-  rotation, flips, opacity и layer order. Dieline идёт после artwork в отдельном
-  OCG с exact CUT/FOLD/OPEN_CUT paths.
-- PDF export fail closed отклоняет invalid/open contours, invalid bounds,
-  пустой/CUT-only/FOLD-only Technical dieline, unsupported/corrupt/missing mixed
-  artwork sources и invalid transforms. Hidden/finish layers не входят в flat
-  PDF.
-- Download-level acceptance строит expected geometry через production pipeline
-  `TechnicalCartonDocument → technicalBoxModelAdapter → getDielineSegments` и
-  сверяет exact CUT/FOLD stroke counts, все ARC cubic-piece counts и каждый
-  OPEN_CUT start/end для трёх fixtures.
-- Technical production-assist/prepress остаётся fail closed и не изменяет
-  canonical PBD model.
+Plan and evidence sources:
 
-### 2.5. CartonFoldViewer foundation
+- `docs/17. dual-workflow-plugin-integration-plan.md`
+- `docs/18. integration-manifest.md`
 
-- Viewer 2.4.0 — автономный offline single-file UI с локальным Three.js 0.185.1
-  и sandbox `allow-scripts`; внешние network requests запрещены CSP.
-- RTE, STE и A55/TT_SL123 строятся, складываются и раскладываются в vendored
-  Viewer.
-- ESM headless foundation предоставляет canonical semantic SVG parse/build,
-  `loadSemanticSvgText`, animation selection, `setFoldProgress`, `exportGlb`,
-  `setArtworkAtlas`, getters и идемпотентный `dispose`.
-- Embedded `carton-workflow.v1` protocol проверяет opaque origin, source,
-  session/load IDs, limits и SHA-256; `foldPreview=true`, но
-  `technicalRender=false`.
-
-### 2.6. Technical Preview — Stage 6A
-
-- `src/host/viewerHostProtocol.js` — отдельный host adapter для `host:init`,
-  `viewer:load`, `host:cancel`, ready/model-loaded/GLB/error/cancelled events.
-- Step 3 маршрутизирует Quick в существующий Preview3D, а Technical — в
-  `./plugins/carton-fold-viewer/2.4.0/index.html` с `sandbox="allow-scripts"`.
-  Viewer получает canonical SVG bytes, composed artwork atlas, optional finish
-  maps, source metadata и locale; default GLB не загружается.
-- Уход со Step 3, смена technical model и `beforeunload` вызывают cancel/dispose.
-  UI явно показывает reference-only/not-production-certified статус; capability
-  `technicalRender=false` и `productionCertified=false` не повышаются.
-- Добавлены `tests/unit/viewerHostProtocol.test.js` и
-  `tests/e2e/technicalPreview.spec.js`. Focused E2E покрывает RTE, STE,
-  TT_SL123/A55, panel IDs, animations, GLB handshake, CSP/offline policy,
-  Quick Preview и lifecycle.
-
-### 2.7. Technical Preview state — Stage 6B (acceptance open)
-
-- `src/host/viewerHostProtocol.js` поддерживает `host:state`/`viewer:state` и
-  `host:artwork`/`viewer:artwork`, с проверкой source/origin/session/loadId и
-  negotiated payload integrity.
-- `src/project/projectSchema.js` мигрирует schema 17 → 18 и сохраняет
-  versioned `technicalViewer` state; archive round-trip сохраняет animation,
-  fold progress и normalized camera через `normalizeCameraPresetState`.
-- Technical artwork updates используют texture-only route; смена canonical
-  technical SVG по-прежнему вызывает dispose/reload и generation guard.
-- Producer source regression проходит; producer `e22d7de` собран и vendored
-  artifact синхронизирован. Targeted Technical Preview acceptance проходит;
-  broader Release 2 visual/resource gate остаётся отдельной границей.
-
-## 3. Ключевые технические решения
-
-- `pbd.model.v1` — единственный canonical Technical CartonModel. SVG, artwork
-  facade, validation, metrics и будущий 3D runtime не создают конкурирующую
-  геометрию.
-- PBD SVG presentation transform — ориентация отображения, а не изменение
-  canonical model. Все consumers используют общую projection boundary.
-- Polygon/tessellation допустимы для hit-testing/GPU, но не вместо LINE/ARC в
-  canonical exports.
-- Technical SVG берётся из проверенных canonical bytes; generic geometry SVG
-  exporter используется только Quick branch.
-- Technical replacement имеет один awaited commit boundary. Autosave без await
-  не считается успешным завершением транзакции.
-- Preview/Render маршрутизируются по carton source. Technical нельзя временно
-  показывать через Quick `BoxNetModel`, `Preview3D` или `BoxScene`.
-- Diagnostic DPI/coverage не означает разрешение production prepress.
-- Plugin catalog и hashes обновляются только транзакционными sync scripts.
-
-## 4. Основные файлы текущей интеграции
-
-| Область | Основные файлы |
-|---|---|
-| Handoff/plan/evidence | `PROJECT_STATUS.md`, `docs/17. dual-workflow-plugin-integration-plan.md`, `docs/18. integration-manifest.md` |
-| Workflow UI/bootstrap | `index.html`, `src/main.js`, `src/styles/main.css`, `src/workflow/workflowSelectionState.js`, `src/ui/FileMenu.js` |
-| Technical host/contracts | `src/host/pbdHostProtocol.js`, `src/workflow/`, `schemas/`, `vendor/plugins/plugins.manifest.json` |
-| Technical Preview host | `src/host/viewerHostProtocol.js`, `src/main.js`, `tests/unit/viewerHostProtocol.test.js`, `tests/e2e/technicalPreview.spec.js` |
-| Carton domain/projection | `src/carton/TechnicalCartonDocument.js`, `src/carton/technicalBoxModelAdapter.js`, `src/carton/technicalPresentation.js`, `src/carton/frontRelativeCoordinates.js` |
-| Quick Custom Net | `src/carton/QuickCartonDocument.js`, `src/model/quickCustomNet.js`, `src/model/ConstructionTemplates.js` |
-| Artwork/geometry | `src/artwork/ArtworkApp.js`, `ArtworkRenderer.js`, `snap.js`, `technicalArtworkPreflight.js`, `src/model/dieline.js` |
-| Export | `src/export/technicalSvgExport.js`, `svgExport.js`, `artworkExport.js` |
-| Persistence | `src/project/projectSchema.js`, `projectArchive.js`, `ProjectCheckpoint.js`, `PresetStore.js` |
-| Acceptance | `tests/e2e/app.spec.js`, `artwork-crop.spec.js`, `tests/unit/artworkExport.test.js`, `technicalArtworkPreflight.test.js`, `tests/unit/carton/`, `tests/unit/snap.test.js` |
-
-Коммиты текущего завершённого среза после прежней handoff-точки `e83ac06`:
-
-- `c34e6aa` — canonical Technical SVG provenance;
-- `3e23548` — Step 0, workflow/Quick/PBD UI refinement и persistence gates;
-- `460e5e0` — Quick Custom Net fit-to-workspace;
-- `c0bd44f` — Technical semantic snapping;
-- `12bc388` — printable coverage/DPI preflight;
-- `bc8c3ba` — Technical flat PDF/artwork и Stage 4E acceptance.
-
-## 5. Подтверждённые проверки
-
-Повторно запущено на HEAD `d8c6758` плюс незакоммиченный Stage 6B slice
-2026-08-23:
+## 5. Подтверждённые проверки текущего среза
 
 | Проверка | Результат |
 |---|---|
-| `npm run plugins:verify` | PASS; 2 vendored plugins, schemas/hashes/CSP/offline scan |
-| `npm run test:unit` | 78/78 files, 573/573 tests PASS |
-| `npm run build` | PASS; Vite 395 modules |
+| Producer `npm run build:plugin` | **PASS**, provenance gate and 13/13 regression suites |
+| Producer artwork/UV/headless/host focused tests | **PASS**: 4 focused suites |
+| `npm run plugins:sync:viewer -- --source C:\Projects\CartonFoldViewer-stage1\dist\plugins\carton-fold-viewer\2.4.0` | **PASS**, transactional sync |
+| `npm run plugins:verify` | **PASS**, 2 plugins, manifest/hash/CSP/offline checks |
+| `git diff --check` | **PASS**; only CRLF conversion warnings on existing UI files |
 
-Полный post-review acceptance, выполненный на содержимом commit `bc8c3ba` до
-его фиксации:
-
-| Проверка | Результат |
-|---|---|
-| `tests/e2e/app.spec.js --workers=1` | 56/56 PASS |
-| `tests/e2e/artwork-crop.spec.js --workers=1` | 10/10 PASS |
-| `npm run test:e2e:smoke` | 7/7 PASS |
-| Technical flat PDF focused E2E | 4/4 PASS |
-| `tests/unit/artworkExport.test.js` | 26/26 PASS |
-| `graphify update .` | PASS; graph current for committed code |
-| `git diff --check` | PASS; CRLF conversion warnings only |
-
-Stage 6A verification:
-
-| Проверка | Результат |
-|---|---|
-| `tests/unit/viewerHostProtocol.test.js` | 2/2 PASS |
-| `tests/e2e/technicalPreview.spec.js --workers=1` | 2/2 PASS; RTE, STE, TT_SL123/A55, sandbox/CSP/offline, Quick path |
-| `npm run test:e2e:smoke` | 7/7 PASS |
-
-Stage 6B focused source verification:
-
-| Проверка | Результат |
-|---|---|
-| Producer `python tests/run_regression.py` | 13/13 PASS, включая state/artwork protocol regressions |
-| CartonBuilder focused schema/archive/host unit | 25/25 PASS |
-| CartonBuilder `npm run build` | PASS; Vite 396 modules |
-| Producer `e22d7de` artifact build and штатная viewer sync | PASS; vendored integrity verified |
-| `tests/e2e/technicalPreview.spec.js --workers=1` | 2/2 PASS; state persistence, RTE/STE/TT_SL123, Quick path, sandbox/CSP/offline |
-
-Fixture expectations: RTE 19 ARC, STE 20 ARC, TT_SL123 21 ARC. SVG provenance,
-PDF CUT/FOLD/OPEN_CUT, autosave/reopen and archive integrity проверяются
-независимо от визуального smoke.
-
-Неблокирующие diagnostics production build:
-
-- Vite externalizes Node builtins из MuPDF browser modules;
-- `ProjectStore.js` импортируется статически и динамически, поэтому не выделяется
-  в отдельный chunk;
-- несколько production chunks превышают 500 kB.
+Previous acceptance evidence remains useful but was not rerun after this final
+vendor artifact sync: CartonBuilder unit baseline 573/573, build baseline 396
+Vite modules, Stage 6A focused Technical Preview 2/2, smoke 7/7 and the
+earlier Stage 4E export gates. Do not report those as a fresh post-sync browser
+run without rerunning the affected specs.
 
 ## 6. Известные проблемы и открытые границы
 
-### 6.1. Этап 5 Viewer runtime
-
-Stage 5A–5D закрыты в producer и синхронизированы в CartonBuilder: canonical
-loader, global UV, artwork atlas, headless GLB/disposal и embedded host protocol
-проверены для RTE, STE и TT_SL123/A55. Producer-side изменения для Stage 6A не
-требуются.
-
-### 6.2. Technical Preview, Render и production
-
-- Stage 6A Technical Preview подключён в Step 3 через reference-only Viewer.
-  Step 4 Technical Render остаётся disabled; Quick Preview/Render не изменены.
-- Project schema stores versioned Technical Viewer animation/progress/camera
-  state; targeted browser state acceptance passes against the synchronized
-  producer artifact. Broader Release 2 visual/resource acceptance remains
-  separately governed.
-- Technical Render ждёт общего `RenderSceneSource` и отдельного visual/export
-  acceptance. `technicalRender=false` сохраняется.
-- Production-assist/prepress для Technical не разрешён. Physical dieline,
-  converter/material profiles и folded samples не сертифицированы.
-
-### 6.3. Worktree boundary
-
-- Продолжать только в `C:\Projects\CartonBuilder_1-stage1` на
-  `codex/dual-workflow-stage1`.
-- `C:\Projects\CartonBuilder_1` — отдельный workspace с несвязанными HDRI/UI
-  изменениями. Не reset/merge/stage его файлы автоматически.
-- Не редактировать `vendor/plugins/` вручную и не копировать файлы из producer
-  repositories без sync/integrity flow.
+- Release 2 broader visual/resource gate is open. It must cover 2D↔3D panel
+  mapping, outer-only artwork, GLB/resource round-trip, texture replacement and
+  repeated dispose/reload behavior.
+- Technical Render remains disabled. Do not route Technical through Quick
+  `BoxNetModel`, `Preview3D` or `BoxScene`.
+- Technical production-assist/prepress, material/converter profiles, Spot
+  Gloss/Foil/Emboss/Deboss and physical folded-sample certification are not
+  implemented or certified.
+- Host payload limits are fail-closed. `payload-too-large`/`maxGlbBytes` must be
+  handled as an explicit contract error, not bypassed by relaxing validation.
+- The integration tree is intentionally dirty. Do not reset or overwrite the
+  four existing UI files, generated vendor changes or this status update.
+- Do not run Playwright against shared `dist` concurrently with `npm run build`;
+  this previously caused transient empty DOM and false timeouts. Run browser
+  suites after build and sequentially, focusing on the affected spec.
+- GitHub Actions and deployment automation remain disabled unless explicitly
+  re-authorized.
 
 ## 7. Опробованные и отвергнутые подходы
 
-- Generic SVG export из geometry facade терял canonical `pbd.svg.v4` metadata и
-  provenance. Technical SVG теперь восстанавливается из проверенных source
-  bytes и получает узкий provenance block.
-- Прямое повторение Cartesian clockwise в Y-down presentation выворачивало ARC
-  в обратную сторону. Направление теперь меняется только общей projection
-  boundary с determinant-aware transform.
-- Замена ARC chord/polyline или декоративным SVG path скрывала бы ошибку и
-  расходилась с export geometry; этот подход запрещён.
-- Создание checkpoint при входе в PBD перезаписывало безопасное состояние до
-  подтверждения. Checkpoint создаётся только после validation и confirm.
-- Fire-and-forget final autosave не позволял доказать commit/rollback.
-  Transaction использует awaited final save и fault injection всех шести фаз.
-- Bounding-box/endpoints-only coverage маскировал gaps и ARC bulges. Diagnostic
-  preflight использует analytic LINE/ARC boundary/scanline checks и fail-closed
-  `unknown`.
-- Проверка PDF только по `cubicCount >= arcCount` и только OPEN_CUT не доказывала
-  сохранение всей геометрии. Acceptance теперь сравнивает exact CUT/FOLD cubic
-  pieces с production box-model.
-- Параллельный запуск full Playwright и `npm run build` против общего `dist`
-  давал transient empty DOM/timeouts. Browser suites запускать после build и
-  последовательно; изолированные повторы прошли полностью.
+- Manual edits in `vendor/plugins/`: rejected; producer commit → provenance
+  build → transactional sync is the only supported artifact flow.
+- A second parser, SVG-only/alternative 3D model or Quick geometry reuse for
+  Technical: rejected; canonical PBD model and one semantic runtime remain the
+  source of truth.
+- Generic Technical SVG export: rejected because it loses canonical metadata,
+  provenance and exact LINE/ARC semantics.
+- `DoubleSide` on the panel artwork material: rejected because the atlas then
+  appears on inner caps; the synchronized viewer now uses explicit outside,
+  inside-paper and edge material groups.
+- Splitting crease meshes into multiple material groups: rejected because it
+  changes GLB primitive identity and breaks fold/UV checks; the crease remains a
+  single `FrontSide` material.
+- Parallel Playwright and build against shared `dist`: rejected because it
+  produces transient empty DOM/timeouts.
+- Relaxing payload limits for oversized GLB: rejected; the host contract must
+  remain fail-closed.
 
 ## 8. Следующие шаги
 
-1. **Этап 6B — Technical Preview completion.**
-   - Добавить versioned-сохранение animation/progress/camera state в project
-     schema и archive tests.
-   - Закрыть 2D↔3D panel-ID visual gate, GLB gate и 20-cycle resource gate для
-     host-integrated flow.
-   - Сохранить texture-only artwork updates и полный dispose/rebuild при смене
-     technical geometry.
-2. **Этапы 7–8 — Technical Render.**
-   - Выделить общий `RenderSceneSource`, сохранив существующий Render UI/studio.
-   - Подключить Technical geometry, global UV, artwork и finish maps.
-   - Включать `technicalRender=true` только после visual/export acceptance.
-4. **Этап 9 — unified release/deployment.**
-   - Проверить relative URLs, lazy plugin loading, hashes, offline policy,
-     GitHub Pages subpath и браузеры. Не включать GitHub Actions без отдельного
-     разрешения владельца.
+1. Review the exact integration diff and decide whether the existing UI cleanup,
+   generated plugin sync and this handoff should be committed together or as
+   separate reviewed commits.
+2. Run sequential CartonBuilder verification on the synchronized artifact:
+   `npm run plugins:verify`, `npm run test:unit`, `npm run build`, then the
+   affected Technical Preview/Render browser specs with `--workers=1`.
+3. Close the Release 2 visual/resource gate; keep `technicalRender=false` and
+   both certification flags unchanged until evidence is complete.
+4. Continue Stage 7B — TechnicalRenderSceneSource — only through the existing
+   `RenderSceneSource` boundary and without duplicating Quick geometry.
+5. Only after local acceptance, handle publication/deployment as a separate
+   explicitly authorized operation.
 
-## 9. Порядок безопасного продолжения
+## 9. Безопасный порядок продолжения
 
-1. Прочитать этот файл полностью.
-2. Прочитать `docs/17. dual-workflow-plugin-integration-plan.md`, особенно
-   Этапы 5–6, затем релевантный раздел `docs/18. integration-manifest.md`.
-3. Проверить Git:
+1. Read this file, `docs/17. dual-workflow-plugin-integration-plan.md` and the
+   relevant sections of `docs/18. integration-manifest.md`.
+2. Check `git status --short` and `git log -10 --oneline --decorate` in
+   `C:\Projects\CartonBuilder_1-stage1`.
+3. Preserve the dirty UI/vendor boundary; never use reset/checkout to discard it.
+4. Run focused checks first, then unit/build, then affected browser specs
+   sequentially. Finish with `plugins:verify`, `git diff --check` and exact Git
+   status.
+5. Use the producer repository for any future viewer change; after its commit,
+   run `npm run build:plugin` there and then sync with:
 
    ```powershell
    Set-Location "C:\Projects\CartonBuilder_1-stage1"
-   git status --short
-   git log -10 --oneline --decorate
-   ```
-
-4. Перед изменениями подтвердить baseline:
-
-   ```powershell
+   npm run plugins:sync:viewer -- --source "C:\Projects\CartonFoldViewer-stage1\dist\plugins\carton-fold-viewer\2.4.0"
    npm run plugins:verify
-   npm run test:unit
-   npm run build
    ```
-
-5. Для локальной UI-проверки без предварительной пересборки:
-
-   ```powershell
-   npm run dev -- --host 127.0.0.1
-   ```
-
-6. После каждого bounded slice выполнить focused tests, полный unit gate,
-   relevant Playwright последовательно после build, `plugins:verify`,
-   `graphify update .`, `git diff --check` и проверить exact Git status.
-
-## Stage 7A — RenderSceneSource foundation (2026-08-23)
-
-The shared Render source boundary is now present in
-`src/render/RenderSceneSource.js`. `LegacyRenderSceneSource` adapts the
-existing `BoxScene` without duplicating Quick geometry, fold transforms,
-materials, UVs or export logic. `WebGLCartonRenderer` keeps its public API and
-routes the render surface, artwork replacement, camera operations,
-portable-scene export, diagnostics and idempotent disposal through the adapter.
-
-Focused source-contract and render regressions pass. Full Render/browser gates
-remain open until the required sequential unit, Render E2E, smoke, plugin,
-build and diff checks are completed. Technical Render remains disabled;
-`technicalRender=false`, `referenceOnly=true` and `productionCertified=false`
-are unchanged.
-
-Next bounded slice: **Stage 7B — TechnicalRenderSceneSource**.

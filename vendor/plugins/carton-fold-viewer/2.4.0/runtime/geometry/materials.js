@@ -18,17 +18,19 @@ export function panelColor(spec){
 }
 
 export function makeTechMaterials(spec){
-  const surface=new THREE.MeshStandardMaterial({color:panelColor(spec),roughness:1,metalness:0,side:THREE.DoubleSide});
-  surface.name=`${spec.nodeName}_paper`;
+  const surface=new THREE.MeshStandardMaterial({color:panelColor(spec),roughness:1,metalness:0,side:THREE.FrontSide});
+  surface.name=`${spec.nodeName}_outer_paper`;
+  const inner=new THREE.MeshStandardMaterial({color:0xfafaf6,roughness:1,metalness:0,side:THREE.FrontSide});
+  inner.name=`${spec.nodeName}_inner_paper`;
   const edge=new THREE.MeshStandardMaterial({color:0xeadfcf,roughness:1,metalness:0,side:THREE.DoubleSide});
   edge.name=`${spec.nodeName}_edge`;
-  return [surface,edge];
+  return [surface,inner,edge];
 }
 
 export function makeCreaseMaterial(foldId, creaseMeshName){
-  const m=new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:1,metalness:0,side:THREE.DoubleSide});
-  m.name=`${creaseMeshName(foldId)}_paper`;
-  return m;
+  const surface=new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:1,metalness:0,side:THREE.FrontSide});
+  surface.name=`${creaseMeshName(foldId)}_outer_paper`;
+  return surface;
 }
 
 export function getArtworkSurfaceMaterials(root) {
@@ -37,8 +39,9 @@ export function getArtworkSurfaceMaterials(root) {
   root?.traverse?.((node) => {
     if (!node.isMesh || node.userData?.artwork_surface !== true) return;
     const list = Array.isArray(node.material) ? node.material : [node.material];
-    // Panel meshes use material slot 0 for the surface and slot 1 for cut/edge
-    // faces. Crease ribbons have one material, which is their artwork surface.
+    // Panel meshes use material slot 0 for the outside surface, slot 1 for the
+    // inner paper surface and slot 2 for cut/edge faces. Crease ribbons have
+    // one material, which is their artwork surface.
     const material = list[0];
     if (material && !seen.has(material)) {
       seen.add(material);

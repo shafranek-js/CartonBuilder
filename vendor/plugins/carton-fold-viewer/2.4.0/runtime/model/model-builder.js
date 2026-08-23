@@ -8,6 +8,7 @@ import { createFlatNetUvMapper } from '../geometry/flat-net-uv.js';
 
 export function buildFoldableFromSemanticSvg(svgText, name = 'carton.svg') {
   const parsed = parseSemanticCartonSvg(svgText), flatNetUv = createFlatNetUvMapper(parsed.canvas), model = new THREE.Group();
+  const outsideNormal = parsed.outsideNormal || parsed.metadata.coordinateConvention?.outsideNormal || '+Z';
   model.name = 'PBD_SVG_Carton_Root';
   model.userData = {
     source: 'pbd.svg.v4',
@@ -36,7 +37,7 @@ export function buildFoldableFromSemanticSvg(svgText, name = 'carton.svg') {
     };
 
     const mesh = new THREE.Mesh(
-      makePanelGeometry(s.polygon, parsed.dimensions.thickness, s, flatNetUv),
+      makePanelGeometry(s.polygon, parsed.dimensions.thickness, s, flatNetUv, outsideNormal),
       makeTechMaterials(s)
     );
     mesh.name = s.nodeName + '__mesh';
