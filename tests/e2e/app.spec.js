@@ -91,6 +91,24 @@ async function loadGeneratedPng(page, fileName = 'sample-artwork.png') {
   await expect(page.locator('#processingOverlay')).toBeHidden();
 }
 
+async function loadGeneratedVectorPdf(page, fileName = 'vector-artwork.pdf', { replace = true } = {}) {
+  const source = await PDFDocument.create();
+  const pdfPage = source.addPage([720, 480]);
+  pdfPage.drawRectangle({ x: 0, y: 0, width: 720, height: 480, color: rgb(0.2, 0.4, 0.8) });
+  const bytes = await source.save();
+  if (replace) {
+    page.once('dialog', (dialog) => dialog.accept());
+    await (await openEditAction(page, '#menuReplaceArtworkBtn')).click();
+  }
+  await page.locator('#artworkFileInput').setInputFiles({
+    name: fileName,
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(bytes),
+  });
+  await expect(page.locator('#artworkFileName')).toHaveText(fileName, { timeout: 20_000 });
+  await expect(page.locator('#processingOverlay')).toBeHidden();
+}
+
 function decodeXmlText(value) {
   return value
     .replaceAll('&quot;', '"')
@@ -171,13 +189,19 @@ async function captureLiveFingerprint(page) {
   });
 }
 
-async function createTechnicalArtworkProject(page, artworkName = 'technical-checkpoint.png') {
+async function createTechnicalArtworkProject(page, artworkName = 'technical-checkpoint.png', cartonType = 'RTE') {
   await chooseWorkflow(page, 'technical');
   const frame = page.frameLocator('#technicalHostFrame');
   await expect(page.locator('#technicalHostValidation')).toHaveText(
     'Structural VALID · Geometry VALID · Contract VALID',
     { timeout: 20_000 },
   );
+  if (cartonType !== 'RTE') {
+    await frame.locator('#cartonType').selectOption(cartonType);
+    await expect(page.locator('#technicalHostValidation')).toHaveText(
+      'Structural VALID · Geometry VALID · Contract VALID',
+    );
+  }
   await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('#artworkStep')).toBeVisible();
   await loadGeneratedPng(page, artworkName);
@@ -1241,6 +1265,74 @@ for (const cartonType of ['RTE', 'STE', 'TT_SL123']) {
     }
   });
 }
+
+for (const cartonType of ['RTE', 'STE', 'TT_SL123']) {
+  test(`technical printable preflight classifies ${cartonType} surfaces`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await createTechnicalArtworkProject(page, `technical-printable-${cartonType}.png`, cartonType);
+    const report = await page.evaluate(() => window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight());
+    expect(report.mode).toBe('technical');
+    expect(report.printableSurfaces.length).toBeGreaterThan(0);
+    expect(report.excludedSurfaces.map((surface) => surface.id)).toContain('body.glueFlap');
+    expect(report.issues.some((issue) => issue.surfaceId === 'body.glueFlap')).toBe(false);
+    if (cartonType === 'TT_SL123') {
+      expect(report.excludedSurfaces.filter((surface) => surface.reason === 'locking-surface').length).toBe(4);
+      expect(report.issues.some((issue) => issue.code === 'uncovered-printable-surface' && issue.surfaceId.startsWith('closure.bottom.snap'))).toBe(false);
+    }
+    await expect(page.locator('#artworkQualitySummary')).toContainText('Printable surfaces:');
+    await expect(page.locator('#previewStep')).toBeHidden();
+    await expect(page.locator('#renderStep')).toBeHidden();
+  });
+}
+
+test('technical printable coverage and raster DPI recalculate without persisting the report', async ({ page }) => {
+  test.setTimeout(90_000);
+  await createTechnicalArtworkProject(page, 'technical-printable-coverage.png');
+
+  await page.locator('#artworkWidth').fill('20');
+  await page.locator('#artworkWidth').dispatchEvent('change');
+  const partialReport = await page.evaluate(() => window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight());
+  expect(partialReport.summary.uncovered).toBeGreaterThan(0);
+  await expect(page.locator('#artworkQualitySummary')).toContainText('Uncovered surface IDs:');
+
+  await page.locator('#artworkWidth').fill('1000');
+  await page.locator('#artworkWidth').dispatchEvent('change');
+  const lowDpiReport = await page.evaluate(() => window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight());
+  expect(lowDpiReport.artworkQuality).toEqual([
+    expect.objectContaining({ quality: 'warning', issues: ['dpi-below-recommended'] }),
+  ]);
+  await expect(page.locator('#artworkQualitySummary')).toContainText('DPI warnings:');
+
+  await page.locator('#fillArtworkButton').click();
+  await expect.poll(() => page.evaluate(() => {
+    const report = window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight();
+    return report.summary;
+  })).toEqual({ covered: expect.any(Number), uncovered: 0, unknown: 0 });
+  const completeReport = await page.evaluate(() => window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight());
+  expect(completeReport.printableSurfaces.every((surface) => surface.status === 'covered')).toBe(true);
+
+  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  const snapshot = await page.evaluate(() => window.cartonBuilderApp.getState());
+  expect(snapshot).not.toHaveProperty('technicalArtworkPreflight');
+  await page.reload();
+  await expect(page.locator('#artworkStep')).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight().summary))
+    .toEqual(completeReport.summary);
+});
+
+test('technical DPI preflight accepts vector PDF without a raster warning', async ({ page }) => {
+  test.setTimeout(90_000);
+  await createTechnicalArtworkProject(page, 'technical-vector-placeholder.png');
+  page.once('dialog', (dialog) => dialog.accept());
+  await (await openEditAction(page, '#menuRemoveArtworkBtn')).click();
+  await expect(page.locator('#artworkFileName')).toHaveText('No file selected');
+  await loadGeneratedVectorPdf(page, 'vector-artwork.pdf', { replace: false });
+  const report = await page.evaluate(() => window.cartonBuilderApp.artwork.getTechnicalArtworkPreflight());
+  expect(report.artworkQuality).toEqual([
+    expect.objectContaining({ quality: 'vector', dpi: null, issues: [] }),
+  ]);
+  expect(report.issues.some((issue) => issue.code === 'dpi-below-recommended')).toBe(false);
+});
 
 test('snaps Technical side resize to an exact panel boundary', async ({ page }) => {
   test.setTimeout(90_000);

@@ -189,11 +189,41 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
 - Покрытие теперь включает isolated LINE/ARC boundary, competing-target
   distance ranking, global move hysteresis для semantic и legacy LINE/ARC,
   proportional coordinate path и Technical side/corner/crop E2E. Предыдущие
-  acceptance checks проходили, но не покрывали эти ветки; Stage 4C не
-  объявляется завершённым. Technical
-  printable coverage/DPI, оставшиеся flat PDF/artwork требования, весь
-  остальной Этап 4 и Release 1 gate остаются открытыми. Preview и Render не
-  подключались.
+  acceptance checks проходили, но не покрывали эти ветки; после исправлений
+  Stage 4C закрыта в этой semantic-snapping границе. Technical printable
+  coverage/DPI, оставшиеся flat PDF/artwork требования, весь остальной Этап 4
+  и Release 1 gate остаются открытыми. Preview и Render не подключались.
+
+### 2.10. Stage 4D — Technical printable-region coverage and DPI preflight (implementation present; acceptance open)
+
+- `src/artwork/technicalArtworkPreflight.js` добавляет чистый детерминированный
+  report для Technical: exact semantic roles классифицируются как printable,
+  glue/locking surfaces исключаются, неизвестные role/contour дают `unknown`.
+  Для текущих fixtures политика такова: RTE/STE исключают
+  `BODY.SIDE_SEAM.GLUE_FLAP`; TT_SL123 дополнительно исключает четыре
+  `CLOSURE.BOTTOM.SNAP_LOCK.*`; body panels, major/dust flaps и tuck tongues
+  остаются printable. Label не используется как fallback.
+- Coverage проверяется по canonical LINE/ARC contour: ARC временно
+  аппроксимируется только внутри preflight с максимальным шагом `π/96`,
+  `1e-5 mm` join/radius tolerance и `1e-6 mm` coverage tolerance. Scanline
+  union учитывает пересечения surface/artwork footprints, поэтому внутренние
+  gaps и ARC bulge не маскируются bbox/endpoints; повреждённый contour даёт
+  `unknown`.
+- Visible print layers учитывают global position, crop, independent/proportional
+  scale, rotation и flips; hidden, finish и пустые/invalid layers не считаются
+  покрытием. Raster quality использует effective DPI: `<300` — warning,
+  `>=300` — pass, vector — отдельный pass без DPI warning, неизвестные размеры —
+  `dpi-unknown`.
+- Technical UI показывает сводку и предоставляет read-only
+  `getTechnicalArtworkPreflight()`; report transient и пересчитывается, не
+  попадает в schema/archive/export. Quick `getExportWarnings()` не изменён.
+  Existing `technical-prepress-unavailable` и
+  `technicalPrepressUnavailable` guards сохранены.
+- Stage 4D implementation присутствует только для diagnostic
+  printable-region/DPI preflight; acceptance остаётся открытой до повторной
+  проверки после code-review corrections. Это не включает technical
+  prepress/production-assist, flat PDF/artwork acceptance, Preview, Render,
+  converter/material/physical evidence, весь Release 1 gate или весь Этап 4.
 
 ## 3. Ключевые технические решения
 
@@ -228,7 +258,7 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
 | Host protocol | `src/host/pbdHostProtocol.js` | `carton-host.v1`, validation и request/response lifecycle |
 | Carton domain | `src/carton/CartonDocument.js`, `QuickCartonDocument.js`, `TechnicalCartonDocument.js`, `technicalBoxModelAdapter.js` | Общий document API и адаптация technical geometry для Artwork |
 | Persistence | `src/project/projectSchema.js`, `projectArchive.js`, `ProjectStore.js`, `ProjectCheckpoint.js` | Schema v17, archive v5, Blob assets и transactional checkpoints |
-| Technical 2D/export | `src/model/dieline.js`, `src/artwork/ArtworkRenderer.js`, `src/artwork/snap.js`, `src/export/artworkExport.js`, `src/export/svgExport.js` | LINE/ARC/OPEN_CUT, masks, snapping и exports |
+| Technical 2D/export | `src/model/dieline.js`, `src/artwork/ArtworkRenderer.js`, `src/artwork/snap.js`, `src/artwork/technicalArtworkPreflight.js`, `src/export/artworkExport.js`, `src/export/svgExport.js` | LINE/ARC/OPEN_CUT, masks, snapping, printable/DPI preflight и exports |
 | Prepress guard | `src/prepress/prepressPreflight.js`, `src/prepress/productionDieline.js` | Fail-closed блокировка неподдержанного technical production-assist |
 | Plugin infrastructure | `scripts/lib/atomicManifestSync.mjs`, `offlinePolicy.mjs`, `pluginPackageVerification.mjs`, `scripts/sync-*.mjs`, `scripts/verify-vendored-plugins.mjs` | Детерминированный vendoring, integrity/offline/security gates |
 | Contracts/plugins | `src/workflow/`, `schemas/`, `vendor/plugins/` | Версионированные contracts, fixtures и автономные plugin artifacts |
@@ -236,20 +266,21 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
 
 ## 5. Подтверждённые проверки
 
-Последняя полная проверка выполнялась на кодовом HEAD `97cd937` в чистом
-integration worktree:
+Последняя полная проверка до текущего code-review correction была выполнена в
+dirty worktree
+ветки `codex/dual-workflow-stage1`:
 
 | Проверка | Результат |
 |---|---|
-| `npm run test:unit` — три последовательных запуска | `72/72` files, `456/456` tests PASS в каждом запуске |
-| Focused checkpoint/transaction Playwright | `12/12` PASS |
-| `technical workflow` Playwright selection | `4/4` PASS |
+| `npm run test:unit` | `77/77` files, `553/553` tests PASS |
+| Technical preflight unit | `9/9` PASS |
+| Technical printable/DPI Playwright | `5/5` PASS |
+| Full `tests/e2e/app.spec.js` | `52/52` PASS |
 | `npm run plugins:verify` | `2/2` vendored plugins PASS |
-| `npm run build` | PASS, 388 modules transformed |
+| `npm run build` | PASS, 394 modules transformed |
 | `npm run test:e2e:smoke` | `7/7` PASS |
-| PBD official `npm run build:plugin` | PASS; hashes совпадают с vendored artifact |
-| `git diff --check` | PASS |
-| Graphify | Обновлён: 3,851 nodes, 7,027 edges, 244 communities |
+| `git diff --check` | PASS (CRLF warnings only) |
+| Graphify | Обновлён: 4,035 nodes, 7,517 edges, 230 communities |
 
 Exact ARC fixture expectations зафиксированы независимо от fixture parser:
 RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoints
@@ -279,9 +310,13 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
   selection и global move hysteresis повторно подтверждены; Stage 4C закрыта.
   Это не закрывает technical printable coverage/DPI и оставшиеся flat
   PDF/artwork requirements.
-- DPI/coverage остаются общими Artwork checks; исключение glue/locking
-  surfaces из semantic printable coverage не подтверждено отдельным technical
-  preflight implementation/test.
+- Stage 4D diagnostic preflight реализован: semantic printable coverage
+  исключает glue/locking surfaces, проверяет LINE/ARC contours и transient
+  artwork footprints, а DPI report различает raster/vector/unknown. После
+  code-review исправлены ARC fail-closed coverage, invalid facade, invalid DPI
+  и contributor reporting; focused regression проходит, но Stage 4D
+  acceptance остаётся открытой до полного повторного gate. Это не снимает
+  production-assist guard и не является flat PDF/artwork acceptance.
 - Technical SVG download-level E2E для RTE, STE и TT_SL123 подтверждает один PBD
   metadata и один provenance; оставшиеся flat PDF/artwork requirements и их
   acceptance остаются открытыми до Release 1.
@@ -349,8 +384,8 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
 
 ## 8. Последовательность следующих шагов
 
-1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A–4C завершены отдельно):**
-   - technical printable-region coverage/DPI;
+1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A–4C завершены отдельно; Stage 4D acceptance open):**
+   - повторить полный Stage 4D acceptance gate после code-review correction;
    - оставшиеся flat PDF/artwork requirements и download-level acceptance;
    - повторить Quick full regression, technical autosave/reopen и archive
      round-trip.

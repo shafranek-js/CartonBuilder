@@ -17,6 +17,7 @@ import { ArtworkModel } from './ArtworkModel.js';
 import { ArtworkRenderer } from './ArtworkRenderer.js';
 import { HistoryManager } from './HistoryManager.js';
 import { ViewportModel } from './ViewportModel.js';
+import { analyzeTechnicalArtworkPreflight } from './technicalArtworkPreflight.js';
 import { loadArtworkFile, renderPdfWithLayers } from './fileLoader.js';
 import {
   getSnapOffset,
@@ -623,6 +624,11 @@ export function createArtworkApp({
     }));
   }
 
+  function getTechnicalArtworkPreflight() {
+    if (boxModel?.mode !== 'technical') return null;
+    return analyzeTechnicalArtworkPreflight({ carton: boxModel, artworks: getArtworks() });
+  }
+
   function getPreviewResourceDpi() {
     const bounds = boxModel.getBounds();
     const width = Math.max(1, svg?.clientWidth || 1);
@@ -847,6 +853,7 @@ export function createArtworkApp({
     controls.x.value = enabled ? round(reference.x) : '';
     controls.y.value = enabled ? round(reference.y) : '';
     const isTechnical = boxModel?.mode === 'technical';
+    const technicalPreflight = isTechnical ? getTechnicalArtworkPreflight() : null;
     const frame = isTechnical ? boxModel.getArtworkReferenceFrame?.() : null;
     const frontRelative = enabled ? computeFrontRelativeCoordinates(reference, frame) : null;
     if (controls.frontRelativeSection) controls.frontRelativeSection.hidden = !isTechnical || !enabled;
@@ -890,11 +897,26 @@ export function createArtworkApp({
     if (controls.previewQuality) controls.previewQuality.disabled = !enabled || !artwork.source?.vector;
     if (controls.renderQuality) controls.renderQuality.disabled = !enabled || !artwork.source?.vector;
     if (controls.qualitySummary) {
-      controls.qualitySummary.textContent = !enabled
-        ? t('qualityNoArtwork')
-        : artwork.source?.vector
-          ? t('qualityVectorSummary')
-          : t('qualityNativeSummary', { dpi: Math.round(dpi || 0) });
+      if (isTechnical && technicalPreflight) {
+        const uncoveredIds = technicalPreflight.printableSurfaces
+          .filter((surface) => surface.status === 'uncovered')
+          .map((surface) => surface.id)
+          .join(', ');
+        const dpiWarnings = technicalPreflight.artworkQuality
+          .filter((entry) => entry.quality === 'warning' || entry.quality === 'unknown')
+          .map((entry) => entry.dpi == null ? `${entry.name} (${t('technicalDpiUnknown')})` : `${entry.name} (${Math.round(entry.dpi)} DPI)`)
+          .join(', ');
+        const messages = [t('technicalCoverageSummary', technicalPreflight.summary)];
+        if (uncoveredIds) messages.push(t('technicalCoverageUncovered', { ids: uncoveredIds }));
+        if (dpiWarnings) messages.push(t('technicalDpiWarnings', { details: dpiWarnings }));
+        controls.qualitySummary.textContent = messages.join(' ');
+      } else {
+        controls.qualitySummary.textContent = !enabled
+          ? t('qualityNoArtwork')
+          : artwork.source?.vector
+            ? t('qualityVectorSummary')
+            : t('qualityNativeSummary', { dpi: Math.round(dpi || 0) });
+      }
     }
     const activeFinish = finishState(getActiveEntry());
     const hasFinish = enabled && activeFinish.outputRole !== 'print';
@@ -4202,6 +4224,7 @@ export function createArtworkApp({
     get originalBlob() { return originalBlob; },
     get previewBlob() { return previewBlob; },
     getArtworks,
+    getTechnicalArtworkPreflight: () => deepClone(getTechnicalArtworkPreflight()),
     getArtworksJson,
     getPrepressSettings,
     setPrepressSettings,
