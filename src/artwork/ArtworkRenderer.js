@@ -200,21 +200,37 @@ function appendDieline(documentRef, parent, model) {
   }
 }
 
-function appendSnapGuides(documentRef, parent, guides) {
+function appendSnapGuides(documentRef, parent, guides, zoom = 1) {
   const seen = new Set();
   for (const guide of guides || []) {
     const segment = guide?.segment;
-    if (!segment || seen.has(segment.id)) continue;
-    seen.add(segment.id);
+    const guideId = guide?.id || segment?.id;
+    if (seen.has(guideId)) continue;
+    seen.add(guideId);
+    const semanticKind = ['endpoint', 'intersection', 'panel-center', 'panel-boundary'].includes(guide?.kind)
+      ? guide.kind
+      : null;
+    const dataKind = semanticKind || segment?.kind || guide?.kind || 'dieline';
     const attributes = {
-      class: `snap-guide snap-guide-${segment.kind}`,
-      'data-snap-axis': segment.axis,
-      'data-snap-kind': segment.kind,
+      class: `snap-guide snap-guide-${dataKind}`,
+      'data-snap-axis': guide?.axis ?? segment?.axis,
+      'data-snap-kind': dataKind,
+      'data-snap-id': guideId,
+      'data-snap-source-ids': Array.isArray(guide?.sourceIds) ? guide.sourceIds.join('|') : null,
       'pointer-events': 'none',
     };
-    if (segment.geometryKind === 'ARC') {
+    if (semanticKind && semanticKind !== 'panel-boundary') {
+      parent.appendChild(svgElement(documentRef, 'circle', {
+        ...attributes,
+        class: `${attributes.class} snap-guide-point`,
+        cx: guide.point.x,
+        cy: guide.point.y,
+        r: Math.max(1.6, 3 / Math.max(0.01, zoom)),
+        fill: '#e6c84f',
+      }));
+    } else if (segment?.kind === 'ARC' || segment?.geometryKind === 'ARC') {
       parent.appendChild(svgElement(documentRef, 'path', { ...attributes, d: segmentPathData(segment) }));
-    } else {
+    } else if (segment) {
       parent.appendChild(svgElement(documentRef, 'line', {
         ...attributes,
         x1: segment.start.x,
@@ -497,7 +513,7 @@ export class ArtworkRenderer {
 
     if (showDieline) appendDieline(documentRef, target, this.model);
 
-    if (!preview && this.snapGuides.length) appendSnapGuides(documentRef, target, this.snapGuides);
+    if (!preview && this.snapGuides.length) appendSnapGuides(documentRef, target, this.snapGuides, this.viewport.zoom);
 
     if (showNames) {
       for (const panel of this.model.getPanels()) {

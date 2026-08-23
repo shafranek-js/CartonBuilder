@@ -167,8 +167,33 @@ CartonBuilder для Place Artwork и, позднее, общий UI Preview/Ren
   archive или exporter.
 - Покрыты identity, H/V flip и CW/CCW rotation, RTE/STE/TT_SL123, reference
   point changes, global moves, autosave/reload и скрытие панели в Quick.
-  Stage 4B закрыт только в этой UI-coordinate границе; весь Этап 4 и Release
-  1 gate остаются открытыми.
+   Stage 4B закрыт только в этой UI-coordinate границе; весь Этап 4 и Release
+   1 gate остаются открытыми.
+
+### 2.9. Stage 4C — Technical semantic snapping (complete)
+
+- Technical artwork snapping строит детерминированные semantic targets из
+  существующих projected LINE/ARC primitives и semantic surfaces: endpoints,
+  конечные LINE–LINE/LINE–ARC/ARC–ARC intersections, panel centers и точные
+  LINE/ARC panel boundaries. Отдельной geometry model не добавлено.
+- Move, independent/proportional side/corner resize и crop resize используют
+  общий screen-pixel threshold с zoom, transient targets и stable ids. После
+  code review исправлены fail-closed gaps в координатах proportional handle,
+  exact finite LINE/ARC boundary contact, global move hysteresis между
+  semantic/legacy LINE/ARC targets и distance-first candidate ranking после
+  release threshold; focused/full regression и reviewer acceptance пройдены.
+- Endpoint/intersection/center показываются point guides, panel boundary —
+  исходным LINE/ARC guide; каждый guide получает `data-snap-kind` и
+  `data-snap-id` и очищается при release/cancel/workflow/project change.
+  Targets не попадают в project schema, archive или exporter.
+- Покрытие теперь включает isolated LINE/ARC boundary, competing-target
+  distance ranking, global move hysteresis для semantic и legacy LINE/ARC,
+  proportional coordinate path и Technical side/corner/crop E2E. Предыдущие
+  acceptance checks проходили, но не покрывали эти ветки; Stage 4C не
+  объявляется завершённым. Technical
+  printable coverage/DPI, оставшиеся flat PDF/artwork требования, весь
+  остальной Этап 4 и Release 1 gate остаются открытыми. Preview и Render не
+  подключались.
 
 ## 3. Ключевые технические решения
 
@@ -248,9 +273,12 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
 - Artwork UI хранит global millimetre coordinates и дополнительно показывает
   read-only положение reference point относительно semantic panel `body.front`;
   relative values не persisted.
-- ARC nearest-point snapping реализован. Отдельные semantic endpoint,
-  line/arc intersection, panel-centre и panel-boundary targets не имеют полного
-  подтверждённого набора implementation/acceptance tests.
+- ARC nearest-point snapping и Stage 4C semantic endpoint/intersection,
+  panel-centre и panel-boundary targets реализованы и покрыты unit/fixture/
+  technical Playwright checks. Exact LINE/ARC contact, distance-first
+  selection и global move hysteresis повторно подтверждены; Stage 4C закрыта.
+  Это не закрывает technical printable coverage/DPI и оставшиеся flat
+  PDF/artwork requirements.
 - DPI/coverage остаются общими Artwork checks; исключение glue/locking
   surfaces из semantic printable coverage не подтверждено отдельным technical
   preflight implementation/test.
@@ -321,8 +349,7 @@ RTE — 19 ARC, STE — 20 ARC, TT_SL123 — 21 ARC. OPEN_CUT segments и endpoi
 
 ## 8. Последовательность следующих шагов
 
-1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A и 4B завершены отдельно):**
-   - endpoint/intersection/panel semantic snapping;
+1. **Закрыть остаток Этапа 4 / Release 1 (Stages 4A–4C завершены отдельно):**
    - technical printable-region coverage/DPI;
    - оставшиеся flat PDF/artwork requirements и download-level acceptance;
    - повторить Quick full regression, technical autosave/reopen и archive

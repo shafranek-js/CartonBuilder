@@ -42,6 +42,10 @@ class FakeSvgNode {
   replaceChildren(...children) {
     this.children = children;
   }
+
+  querySelectorAll() {
+    return [];
+  }
 }
 
 function descendants(node) {
@@ -146,4 +150,51 @@ describe('ArtworkRenderer crop geometry', () => {
       })));
     });
   }
+
+  it('renders semantic snap markers and exact boundary guides with diagnostics', () => {
+    const documentRef = { createElementNS: (_namespace, tagName) => new FakeSvgNode(tagName, documentRef) };
+    const svg = new FakeSvgNode('svg', documentRef);
+    const renderer = new ArtworkRenderer({
+      svg,
+      model: {
+        getBounds: () => ({ minX: 0, minY: 0, maxX: 100, maxY: 100 }),
+        getPanels: () => [],
+      },
+      artwork: { hasArtwork: false },
+      viewport: { zoom: 2, panX: 0, panY: 0 },
+      layers: { dieline: false, names: false, highlights: false, artwork: false },
+      onPointerStart() {},
+    });
+    renderer.setSnapGuides([
+      {
+        id: 'intersection:cross',
+        kind: 'intersection',
+        point: { x: 20, y: 30 },
+        sourceIds: ['a', 'b'],
+      },
+      {
+        id: 'panel-boundary:front:0',
+        kind: 'panel-boundary',
+        point: { x: 50, y: 40 },
+        sourceIds: ['body.front:boundary:0'],
+        segment: { kind: 'LINE', start: { x: 0, y: 40 }, end: { x: 100, y: 40 } },
+      },
+    ]);
+    renderer.renderScene(svg, {
+      preview: false,
+      showDieline: false,
+      showNames: false,
+      showHighlights: false,
+      showArtwork: false,
+    });
+
+    const nodes = descendants(svg);
+    const marker = nodes.find((node) => node.tagName === 'circle');
+    const boundary = nodes.find((node) => node.tagName === 'line' && node.getAttribute('data-snap-kind') === 'panel-boundary');
+    expect(marker?.getAttribute('data-snap-kind')).toBe('intersection');
+    expect(marker?.getAttribute('data-snap-id')).toBe('intersection:cross');
+    expect(marker?.getAttribute('data-snap-source-ids')).toBe('a|b');
+    expect(boundary?.getAttribute('data-snap-kind')).toBe('panel-boundary');
+    expect(boundary?.getAttribute('data-snap-id')).toBe('panel-boundary:front:0');
+  });
 });

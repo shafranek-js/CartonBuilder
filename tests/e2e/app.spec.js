@@ -184,6 +184,357 @@ async function createTechnicalArtworkProject(page, artworkName = 'technical-chec
   return frame;
 }
 
+async function snapTechnicalArtworkToTarget(page, kind, { bypass = false } = {}) {
+  const target = await page.evaluate(({ targetKind }) => {
+    const app = window.cartonBuilderApp;
+    const snapTargets = app.artwork.getSnapTargets();
+    const distanceToBoundary = (point, segment) => {
+      let best = Infinity;
+      for (let index = 0; index <= 32; index += 1) {
+        const fraction = index / 32;
+        const sample = segment.kind === 'ARC'
+          ? (() => {
+            const start = Math.atan2(segment.start.y - segment.center.y, segment.start.x - segment.center.x);
+            const end = Math.atan2(segment.end.y - segment.center.y, segment.end.x - segment.center.x);
+            const delta = segment.clockwise
+              ? ((start - end) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)
+              : ((end - start) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+            const angle = segment.clockwise ? start - delta * fraction : start + delta * fraction;
+            return {
+              x: segment.center.x + segment.radius * Math.cos(angle),
+              y: segment.center.y + segment.radius * Math.sin(angle),
+            };
+          })()
+          : {
+            x: segment.start.x + (segment.end.x - segment.start.x) * fraction,
+            y: segment.start.y + (segment.end.y - segment.start.y) * fraction,
+          };
+        best = Math.min(best, Math.hypot(point.x - sample.x, point.y - sample.y));
+      }
+      return best;
+    };
+    const candidates = snapTargets.semanticTargets.filter((entry) => entry.kind === targetKind && entry.point);
+    const boundaries = snapTargets.panelBoundaries;
+    const target = candidates.slice().sort((first, second) => {
+      const firstDistance = Math.min(...boundaries.map((boundary) => distanceToBoundary(first.point, boundary.segment)));
+      const secondDistance = Math.min(...boundaries.map((boundary) => distanceToBoundary(second.point, boundary.segment)));
+      return secondDistance - firstDistance || String(first.id).localeCompare(String(second.id));
+    })[0];
+    if (!target) throw new Error(`No semantic ${targetKind} target is available`);
+    const model = app.artwork.artwork;
+    model.setScaleX(0.03);
+    model.setScaleY(0.03);
+    model.setVisibleCenter(target.point.x, target.point.y);
+    app.artwork.render();
+    return {
+      id: target.id,
+      kind: target.kind,
+      point: { x: target.point.x, y: target.point.y },
+      halfExtents: {
+        x: model.displayedWidthMm / 2,
+        y: model.displayedHeightMm / 2,
+      },
+    };
+  }, { targetKind: kind });
+  const image = page.locator('#artworkWorkspace image.artwork-image').last();
+  const imageBox = await image.boundingBox();
+  if (!imageBox) throw new Error('Technical artwork image has no screen bounds');
+  const targetScreen = await page.evaluate((point) => {
+    const svg = document.getElementById('artworkWorkspace');
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = point.x;
+    svgPoint.y = point.y;
+    const screen = svgPoint.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, {
+    x: target.point.x + (kind === 'panel-center' ? 0 : target.halfExtents.x),
+    y: target.point.y + (kind === 'panel-center' ? 0 : target.halfExtents.y),
+  });
+  const start = {
+    x: imageBox.x + imageBox.width / 2,
+    y: imageBox.y + imageBox.height / 2,
+  };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  if (bypass) {
+    await page.keyboard.down('Control');
+    await page.mouse.move(targetScreen.x, targetScreen.y, { steps: 1 });
+    await page.keyboard.up('Control');
+    await expect(page.locator('.snap-guide')).toHaveCount(0);
+  } else {
+    await page.mouse.move(targetScreen.x, targetScreen.y, { steps: 1 });
+    const guide = page.locator(`.snap-guide[data-snap-kind="${kind}"]`);
+    const guideCount = await guide.count();
+    if (guideCount !== 1) {
+      const diagnostic = await page.evaluate(() => {
+        const app = window.cartonBuilderApp;
+        const svg = document.getElementById('artworkWorkspace');
+        const targets = app.artwork.getSnapTargets().semanticTargets;
+        return {
+          center: { x: app.artwork.artwork.centerXmm, y: app.artwork.artwork.centerYmm },
+          zoom: app.artwork.renderer.viewport.zoom,
+          guides: [...svg.querySelectorAll('.snap-guide')].map((node) => ({
+            kind: node.dataset.snapKind,
+            id: node.dataset.snapId,
+          })),
+          targetKinds: targets.reduce((counts, target) => {
+            counts[target.kind] = (counts[target.kind] || 0) + 1;
+            return counts;
+          }, {}),
+        };
+      });
+      throw new Error(`Expected semantic guide ${kind}; target=${JSON.stringify(target)} screen=${JSON.stringify(targetScreen)} diagnostic=${JSON.stringify(diagnostic)}`);
+    }
+    await expect(guide).toHaveAttribute('data-snap-id', target.id);
+    const snapped = await page.evaluate(() => ({
+      x: window.cartonBuilderApp.artwork.artwork.centerXmm,
+      y: window.cartonBuilderApp.artwork.artwork.centerYmm,
+    }));
+    const expectedCenter = kind === 'panel-center'
+      ? target.point
+      : {
+        x: target.point.x + target.halfExtents.x,
+        y: target.point.y + target.halfExtents.y,
+      };
+    expect(snapped.x).toBeCloseTo(expectedCenter.x, 4);
+    expect(snapped.y).toBeCloseTo(expectedCenter.y, 4);
+  }
+  await page.mouse.up();
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
+  return target;
+}
+
+async function chooseTechnicalVerticalBoundary(page) {
+  return page.evaluate(() => {
+    const app = window.cartonBuilderApp;
+    const target = app.artwork.getSnapTargets().panelBoundaries
+      .filter((entry) => entry.segment?.kind === 'LINE')
+      .filter((entry) => Math.abs(entry.segment.start.x - entry.segment.end.x) < 1e-7)
+      .sort((first, second) => (
+        first.segment.start.x - second.segment.start.x
+        || String(first.id).localeCompare(String(second.id))
+      ))[0];
+    if (!target) throw new Error('No vertical Technical panel boundary is available');
+    return {
+      id: target.id,
+      x: target.segment.start.x,
+      y: (target.segment.start.y + target.segment.end.y) / 2,
+    };
+  });
+}
+
+async function prepareTechnicalSideBoundary(page) {
+  const target = await chooseTechnicalVerticalBoundary(page);
+  await page.evaluate(({ x, y }) => {
+    const app = window.cartonBuilderApp;
+    const model = app.artwork.artwork;
+    model.setScaleX(0.08);
+    model.setScaleY(0.08);
+    model.setVisibleCenter(x - model.displayedWidthMm / 2 - 2, y);
+    app.artwork.render();
+  }, target);
+  return target;
+}
+
+async function dragTechnicalSideToBoundary(page, target) {
+  const handle = page.locator('.resize-side-handle[data-resize-side="e"]');
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error('Technical east resize handle has no screen bounds');
+  const targetScreen = await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById('artworkWorkspace');
+    const point = svg.createSVGPoint();
+    point.x = x;
+    point.y = y;
+    const screen = point.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, target);
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetScreen.x, targetScreen.y, { steps: 2 });
+  const guide = page.locator(`.snap-guide[data-snap-kind="panel-boundary"][data-snap-id="${target.id}"]`);
+  if (await guide.count() !== 1) {
+    const diagnostic = await page.evaluate((screenPoint) => {
+      const app = window.cartonBuilderApp;
+      const model = app.artwork.artwork;
+      const svg = document.getElementById('artworkWorkspace');
+      return {
+        center: { x: model.centerXmm, y: model.centerYmm },
+        visibleCenter: model.visibleCenter,
+        width: model.displayedWidthMm,
+        height: model.displayedHeightMm,
+        handleBox: document.querySelector('.resize-side-handle[data-resize-side="e"]')?.getBoundingClientRect().toJSON(),
+        elementAtHandle: (() => {
+          const box = document.querySelector('.resize-side-handle[data-resize-side="e"]')?.getBoundingClientRect();
+          const node = box ? document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) : null;
+          return node?.outerHTML?.slice(0, 240) || node?.getAttribute?.('data-resize-side') || node?.className?.baseVal || node?.className || node?.tagName;
+        })(),
+        targetScreen: screenPoint,
+        elementAtTarget: document.elementFromPoint(screenPoint.x, screenPoint.y)?.className?.baseVal
+          || document.elementFromPoint(screenPoint.x, screenPoint.y)?.className
+          || document.elementFromPoint(screenPoint.x, screenPoint.y)?.tagName,
+        guides: [...svg.querySelectorAll('.snap-guide')].map((node) => ({
+          kind: node.dataset.snapKind,
+          id: node.dataset.snapId,
+        })),
+        targetCount: app.artwork.getSnapTargets().panelBoundaries.length,
+      };
+    }, targetScreen);
+    throw new Error(`Expected exact Technical side boundary guide: ${JSON.stringify(diagnostic)}`);
+  }
+  const contact = await page.evaluate((boundaryX) => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return { x: model.visibleCenter.x + model.displayedWidthMm / 2, boundaryX };
+  }, target.x);
+  expect(contact.x).toBeCloseTo(contact.boundaryX, 4);
+  await page.mouse.up();
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
+}
+
+async function prepareTechnicalProportionalBoundary(page) {
+  const target = await chooseTechnicalVerticalBoundary(page);
+  await page.evaluate(({ x, y }) => {
+    const app = window.cartonBuilderApp;
+    const model = app.artwork.artwork;
+    model.setScaleX(0.08);
+    model.setScaleY(0.08);
+    const halfWidth = model.displayedWidthMm / 2;
+    const halfHeight = model.displayedHeightMm / 2;
+    const desiredFactor = 1 + 2 / Math.max(0.001, halfWidth);
+    model.setVisibleCenter(
+      x - halfWidth - 2,
+      y - desiredFactor * halfHeight,
+    );
+    app.artwork.render();
+  }, target);
+  return target;
+}
+
+async function prepareTechnicalCropBoundary(page) {
+  const target = await chooseTechnicalVerticalBoundary(page);
+  await page.evaluate(({ x, y }) => {
+    const app = window.cartonBuilderApp;
+    const model = app.artwork.artwork;
+    model.setScaleX(0.08);
+    model.setScaleY(0.08);
+    model.setVisibleCenter(x - model.displayedWidthMm / 2 + 2, y);
+    app.artwork.render();
+  }, target);
+  return target;
+}
+
+async function dragTechnicalProportionalCornerToBoundary(page, target) {
+  if (await page.locator('#constrainProportionsBtn').getAttribute('aria-pressed') !== 'true') {
+    await page.locator('#constrainProportionsBtn').click();
+  }
+  const handle = page.locator('.resize-handle[data-handle="se"]');
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error('Technical southeast resize handle has no screen bounds');
+  const initialGeometry = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    const anchor = model.getReferencePosition();
+    const start = {
+      x: model.visibleCenter.x + model.displayedWidthMm / 2,
+      y: model.visibleCenter.y + model.displayedHeightMm / 2,
+    };
+    const factor = (0 - anchor.x) / (start.x - anchor.x);
+    return {
+      anchor,
+      start,
+      expectedY: anchor.y + (start.y - anchor.y) * factor,
+    };
+  });
+  const targetScreen = await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById('artworkWorkspace');
+    const point = svg.createSVGPoint();
+    point.x = x;
+    point.y = y;
+    const screen = point.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, target);
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetScreen.x, targetScreen.y, { steps: 2 });
+  const guide = page.locator(`.snap-guide[data-snap-kind="panel-boundary"][data-snap-id="${target.id}"]`);
+  if (await guide.count() !== 1) {
+    const diagnostic = await page.evaluate((boundary) => {
+      const app = window.cartonBuilderApp;
+      const targets = app.artwork.getSnapTargets();
+      return {
+        center: app.artwork.artwork.visibleCenter,
+        width: app.artwork.artwork.displayedWidthMm,
+        height: app.artwork.artwork.displayedHeightMm,
+        boundary,
+        initialGeometry: boundary.initialGeometry,
+        rawPoint: app.artwork.renderer.clientToModel(
+          boundary.targetScreen.x,
+          boundary.targetScreen.y,
+        ),
+        semantic: targets.panelBoundaries.find((entry) => entry.id === boundary.id),
+        legacy: targets.segments.x.filter((entry) => Math.abs(entry.coordinate - boundary.x) < 1e-7),
+        guides: [...document.querySelectorAll('#artworkWorkspace .snap-guide')].map((node) => ({
+          kind: node.dataset.snapKind,
+          id: node.dataset.snapId,
+        })),
+      };
+    }, { ...target, initialGeometry, targetScreen });
+    throw new Error(`Expected exact Technical proportional boundary guide: ${JSON.stringify(diagnostic)}`);
+  }
+  const contact = await page.evaluate(({ x, y }) => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return {
+      x: model.visibleCenter.x + model.displayedWidthMm / 2,
+      y: model.visibleCenter.y + model.displayedHeightMm / 2,
+      targetX: x,
+      targetY: y,
+    };
+  }, target);
+  expect(contact.x).toBeCloseTo(contact.targetX, 4);
+  expect(contact.y).toBeCloseTo(contact.targetY, 4);
+  await page.mouse.up();
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
+}
+
+async function dragTechnicalCropEastToBoundary(page, target) {
+  await page.locator('#cropFrameButton').click();
+  const handle = page.locator('.crop-side-handle[data-crop-edge="e"]');
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error('Technical east crop handle has no screen bounds');
+  const targetScreen = await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById('artworkWorkspace');
+    const point = svg.createSVGPoint();
+    point.x = x;
+    point.y = y;
+    const screen = point.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, target);
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetScreen.x, targetScreen.y, { steps: 2 });
+  const guide = page.locator(`.snap-guide[data-snap-kind="panel-boundary"][data-snap-id="${target.id}"]`);
+  if (await guide.count() !== 1) {
+    const diagnostic = await page.evaluate(() => ({
+      center: window.cartonBuilderApp.artwork.artwork.visibleCenter,
+      crop: window.cartonBuilderApp.artwork.artwork.crop,
+      guides: [...document.querySelectorAll('#artworkWorkspace .snap-guide')].map((node) => ({
+        kind: node.dataset.snapKind,
+        id: node.dataset.snapId,
+      })),
+    }));
+    throw new Error(`Expected exact Technical crop boundary guide: ${JSON.stringify(diagnostic)}`);
+  }
+  await page.mouse.up();
+  await expect(page.locator('.snap-guide')).toHaveCount(0);
+  await page.locator('#cropFrameButton').click();
+  const crop = await page.evaluate(() => {
+    const model = window.cartonBuilderApp.artwork.artwork;
+    return {
+      right: model.centerXmm + model.crop.x + model.crop.width - model.unrotatedWidthMm / 2,
+      crop: model.crop,
+    };
+  });
+  expect(crop.right).toBeCloseTo(target.x, 4);
+}
+
 async function assertTechnicalRestoreRoundTrip(page, cartonType) {
   await chooseWorkflow(page, 'technical');
   const frame = page.frameLocator('#technicalHostFrame');
@@ -850,6 +1201,67 @@ for (const phase of [
     expect(await captureCheckpointFingerprint(page)).toEqual(before);
   });
 }
+
+for (const cartonType of ['RTE', 'STE', 'TT_SL123']) {
+  test(`snaps Technical artwork to semantic targets for ${cartonType}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    const frame = await createTechnicalArtworkProject(page, `semantic-${cartonType}.png`);
+    if (cartonType !== 'RTE') {
+      await page.locator('.step[data-step-target="box"]').click();
+      await frame.locator('#cartonType').selectOption(cartonType);
+      await expect(page.locator('#technicalHostValidation')).toHaveText(
+        'Structural VALID · Geometry VALID · Contract VALID',
+      );
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.locator('.step[data-step-target="artwork"]').click();
+      await expect(page.locator('#artworkStep')).toBeVisible({ timeout: 20_000 });
+      await loadGeneratedPng(page, `semantic-${cartonType}.png`);
+    }
+
+    await snapTechnicalArtworkToTarget(page, 'endpoint');
+    await snapTechnicalArtworkToTarget(page, 'intersection');
+    await snapTechnicalArtworkToTarget(page, 'panel-center');
+    await snapTechnicalArtworkToTarget(page, 'panel-boundary');
+    await snapTechnicalArtworkToTarget(page, 'panel-center', { bypass: true });
+
+    const savedPosition = await page.evaluate(() => ({
+      x: window.cartonBuilderApp.artwork.artwork.centerXmm,
+      y: window.cartonBuilderApp.artwork.artwork.centerYmm,
+    }));
+    if (cartonType === 'RTE') {
+      await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+      await page.reload();
+      await expect(page.locator('#artworkStep')).toBeVisible({ timeout: 20_000 });
+      await expect(page.locator('#artworkFileName')).toHaveText(`semantic-${cartonType}.png`);
+      await expect.poll(() => page.evaluate(() => ({
+        x: window.cartonBuilderApp.artwork.artwork.centerXmm,
+        y: window.cartonBuilderApp.artwork.artwork.centerYmm,
+      }))).toEqual(savedPosition);
+      await expect(page.locator('.snap-guide')).toHaveCount(0);
+    }
+  });
+}
+
+test('snaps Technical side resize to an exact panel boundary', async ({ page }) => {
+  test.setTimeout(90_000);
+  await createTechnicalArtworkProject(page, 'semantic-side-resize.png');
+  const target = await prepareTechnicalSideBoundary(page);
+  await dragTechnicalSideToBoundary(page, target);
+});
+
+test('snaps Technical proportional corner resize to an exact panel boundary', async ({ page }) => {
+  test.setTimeout(90_000);
+  await createTechnicalArtworkProject(page, 'semantic-proportional-resize.png');
+  const target = await prepareTechnicalProportionalBoundary(page);
+  await dragTechnicalProportionalCornerToBoundary(page, target);
+});
+
+test('snaps Technical crop resize to a panel boundary', async ({ page }) => {
+  test.setTimeout(90_000);
+  await createTechnicalArtworkProject(page, 'semantic-crop.png');
+  const target = await prepareTechnicalCropBoundary(page);
+  await dragTechnicalCropEastToBoundary(page, target);
+});
 
 test('completes the three-step artwork workflow and exports every deliverable', async ({ page }) => {
   test.setTimeout(90_000);

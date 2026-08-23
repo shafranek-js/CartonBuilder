@@ -2126,6 +2126,7 @@ export function createArtworkApp({
       resizeFixedSide: detail.side ? fixedSideBySide[detail.side] : null,
       resizeFixedCorner: detail.corner ? fixedCornerByCorner[detail.corner] : null,
       activeSnapTargets: {},
+      activeSnapTarget: null,
     };
     svg.setPointerCapture(event.pointerId);
     render();
@@ -2295,9 +2296,8 @@ export function createArtworkApp({
         x: gesture.resizeStartPoint.x - anchor.x,
         y: gesture.resizeStartPoint.y - anchor.y,
       };
-      let best = null;
-      for (const axis of ['x', 'y']) {
-        if (Math.abs(vector[axis]) < 1e-9) continue;
+      const axis = Math.abs(vector.x) >= Math.abs(vector.y) ? 'x' : 'y';
+      if (Math.abs(vector[axis]) >= 1e-9) {
         const resolved = getResizeSnapFactor({
           candidateFactor: nextFactor,
           anchor,
@@ -2311,13 +2311,8 @@ export function createArtworkApp({
           activeTarget: activeTargets.corner,
           point,
         });
-        if (!best || Math.abs(resolved.factor - nextFactor) < Math.abs(best.factor - nextFactor)) {
-          best = resolved;
-        }
-      }
-      if (best) {
-        snappedFactor = best.factor;
-        keepTarget('corner', best.target);
+        snappedFactor = resolved.factor;
+        keepTarget('corner', resolved.target);
       }
     }
     artwork.setScaleX(gesture.startScaleX * snappedFactor);
@@ -2339,7 +2334,7 @@ export function createArtworkApp({
         y: gesture.startCenter.y + point.y - gesture.startPoint.y,
       };
       let snapped = candidate;
-      if (!event.altKey) {
+      if (!event.altKey && !event.ctrlKey && !event.metaKey) {
         const offset = getSnapOffset(
           candidate,
           {
@@ -2348,11 +2343,20 @@ export function createArtworkApp({
           },
           buildSnapTargets(boxModel),
           SNAP_SCREEN_PX / viewport.zoom,
+          {
+            activeTarget: gesture.activeSnapTarget,
+            releaseThreshold: SNAP_RELEASE_SCREEN_PX / viewport.zoom,
+          },
         );
         snapped = {
           x: candidate.x + offset.dx,
           y: candidate.y + offset.dy,
         };
+        gesture.activeSnapTarget = offset.target || null;
+        renderer.setSnapGuides(offset.targets || []);
+      } else {
+        gesture.activeSnapTarget = null;
+        renderer.setSnapGuides([]);
       }
       artwork.setVisibleCenter(snapped.x, snapped.y);
     } else if (gesture.type === 'resize') {
@@ -2385,6 +2389,7 @@ export function createArtworkApp({
     }
     gesture = null;
     renderer.setSnapGuides([]);
+    renderer.render();
     svg.classList.remove('canvas-panning');
     releasePointerCapture(pointerId);
   }
@@ -3949,6 +3954,8 @@ export function createArtworkApp({
     artworks.length = 0;
     activeArtworkIndex = -1;
     selectedArtworkIndices.clear();
+    gesture = null;
+    renderer.setSnapGuides([]);
     artwork = new ArtworkModel();
     originalBlob = null;
     previewBlob = null;
@@ -3964,6 +3971,9 @@ export function createArtworkApp({
   }
 
   async function restoreProject({ snapshot, artworkBlobs = [], technicalAssets = null }, { schedule = true } = {}) {
+    gesture = null;
+    renderer.setSnapGuides([]);
+    resetCropInteraction({ updateUi: false });
     const quickBox = snapshot.cartonSource?.mode === 'quick'
       ? snapshot.cartonSource.box
       : snapshot.box;
@@ -4168,6 +4178,7 @@ export function createArtworkApp({
     history,
     layers,
     layerLocks,
+    getSnapTargets: () => buildSnapTargets(boxModel),
     render,
     fitToScreen: () => {
       renderer.fitToScreen();

@@ -6,6 +6,7 @@ import { TechnicalCartonDocument } from '../../../src/carton/TechnicalCartonDocu
 import { createTechnicalBoxModelAdapter } from '../../../src/carton/technicalBoxModelAdapter.js';
 import { getDielineSegments, getPanelMaskPath } from '../../../src/model/dieline.js';
 import { createTechnicalSvgExport } from '../../../src/export/technicalSvgExport.js';
+import { buildSnapTargets } from '../../../src/artwork/snap.js';
 
 const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/workflow/fixtures');
 const expectedArcCounts = { rte: 19, ste: 20, tt_sl123: 21 };
@@ -81,6 +82,28 @@ describe('technical artwork compatibility model', () => {
         expect(consumed.some((item) => item.id === primitive.id && item.role === primitive.role)).toBe(true);
       }
     });
+  }
+
+  for (const name of ['rte', 'ste', 'tt_sl123']) {
+    for (const [transformName, transform] of Object.entries(presentationTransforms)) {
+      it(`builds semantic snapping targets from projected ${name.toUpperCase()} ${transformName} geometry`, async () => {
+        const document = await TechnicalCartonDocument.create(loadFixture(name));
+        const sourceSerialization = document.serialize();
+        const sourceSvg = document.getCanonicalSemanticSvg();
+        const adapter = createTechnicalBoxModelAdapter(withPresentationTransform(document, transform));
+        const targets = buildSnapTargets(adapter);
+
+        expect(targets.endpoints.length).toBeGreaterThan(0);
+        expect(targets.intersections.length).toBeGreaterThan(0);
+        expect(targets.panelCenters.length).toBeGreaterThan(0);
+        expect(targets.panelBoundaries.length).toBeGreaterThan(0);
+        expect(targets.targets.every((target) => Number.isFinite(target.point.x) && Number.isFinite(target.point.y))).toBe(true);
+        expect(targets.panelBoundaries.every((target) => ['LINE', 'ARC'].includes(target.segment.kind))).toBe(true);
+        expect(targets.panelBoundaries.some((target) => target.segment.kind === 'ARC')).toBe(true);
+        expect(document.serialize()).toEqual(sourceSerialization);
+        expect(document.getCanonicalSemanticSvg()).toEqual(sourceSvg);
+      });
+    }
   }
 
   for (const name of ['rte', 'ste', 'tt_sl123']) {
