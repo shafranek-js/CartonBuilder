@@ -83,8 +83,10 @@ test('loads vendored Viewer in declared sandboxed iframe, renders 3D WebGL viewp
   expect(csp).toContain("base-uri 'none'");
   expect(csp).toContain("form-action 'none'");
 
-  // Verify UI controls and options
-  await expect(frame.locator('#fitBtn')).toBeVisible();
+  // Embedded mode waits for host:init and hides standalone-only controls.
+  await expect(frame.locator('.fileBtn')).toBeHidden();
+  await expect(frame.locator('#fitBtn')).toBeHidden();
+  await expect(frame.locator('#saveGlbBtn')).toBeHidden();
   await expect(frame.locator('#displayModeSel')).toBeVisible();
   await expect(frame.locator('#gridChk')).toBeChecked();
 

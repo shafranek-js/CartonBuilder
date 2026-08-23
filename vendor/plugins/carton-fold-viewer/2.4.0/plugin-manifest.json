@@ -5,10 +5,10 @@
   "name": "CartonFoldViewer",
   "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
   "entrypoint": "index.html",
-  "sourceCommit": "943fcfc336300986cd97af2666538b0a27c8ad5d",
+  "sourceCommit": "4be5ecee7254ee0e02867d1906e3a5d1b47bd138",
   "artifact": {
-    "byteLength": 1068194,
-    "sha256": "d4d9bb1db45045fd634563b5cf8b43c1478aeede84735d765c17233bead6540b"
+    "byteLength": 1085940,
+    "sha256": "f6c29128850166c00d679862d3155697467b0d13edd55d06baa50a086e9f650e"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -38,8 +38,8 @@
     },
     {
       "path": "index.html",
-      "byteLength": 1068194,
-      "sha256": "d4d9bb1db45045fd634563b5cf8b43c1478aeede84735d765c17233bead6540b"
+      "byteLength": 1085940,
+      "sha256": "f6c29128850166c00d679862d3155697467b0d13edd55d06baa50a086e9f650e"
     },
     {
       "path": "runtime/animation/fold-animations.js",
@@ -89,7 +89,7 @@
     {
       "path": "runtime/package-manifest.json",
       "byteLength": 2253,
-      "sha256": "3665276d44007e534bafa8f36ae410af2161a243930b3d5bff9324c44314c996"
+      "sha256": "f4fbda3a259de6ba83eb2a495ce160f3d974322c2883c9297261e16e0714089f"
     },
     {
       "path": "runtime/package.json",

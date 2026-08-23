@@ -1,7 +1,7 @@
 {
   "packageName": "@cartonbuilder/fold-runtime",
   "packageVersion": "2.4.0",
-  "viewerCommit": "943fcfc336300986cd97af2666538b0a27c8ad5d",
+  "viewerCommit": "4be5ecee7254ee0e02867d1906e3a5d1b47bd138",
   "files": [
     {
       "path": "animation/fold-animations.js",
