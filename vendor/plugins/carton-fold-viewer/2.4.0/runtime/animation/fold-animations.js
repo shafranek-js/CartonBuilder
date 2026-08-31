@@ -52,33 +52,6 @@ function buildSimultaneousAnimation(parsed) {
       tracks.push(new THREE.NumberKeyframeTrack(`${p.nodeName}__mesh.morphTargetInfluences[0]`, [0, 0.7, 1], [0, 0, 1]));
     }
   }
-
-  // Dynamic kinematic bend compensation for tuck-insertion relations in simultaneous animation
-  for (const r of (parsed.metadata?.interactions || [])) {
-    if (r.type === 'tuck-insertion' && r.closureFoldId && r.tongueFoldId) {
-      const cf = parsed.folds[r.closureFoldId], tf = parsed.folds[r.tongueFoldId];
-      if (cf && tf && parsed.panels[tf.childPanelId]) {
-        const midC = [(cf.line.a[0] + cf.line.b[0]) / 2, (cf.line.a[1] + cf.line.b[1]) / 2];
-        const midT = [(tf.line.a[0] + tf.line.b[0]) / 2, (tf.line.a[1] + tf.line.b[1]) / 2];
-        const d2d = Math.hypot(midT[0] - midC[0], midT[1] - midC[1]);
-        const targetDepth = parsed.dimensions.W || parsed.dimensions.width || parsed.dimensions.widthMm || 60.0;
-        const comp = targetDepth - d2d;
-        if (comp > 0.05 && d2d > 0.1) {
-          const n = [(midT[0] - midC[0]) / d2d, (midT[1] - midC[1]) / d2d];
-          const tfNode = parsed.panels[tf.childPanelId].nodeName;
-          const tfSpec = parsed.specs?.find(s => s.id === tf.childPanelId);
-          const baseX = (tfSpec?.translation?.[0] || 0) * 0.001;
-          const baseY = (tfSpec?.translation?.[1] || 0) * 0.001;
-          tracks.push(new THREE.VectorKeyframeTrack(
-            `${tfNode}.position`,
-            [0, 1],
-            [baseX, baseY, 0, baseX + n[0] * comp * 0.001, baseY + n[1] * comp * 0.001, 0]
-          ));
-        }
-      }
-    }
-  }
-
   return new THREE.AnimationClip('Fold_Simultaneous', 1, tracks);
 }
 

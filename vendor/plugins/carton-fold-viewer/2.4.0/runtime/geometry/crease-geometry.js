@@ -37,6 +37,14 @@ export function resolveCreaseProfile(metadata, dims, fold = null) {
   };
 }
 
+export function hasFiniteCreaseProfile(profile) {
+  return profile?.source === 'svg'
+    && Number.isFinite(profile.creaseWidthMm)
+    && profile.creaseWidthMm > 0
+    && Number.isFinite(profile.bendRadiusMm)
+    && profile.bendRadiusMm > 0;
+}
+
 function rotateAroundAxis(v, axis, angle) {
   return v.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, angle));
 }
@@ -237,7 +245,7 @@ function creaseShapeArraysAndNormals(
   return { positions: pos, normals: norm };
 }
 
-function creaseIndices(segments, isFlipped = false) {
+function creaseIndices(segments, isFlipped = false, includeEndpointRims = true) {
   // Per q: 8 vertices per slice:
   //   k=0: outer s0 (cyl normal)
   //   k=1: inner s0 (cyl normal)
@@ -285,11 +293,12 @@ function creaseIndices(segments, isFlipped = false) {
     }
   }
 
+  const renderedRims = includeEndpointRims ? rims : [];
   return {
-    indices: [...outer, ...inner, ...rims],
+    indices: [...outer, ...inner, ...renderedRims],
     outerCount: outer.length,
     innerCount: inner.length,
-    rimsCount: rims.length
+    rimsCount: renderedRims.length
   };
 }
 
@@ -302,7 +311,12 @@ export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, fl
   const isFlipped = (u.x * n.y - u.y * n.x) < 0;
 
   const seg = 16;
-  const { indices, outerCount, innerCount, rimsCount } = creaseIndices(seg, isFlipped);
+  // A canonical zero-width hinge still needs its curved outer/inner skins so
+  // the folded carton does not look razor-sharp. Its endpoint rims collapse
+  // into radial triangle fans, however, so only certified finite creases get
+  // physical end caps.
+  const includeEndpointRims = hasFiniteCreaseProfile(profile);
+  const { indices, outerCount, innerCount, rimsCount } = creaseIndices(seg, isFlipped, includeEndpointRims);
   const base = creaseShapeArraysAndNormals(
     fold,
     parsed,
@@ -320,7 +334,7 @@ export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, fl
   g.setIndex(indices);
   g.addGroup(0, outerCount, 0);
   g.addGroup(outerCount, innerCount, 1);
-  g.addGroup(outerCount + innerCount, rimsCount, 2);
+  if (rimsCount > 0) g.addGroup(outerCount + innerCount, rimsCount, 2);
   if (flatNetUv) applyFlatNetUv(g, flatNetUv, parentOrigin);
   g.morphTargetsRelative = true;
 

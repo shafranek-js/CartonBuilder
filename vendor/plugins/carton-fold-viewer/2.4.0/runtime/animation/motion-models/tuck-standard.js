@@ -36,10 +36,9 @@ export function evaluateTuckStandard(t) {
   return { closureFactor, tongueFactor };
 }
 
-import * as THREE from 'three';
-
 /**
- * Generates Three.js quaternion, position, and morph animation tracks for a tuck relation
+ * Generates quaternion and optional finite-crease morph tracks for a tuck relation.
+ * The tongue node position remains the canonical child hinge translation.
  */
 export function solveTuckStandardTracks({ relation, start, duration, parsed, tracks, makeQuatTrack, makeCreaseMorphTracks }) {
   const cf = parsed.folds[relation.closureFoldId], tf = parsed.folds[relation.tongueFoldId];
@@ -55,31 +54,4 @@ export function solveTuckStandardTracks({ relation, start, duration, parsed, tra
   tracks.push(makeQuatTrack(tfNode, tf.line.axis, tf.targetAngleDeg, times, tongueFactors));
   tracks.push(...makeCreaseMorphTracks(cf, times, closureFactors));
   tracks.push(...makeCreaseMorphTracks(tf, times, tongueFactors));
-
-  // Dynamic kinematic bend compensation:
-  // In 2D CAD dielines, major flaps are drafted shorter by 1x caliper (d2d = W - t).
-  // During physical 3D folding (closureFactor > 0), outer corner bend expansion reaches full box depth W.
-  // We dynamically translate the tongue hinge node in local space so that at Fold=0% it is 0,
-  // and at Fold=100% the tongue tucks flush along the mating wall with zero collision.
-  const midC = [(cf.line.a[0] + cf.line.b[0]) / 2, (cf.line.a[1] + cf.line.b[1]) / 2];
-  const midT = [(tf.line.a[0] + tf.line.b[0]) / 2, (tf.line.a[1] + tf.line.b[1]) / 2];
-  const d2d = Math.hypot(midT[0] - midC[0], midT[1] - midC[1]);
-  const targetDepth = parsed.dimensions.W || parsed.dimensions.width || parsed.dimensions.widthMm || 60.0;
-  const comp = targetDepth - d2d;
-
-  if (comp > 0.05 && d2d > 0.1) {
-    const n = [(midT[0] - midC[0]) / d2d, (midT[1] - midC[1]) / d2d];
-    const tfSpec = parsed.specs?.find(s => s.id === tf.childPanelId);
-    const baseX = (tfSpec?.translation?.[0] || 0) * 0.001;
-    const baseY = (tfSpec?.translation?.[1] || 0) * 0.001;
-    const posValues = [];
-    closureFactors.forEach(f => {
-      posValues.push(
-        baseX + n[0] * comp * 0.001 * f,
-        baseY + n[1] * comp * 0.001 * f,
-        0
-      );
-    });
-    tracks.push(new THREE.VectorKeyframeTrack(`${tfNode}.position`, times, posValues));
-  }
 }

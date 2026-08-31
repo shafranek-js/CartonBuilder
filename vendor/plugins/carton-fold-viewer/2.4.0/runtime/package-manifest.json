@@ -1,17 +1,17 @@
 {
   "packageName": "@cartonbuilder/fold-runtime",
   "packageVersion": "2.4.0",
-  "viewerCommit": "1ea901119f211e468c00e9eda9092769a9485fdb",
+  "viewerCommit": "d48c5405ecdbe8018d0eda5dc51c3f08fda6f52a",
   "files": [
     {
       "path": "animation/fold-animations.js",
-      "byteLength": 8816,
-      "sha256": "b462228479a74faec3e6857871a66367679a4929b927258929398eaa3de410b5"
+      "byteLength": 7407,
+      "sha256": "c2f0445ac326605f29309e2f5dad2bf0511a888a5692eb3d9522836f3be0c04e"
     },
     {
       "path": "animation/motion-models/tuck-standard.js",
-      "byteLength": 3854,
-      "sha256": "577195d0f5d0c258e7d43b43923e1122e8afb53dc8cd4712f4e87d9bcbc6a997"
+      "byteLength": 2516,
+      "sha256": "3d5ad9838890e6ef910565ffb916c7988d5ff5787e3be0c3d39128dfe8cfce15"
     },
     {
       "path": "FoldRuntime.js",
@@ -20,8 +20,8 @@
     },
     {
       "path": "geometry/crease-geometry.js",
-      "byteLength": 14165,
-      "sha256": "950d89dd9af1e0596fbb78a0992353b3d87f16d4cfe8c87b5cf8ae1cf4490670"
+      "byteLength": 14870,
+      "sha256": "4bdab083398348aed4125be83c49b5d599b63c10d9394b36234f177e698d35ef"
     },
     {
       "path": "geometry/flat-net-uv.js",
@@ -45,8 +45,8 @@
     },
     {
       "path": "model/model-builder.js",
-      "byteLength": 3314,
-      "sha256": "a5d8e7020117e56af387ead7483f72b4df706c6726d89c1e8145b921ada41ec3"
+      "byteLength": 3611,
+      "sha256": "5250150081428c33e9b5c0434781e870fe574183a3234357f28039b12b848c37"
     },
     {
       "path": "package.json",

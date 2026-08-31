@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { parseSemanticCartonSvg } from '../pbd/semantic-svg.js';
 import { makePanelGeometry } from '../geometry/panel-geometry.js';
-import { makeFiniteCreaseGeometry, creaseMeshName } from '../geometry/crease-geometry.js';
+import { hasFiniteCreaseProfile, makeFiniteCreaseGeometry, creaseMeshName } from '../geometry/crease-geometry.js';
 import { makeTechMaterials, makeCreaseMaterial } from '../geometry/materials.js';
 import { buildGenericAnimations } from '../animation/fold-animations.js';
 import { createFlatNetUvMapper } from '../geometry/flat-net-uv.js';
@@ -62,7 +62,10 @@ export function buildFoldableFromSemanticSvg(svgText, name = 'carton.svg') {
     else model.add(node);
   }
 
-  // Finite crease ribbons attached to parent panel nodes
+  // Both profile modes render curved outer/inner hinge skins. Canonical hinges
+  // remain zero-width and open-ended; only certified finite creases include a
+  // physical ribbon width and endpoint rims.
+  const finiteCreaseProfile = hasFiniteCreaseProfile(parsed.creaseProfile);
   for (const f of Object.values(parsed.folds)) {
     const parentNode = nodes[f.parentPanelId], parentOrigin = parsed.origins[f.parentPanelId];
     const mesh = new THREE.Mesh(
@@ -71,7 +74,7 @@ export function buildFoldableFromSemanticSvg(svgText, name = 'carton.svg') {
     );
     mesh.name = creaseMeshName(f.foldId);
     mesh.userData = {
-      semantic_role: 'finite-crease-zone',
+      semantic_role: finiteCreaseProfile ? 'finite-crease-zone' : 'canonical-rounded-hinge',
       fold_id: f.foldId,
       parent_panel_id: f.parentPanelId,
       child_panel_id: f.childPanelId,
