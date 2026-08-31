@@ -1,0 +1,103 @@
+{
+  "packageName": "@cartonbuilder/workflow-v1",
+  "packageVersion": "1.0.0",
+  "contractVersion": "carton-workflow.v1",
+  "pbdCommit": "1208f9188e662895cb66a3e3138fa2ac2fadc511",
+  "files": [
+    {
+      "path": "export/modelJson.mjs",
+      "byteLength": 10222,
+      "sha256": "496d97b13f76347c1499dd24b77bf9b2a860ccc984b27e3251d4c0dc3d3b615c"
+    },
+    {
+      "path": "export/svgAnnotations.mjs",
+      "byteLength": 969,
+      "sha256": "ba983efc92ea3a5f8617a6ff5f3e7e4c0ca0b802faca72d12413d9444c2b09d8"
+    },
+    {
+      "path": "export/svgBounds.mjs",
+      "byteLength": 740,
+      "sha256": "ca9fcfbc23008199eaba417abb946dd8b0496b7948879feb5e0626295b94749b"
+    },
+    {
+      "path": "export/svgDiagnostics.mjs",
+      "byteLength": 15819,
+      "sha256": "c7240cbdcf8fe059ae1c5667aefe69868b0263668c51186d39155caf8b79e6f4"
+    },
+    {
+      "path": "export/svgGeometry.mjs",
+      "byteLength": 3306,
+      "sha256": "ac54c248eabeeff18e6bc46ca689be17c3f7047b5c66963f9ba4e7bde7cba359"
+    },
+    {
+      "path": "export/svgMetadata.mjs",
+      "byteLength": 51572,
+      "sha256": "8b4a035164333078c4f894997631033507361fe1cf11f0cbdb7f181bbbd5a269"
+    },
+    {
+      "path": "fixtures/rte-workflow.v1.json",
+      "byteLength": 523902,
+      "sha256": "99da848e8300485ac9788188b374d4de85feda7a2ad1d84a059d67915690be8a"
+    },
+    {
+      "path": "fixtures/ste-workflow.v1.json",
+      "byteLength": 448112,
+      "sha256": "5f9fa9ae4cade01e6594c1990d5e0db53ee26d1c6a22e5f5cd59a0efd9bff98e"
+    },
+    {
+      "path": "fixtures/tt_sl123-workflow.v1.json",
+      "byteLength": 665619,
+      "sha256": "0ce91137382a79ebc547aca0547971d4831d571c908f0631a24bc3ceefb03ace"
+    },
+    {
+      "path": "index.js",
+      "byteLength": 101,
+      "sha256": "d945a11671b5458bf1a4ac292ac6c1c72ac2e70ff166d9d4258dd4eab2e8be73"
+    },
+    {
+      "path": "index.mjs",
+      "byteLength": 101,
+      "sha256": "d945a11671b5458bf1a4ac292ac6c1c72ac2e70ff166d9d4258dd4eab2e8be73"
+    },
+    {
+      "path": "package.json",
+      "byteLength": 862,
+      "sha256": "7bd5cba7949deeae699ff04219c8e909f149e8f2ba00b6b9ecdc8da0e094a3df"
+    },
+    {
+      "path": "schema/carton-workflow.v1.schema.json",
+      "byteLength": 4129,
+      "sha256": "019c63b8f06480204a9003afdcf3e24bff40cab25e8cc52a9e76fa0680e2ed50"
+    },
+    {
+      "path": "workflow/builder.js",
+      "byteLength": 2713,
+      "sha256": "ec3b9108568c3fdd75b194329ca9e1f3066f83107ffaffe0251fa81ecac2fcc8"
+    },
+    {
+      "path": "workflow/compiledSchema.js",
+      "byteLength": 37917,
+      "sha256": "2df19b6655dc023517249ce38fdcbd4974327f0662ab4964eb5900f6196fca17"
+    },
+    {
+      "path": "workflow/crypto.js",
+      "byteLength": 892,
+      "sha256": "78a2cb02e1587b54b45d71d3b71cfd4cf744e3c14b501bf06631342f06b0f076"
+    },
+    {
+      "path": "workflow/index.js",
+      "byteLength": 705,
+      "sha256": "a6497dc9e667e8211cf40df063f26247cc78415c68beb02eb4c03083dfa27f39"
+    },
+    {
+      "path": "workflow/security.js",
+      "byteLength": 11421,
+      "sha256": "fd1da442c91f37cf4139a55a1a34b046ab33d4bd83711ad0b148ad99083ae047"
+    },
+    {
+      "path": "workflow/validator.js",
+      "byteLength": 8236,
+      "sha256": "c5828f7b04c07a7085218ee0745271fc7d092c32ff730d60f468ce53ba45b7b4"
+    }
+  ]
+}

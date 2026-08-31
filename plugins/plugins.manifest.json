@@ -1,0 +1,275 @@
+{
+  "manifestVersion": "plugins.manifest.v1",
+  "description": "Vendored plugin catalog for CartonBuilder",
+  "plugins": [
+    {
+      "manifestPath": "carton-fold-viewer/2.4.0/plugin-manifest.json",
+      "manifestArtifact": {
+        "byteLength": 3846,
+        "sha256": "f29a8bd080ff069aec67c1acd73f42b3d98262309ef482bef35e14d09ffeef76"
+      },
+      "plugin": {
+        "manifestVersion": "plugin.manifest.v1",
+        "id": "carton-fold-viewer",
+        "version": "2.4.0",
+        "name": "CartonFoldViewer",
+        "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
+        "entrypoint": "index.html",
+        "sourceCommit": "61e2f49d84ced808b88c9d3c92cbaa8aa9a017d8",
+        "artifact": {
+          "byteLength": 1095243,
+          "sha256": "c2c051aefbdfcb407a2cd043dbc58529ef8ae195ee21d43d3c8fe94590164336"
+        },
+        "contracts": {
+          "workflow": "carton-workflow.v1",
+          "modelSchema": "pbd.model.v1",
+          "svgSchema": "pbd.svg.v4"
+        },
+        "capabilities": {
+          "artwork2d": false,
+          "flatExport": false,
+          "foldPreview": true,
+          "technicalRender": false
+        },
+        "referenceOnly": true,
+        "productionCertified": false,
+        "runtime": {
+          "sandboxing": [
+            "allow-scripts"
+          ],
+          "csp": "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+          "noExternalNetwork": true
+        },
+        "files": [
+          {
+            "path": "assets/samples/carton-rte-reference-v0.10.0.svg",
+            "byteLength": 51488,
+            "sha256": "c03b75ce7f509b878871827ef83656172e130c75edbcc1a2851c59e18f783c6c"
+          },
+          {
+            "path": "index.html",
+            "byteLength": 1095243,
+            "sha256": "c2c051aefbdfcb407a2cd043dbc58529ef8ae195ee21d43d3c8fe94590164336"
+          },
+          {
+            "path": "runtime/animation/fold-animations.js",
+            "byteLength": 7332,
+            "sha256": "5874089a6fafed8b001e23b41085b9bce4de1ae67f22b683d14c7e22d35d5a24"
+          },
+          {
+            "path": "runtime/animation/motion-models/tuck-standard.js",
+            "byteLength": 2436,
+            "sha256": "a7aee9c0ff777b621cd3e647acdfd4fefbf6418c79ce40b84f9f024b339e5bf8"
+          },
+          {
+            "path": "runtime/FoldRuntime.js",
+            "byteLength": 8809,
+            "sha256": "081e56f503424b5dc55c47b5f4397460270fb5ccf7c197111858aca055b250ac"
+          },
+          {
+            "path": "runtime/geometry/crease-geometry.js",
+            "byteLength": 13067,
+            "sha256": "be83f4e3d1914945559e31eda6c4110ccdbd820904ac53cc93835816a43151c6"
+          },
+          {
+            "path": "runtime/geometry/flat-net-uv.js",
+            "byteLength": 2547,
+            "sha256": "c62b501514dbb238041ffa2dfb4c348b72728d522ec222faa6e2d2ec18c631c3"
+          },
+          {
+            "path": "runtime/geometry/materials.js",
+            "byteLength": 2321,
+            "sha256": "82239ccb8bcb92a63de65569e2088f533b778cc776a4c005468f426ab2a91dd8"
+          },
+          {
+            "path": "runtime/geometry/panel-geometry.js",
+            "byteLength": 8307,
+            "sha256": "91d18f362a7e9fa152080a8897bed0708a87aa0fe21663f8af8f81785a5ed2fc"
+          },
+          {
+            "path": "runtime/index.js",
+            "byteLength": 509,
+            "sha256": "e73e33585a557eb918a3ea8d686b1250e443d7f9c4f648e5f43461986250b2ab"
+          },
+          {
+            "path": "runtime/model/model-builder.js",
+            "byteLength": 3314,
+            "sha256": "a5d8e7020117e56af387ead7483f72b4df706c6726d89c1e8145b921ada41ec3"
+          },
+          {
+            "path": "runtime/package-manifest.json",
+            "byteLength": 2252,
+            "sha256": "bd29f405815b64539874ed3354024820b7201b4e08f8415fb0eea70cc3ef00e5"
+          },
+          {
+            "path": "runtime/package.json",
+            "byteLength": 232,
+            "sha256": "8e2a26247c9d2f9620dc9f0ae51be411b391f899472e2cc1a49b8f392b0930f9"
+          },
+          {
+            "path": "runtime/pbd/path-parser.js",
+            "byteLength": 5144,
+            "sha256": "abe2ef610e39c1ec2b97af582a14c054ec3338beba3e63990d059621d393b08f"
+          },
+          {
+            "path": "runtime/pbd/semantic-svg.js",
+            "byteLength": 8853,
+            "sha256": "d244423c91d1df2c48ea1a20f3875cff7685d871457c81d064f331929aa9a740"
+          },
+          {
+            "path": "runtime/utils/dispose.js",
+            "byteLength": 1082,
+            "sha256": "e0681e480317c605db92dcdad51cf075febeaa0423bc3fdf3a060907270d2a6d"
+          }
+        ]
+      }
+    },
+    {
+      "manifestPath": "packaging-box-designer/1.2.0/plugin-manifest.json",
+      "manifestArtifact": {
+        "byteLength": 4716,
+        "sha256": "16a19e1b3311c008052cf3ce6e459ccdceafbb7d5facc52b5f03c649466fad87"
+      },
+      "plugin": {
+        "manifestVersion": "plugin.manifest.v1",
+        "id": "packaging-box-designer",
+        "version": "1.2.0",
+        "name": "Packaging Box Designer",
+        "description": "Parametric packaging box designer engine and canonical 2D/3D dieline generator",
+        "entrypoint": "index.html",
+        "sourceCommit": "1208f9188e662895cb66a3e3138fa2ac2fadc511",
+        "artifact": {
+          "byteLength": 598887,
+          "sha256": "1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904"
+        },
+        "contracts": {
+          "workflow": "carton-workflow.v1",
+          "modelSchema": "pbd.model.v1",
+          "svgSchema": "pbd.svg.v4"
+        },
+        "capabilities": {
+          "artwork2d": true,
+          "flatExport": true,
+          "foldPreview": true,
+          "technicalRender": false
+        },
+        "referenceOnly": true,
+        "productionCertified": false,
+        "runtime": {
+          "sandboxing": [
+            "allow-scripts"
+          ],
+          "csp": "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+          "noExternalNetwork": true
+        },
+        "files": [
+          {
+            "path": "contract/export/modelJson.mjs",
+            "byteLength": 10222,
+            "sha256": "496d97b13f76347c1499dd24b77bf9b2a860ccc984b27e3251d4c0dc3d3b615c"
+          },
+          {
+            "path": "contract/export/svgAnnotations.mjs",
+            "byteLength": 969,
+            "sha256": "ba983efc92ea3a5f8617a6ff5f3e7e4c0ca0b802faca72d12413d9444c2b09d8"
+          },
+          {
+            "path": "contract/export/svgBounds.mjs",
+            "byteLength": 740,
+            "sha256": "ca9fcfbc23008199eaba417abb946dd8b0496b7948879feb5e0626295b94749b"
+          },
+          {
+            "path": "contract/export/svgDiagnostics.mjs",
+            "byteLength": 15819,
+            "sha256": "c7240cbdcf8fe059ae1c5667aefe69868b0263668c51186d39155caf8b79e6f4"
+          },
+          {
+            "path": "contract/export/svgGeometry.mjs",
+            "byteLength": 3306,
+            "sha256": "ac54c248eabeeff18e6bc46ca689be17c3f7047b5c66963f9ba4e7bde7cba359"
+          },
+          {
+            "path": "contract/export/svgMetadata.mjs",
+            "byteLength": 51572,
+            "sha256": "8b4a035164333078c4f894997631033507361fe1cf11f0cbdb7f181bbbd5a269"
+          },
+          {
+            "path": "contract/fixtures/rte-workflow.v1.json",
+            "byteLength": 523902,
+            "sha256": "99da848e8300485ac9788188b374d4de85feda7a2ad1d84a059d67915690be8a"
+          },
+          {
+            "path": "contract/fixtures/ste-workflow.v1.json",
+            "byteLength": 448112,
+            "sha256": "5f9fa9ae4cade01e6594c1990d5e0db53ee26d1c6a22e5f5cd59a0efd9bff98e"
+          },
+          {
+            "path": "contract/fixtures/tt_sl123-workflow.v1.json",
+            "byteLength": 665619,
+            "sha256": "0ce91137382a79ebc547aca0547971d4831d571c908f0631a24bc3ceefb03ace"
+          },
+          {
+            "path": "contract/index.js",
+            "byteLength": 101,
+            "sha256": "d945a11671b5458bf1a4ac292ac6c1c72ac2e70ff166d9d4258dd4eab2e8be73"
+          },
+          {
+            "path": "contract/index.mjs",
+            "byteLength": 101,
+            "sha256": "d945a11671b5458bf1a4ac292ac6c1c72ac2e70ff166d9d4258dd4eab2e8be73"
+          },
+          {
+            "path": "contract/package-manifest.json",
+            "byteLength": 3275,
+            "sha256": "af65cd1262acc7722302bf2c3dac82953d00bd09f1a6841077655bcbc670cfa0"
+          },
+          {
+            "path": "contract/package.json",
+            "byteLength": 862,
+            "sha256": "7bd5cba7949deeae699ff04219c8e909f149e8f2ba00b6b9ecdc8da0e094a3df"
+          },
+          {
+            "path": "contract/schema/carton-workflow.v1.schema.json",
+            "byteLength": 4129,
+            "sha256": "019c63b8f06480204a9003afdcf3e24bff40cab25e8cc52a9e76fa0680e2ed50"
+          },
+          {
+            "path": "contract/workflow/builder.js",
+            "byteLength": 2713,
+            "sha256": "ec3b9108568c3fdd75b194329ca9e1f3066f83107ffaffe0251fa81ecac2fcc8"
+          },
+          {
+            "path": "contract/workflow/compiledSchema.js",
+            "byteLength": 37917,
+            "sha256": "2df19b6655dc023517249ce38fdcbd4974327f0662ab4964eb5900f6196fca17"
+          },
+          {
+            "path": "contract/workflow/crypto.js",
+            "byteLength": 892,
+            "sha256": "78a2cb02e1587b54b45d71d3b71cfd4cf744e3c14b501bf06631342f06b0f076"
+          },
+          {
+            "path": "contract/workflow/index.js",
+            "byteLength": 705,
+            "sha256": "a6497dc9e667e8211cf40df063f26247cc78415c68beb02eb4c03083dfa27f39"
+          },
+          {
+            "path": "contract/workflow/security.js",
+            "byteLength": 11421,
+            "sha256": "fd1da442c91f37cf4139a55a1a34b046ab33d4bd83711ad0b148ad99083ae047"
+          },
+          {
+            "path": "contract/workflow/validator.js",
+            "byteLength": 8236,
+            "sha256": "c5828f7b04c07a7085218ee0745271fc7d092c32ff730d60f468ce53ba45b7b4"
+          },
+          {
+            "path": "index.html",
+            "byteLength": 598887,
+            "sha256": "1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904"
+          }
+        ]
+      }
+    }
+  ]
+}

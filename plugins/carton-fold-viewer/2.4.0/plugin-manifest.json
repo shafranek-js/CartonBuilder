@@ -1,0 +1,115 @@
+{
+  "manifestVersion": "plugin.manifest.v1",
+  "id": "carton-fold-viewer",
+  "version": "2.4.0",
+  "name": "CartonFoldViewer",
+  "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
+  "entrypoint": "index.html",
+  "sourceCommit": "61e2f49d84ced808b88c9d3c92cbaa8aa9a017d8",
+  "artifact": {
+    "byteLength": 1095243,
+    "sha256": "c2c051aefbdfcb407a2cd043dbc58529ef8ae195ee21d43d3c8fe94590164336"
+  },
+  "contracts": {
+    "workflow": "carton-workflow.v1",
+    "modelSchema": "pbd.model.v1",
+    "svgSchema": "pbd.svg.v4"
+  },
+  "capabilities": {
+    "artwork2d": false,
+    "flatExport": false,
+    "foldPreview": true,
+    "technicalRender": false
+  },
+  "referenceOnly": true,
+  "productionCertified": false,
+  "runtime": {
+    "sandboxing": [
+      "allow-scripts"
+    ],
+    "csp": "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+    "noExternalNetwork": true
+  },
+  "files": [
+    {
+      "path": "assets/samples/carton-rte-reference-v0.10.0.svg",
+      "byteLength": 51488,
+      "sha256": "c03b75ce7f509b878871827ef83656172e130c75edbcc1a2851c59e18f783c6c"
+    },
+    {
+      "path": "index.html",
+      "byteLength": 1095243,
+      "sha256": "c2c051aefbdfcb407a2cd043dbc58529ef8ae195ee21d43d3c8fe94590164336"
+    },
+    {
+      "path": "runtime/animation/fold-animations.js",
+      "byteLength": 7332,
+      "sha256": "5874089a6fafed8b001e23b41085b9bce4de1ae67f22b683d14c7e22d35d5a24"
+    },
+    {
+      "path": "runtime/animation/motion-models/tuck-standard.js",
+      "byteLength": 2436,
+      "sha256": "a7aee9c0ff777b621cd3e647acdfd4fefbf6418c79ce40b84f9f024b339e5bf8"
+    },
+    {
+      "path": "runtime/FoldRuntime.js",
+      "byteLength": 8809,
+      "sha256": "081e56f503424b5dc55c47b5f4397460270fb5ccf7c197111858aca055b250ac"
+    },
+    {
+      "path": "runtime/geometry/crease-geometry.js",
+      "byteLength": 13067,
+      "sha256": "be83f4e3d1914945559e31eda6c4110ccdbd820904ac53cc93835816a43151c6"
+    },
+    {
+      "path": "runtime/geometry/flat-net-uv.js",
+      "byteLength": 2547,
+      "sha256": "c62b501514dbb238041ffa2dfb4c348b72728d522ec222faa6e2d2ec18c631c3"
+    },
+    {
+      "path": "runtime/geometry/materials.js",
+      "byteLength": 2321,
+      "sha256": "82239ccb8bcb92a63de65569e2088f533b778cc776a4c005468f426ab2a91dd8"
+    },
+    {
+      "path": "runtime/geometry/panel-geometry.js",
+      "byteLength": 8307,
+      "sha256": "91d18f362a7e9fa152080a8897bed0708a87aa0fe21663f8af8f81785a5ed2fc"
+    },
+    {
+      "path": "runtime/index.js",
+      "byteLength": 509,
+      "sha256": "e73e33585a557eb918a3ea8d686b1250e443d7f9c4f648e5f43461986250b2ab"
+    },
+    {
+      "path": "runtime/model/model-builder.js",
+      "byteLength": 3314,
+      "sha256": "a5d8e7020117e56af387ead7483f72b4df706c6726d89c1e8145b921ada41ec3"
+    },
+    {
+      "path": "runtime/package-manifest.json",
+      "byteLength": 2252,
+      "sha256": "bd29f405815b64539874ed3354024820b7201b4e08f8415fb0eea70cc3ef00e5"
+    },
+    {
+      "path": "runtime/package.json",
+      "byteLength": 232,
+      "sha256": "8e2a26247c9d2f9620dc9f0ae51be411b391f899472e2cc1a49b8f392b0930f9"
+    },
+    {
+      "path": "runtime/pbd/path-parser.js",
+      "byteLength": 5144,
+      "sha256": "abe2ef610e39c1ec2b97af582a14c054ec3338beba3e63990d059621d393b08f"
+    },
+    {
+      "path": "runtime/pbd/semantic-svg.js",
+      "byteLength": 8853,
+      "sha256": "d244423c91d1df2c48ea1a20f3875cff7685d871457c81d064f331929aa9a740"
+    },
+    {
+      "path": "runtime/utils/dispose.js",
+      "byteLength": 1082,
+      "sha256": "e0681e480317c605db92dcdad51cf075febeaa0423bc3fdf3a060907270d2a6d"
+    }
+  ]
+}

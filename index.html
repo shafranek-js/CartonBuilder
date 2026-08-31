@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Basic Box</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="./assets/index-DdioytSm.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-QDaFhuKp.css">
+</head>
+<body>
+  <main class="app-shell" id="appShell">
+    <section class="app-content">
+      <nav class="stepper" aria-label="Workflow" data-i18n-aria-label="workflowLabel">
+        <div class="stepper-left-tools">
+          <div class="file-menu-wrap">
+            <button type="button" class="file-menu-trigger-btn" id="fileMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="File Menu" data-i18n-title="fileMenu">
+              <span data-i18n="file">File</span>
+            </button>
+            <div class="file-menu-popover" id="fileMenuPopover" hidden></div>
+          </div>
+          <div class="file-menu-wrap">
+            <button type="button" class="file-menu-trigger-btn" id="editMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Edit Menu" data-i18n-title="editMenu">
+              <span data-i18n="edit">Edit</span>
+            </button>
+            <div class="file-menu-popover" id="editMenuPopover" hidden></div>
+          </div>
+          <div class="file-menu-wrap">
+            <button type="button" class="file-menu-trigger-btn" id="viewMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" title="View Menu" data-i18n-title="viewMenu">
+              <span data-i18n="view">View</span>
+            </button>
+            <div class="file-menu-popover" id="viewMenuPopover" hidden></div>
+          </div>
+        </div>
+
+        <div class="stepper-center-steps">
+          <button class="step active" type="button" data-step-target="workflow" aria-current="step" aria-label="Select Workflow" data-i18n-aria-label="selectWorkflowStepLabel" disabled><span>0</span><b data-i18n="selectWorkflowStep">Select Workflow</b></button>
+          <button class="step" type="button" data-step-target="box" aria-label="Create Box" data-i18n-aria-label="createBox" disabled title="Choose a workflow first" data-i18n-title="workflowSelectionRequired"><span>1</span><b data-i18n="createBox">Create Box</b></button>
+          <button class="step" type="button" data-step-target="artwork" aria-label="Place Artwork" data-i18n-aria-label="placeArtwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
+          <button class="step" type="button" data-step-target="preview" aria-label="Preview / Export" data-i18n-aria-label="previewExport" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
+          <button class="step" type="button" data-step-target="render" aria-label="Render" data-i18n-aria-label="renderStep" disabled title="Complete earlier steps to render"><span>4</span><b data-i18n="renderStep">Render</b></button>
+        </div>
+        <div class="header-right-tools">
+          <div class="preset-picker-wrap">
+            <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library">
+              <span>📦 Presets</span>
+              <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <div class="preset-popover" id="presetPopover" hidden></div>
+          </div>
+
+          <div class="file-menu-wrap contacts-menu-wrap">
+            <button type="button" class="file-menu-trigger-btn" id="contactsMenuTriggerBtn" aria-haspopup="true" aria-expanded="false">
+              Contacts
+            </button>
+            <div class="file-menu-popover contacts-menu-popover" id="contactsMenuPopover" hidden>
+              <a class="file-menu-item contacts-menu-item" href="mailto:pavel.p.popovic@gmail.com">pavel.p.popovic@gmail.com</a>
+              <a class="file-menu-item contacts-menu-item" href="https://t.me/Grabovvski" target="_blank" rel="noopener noreferrer">https://t.me/Grabovvski</a>
+              <a class="file-menu-item contacts-menu-item" href="https://www.linkedin.com/in/grabovsky/" target="_blank" rel="noopener noreferrer">https://www.linkedin.com/in/grabovsky/</a>
+            </div>
+          </div>
+
+          <div class="settings-wrap">
+            <button type="button" class="header-icon-btn settings-trigger-btn" id="settingsTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Settings" data-i18n-title="settings">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+            <div class="settings-popover" id="settingsPopover" hidden></div>
+          </div>
+
+          <label class="language-picker">
+            <span class="sr-only" data-i18n="language">Language</span>
+            <select id="localePicker" aria-label="Language" data-i18n-aria-label="languageLabel">
+              <option value="en">EN</option>
+              <option value="ru">RU</option>
+            </select>
+          </label>
+        </div>
+      </nav>
+
+      <div class="error-banner" id="errorBanner" role="alert" hidden>
+        <span id="errorMessage"></span>
+        <div class="error-actions">
+          <button id="errorRetryButton" type="button" hidden data-i18n="tryAnotherFile">Choose another file</button>
+          <button id="errorDismissButton" type="button" data-i18n="dismiss">Dismiss</button>
+        </div>
+      </div>
+
+      <section class="workflow-step workflow-selection-step" id="workflowStep" hidden aria-labelledby="workflowSelectionTitle">
+        <div class="workflow-selection-content">
+          <span class="eyebrow" data-i18n="selectWorkflowStep">Select Workflow</span>
+          <h1 id="workflowSelectionTitle" data-i18n="workflowSelectionTitle">How do you want to build the dieline?</h1>
+          <p data-i18n="workflowSelectionDescription">Choose a workflow to start a new carton project.</p>
+          <div class="workflow-mode-cards" role="group" aria-label="Workflow choices" data-i18n-aria-label="workflowSelectionChoices">
+            <button class="workflow-mode-card" type="button" data-workflow-mode="quick" aria-pressed="false" disabled>
+              <span class="workflow-mode-card-body">
+                <strong data-i18n="workflowQuickTitle">Quick Layout</strong>
+                <span data-i18n="workflowQuickDescription">Custom Net for a fast, flexible layout.</span>
+                <small data-i18n="workflowQuickBadge">Fast start</small>
+                <em class="workflow-current" data-i18n="workflowCurrent" hidden>Current</em>
+              </span>
+            </button>
+            <button class="workflow-mode-card workflow-mode-card-technical" type="button" data-workflow-mode="technical" aria-pressed="false" disabled>
+              <span class="workflow-mode-card-body">
+                <strong data-i18n="workflowTechnicalTitle">Technical Dieline</strong>
+                <span data-i18n="workflowTechnicalDescription">Build a reference-calibrated dieline in Packaging Box Designer.</span>
+                <small data-i18n="workflowTechnicalBadge">Reference-only · not production certified</small>
+                <em class="workflow-current" data-i18n="workflowCurrent" hidden>Current</em>
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow-step box-step" id="boxStep" hidden>
+
+        <section class="technical-workflow-editor" id="technicalWorkflowEditor" hidden aria-label="Packaging Box Designer host">
+          <header class="technical-workflow-toolbar">
+            <div>
+              <strong data-i18n="technicalWorkflowTitle">Technical Dieline</strong>
+              <span id="technicalHostStatus" class="technical-host-status" role="status" aria-live="polite" data-i18n="technicalPluginLoading">Loading Packaging Box Designer…</span>
+            </div>
+            <span id="technicalHostValidation" class="technical-host-validation" role="status" aria-live="polite" data-i18n="technicalValidationWaiting">Structural — · Geometry — · Contract —</span>
+          </header>
+          <iframe id="technicalHostFrame" class="technical-host-frame" title="Packaging Box Designer" sandbox="allow-scripts" data-src="./plugins/packaging-box-designer/1.2.0/index.html"></iframe>
+        </section>
+
+        <div id="quickWorkflowEditor">
+        <header class="box-controls-bar">
+          <span class="design-hint" data-i18n="designBox">Design your box by adding or removing box panels</span>
+
+          <div class="dimension-list">
+            <div class="dimension-row">
+              <label for="boxWidth" data-i18n="width">Width:</label>
+              <span class="measure-input">
+                <input id="boxWidth" name="width" type="number" min="0.1" step="0.01" value="150" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)">
+              </span>
+              <svg class="dimension-icon width-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)">
+                <path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="dimension-row">
+              <label for="boxHeight" data-i18n="height">Height:</label>
+              <span class="measure-input">
+                <input id="boxHeight" name="height" type="number" min="0.1" step="0.01" value="90" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)">
+              </span>
+              <svg class="dimension-icon height-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)">
+                <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="dimension-row">
+              <label for="boxDepth" data-i18n="depth">Depth:</label>
+              <span class="measure-input">
+                <input id="boxDepth" name="depth" type="number" min="0.1" step="0.01" value="40" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)">
+              </span>
+              <svg class="dimension-icon depth-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag diagonally to adjust Depth">
+                <g transform="rotate(45 12 12)">
+                  <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </g>
+              </svg>
+            </div>
+            <div class="dimension-row board-caliper-row">
+              <label for="boardCaliper" data-i18n="boardCaliper">Board:</label>
+              <span class="measure-input">
+                <input id="boardCaliper" name="boardCaliper" type="number" min="0.01" max="2" step="0.01" value="0.35" inputmode="decimal" title="Board caliper in mm (0.01–2.00)">
+              </span>
+              <span class="dimension-unit">mm</span>
+            </div>
+          </div>
+
+          <div class="box-controls-right">
+            <span class="placed-count"><span data-i18n="placedPanels">Placed panels:</span> <strong id="panelCount">1/6</strong></span>
+            <button class="footer-button cancel-button" id="cancelButton" type="button" disabled data-i18n="resetBox">Reset Box</button>
+          </div>
+        </header>
+
+        <section class="designer" aria-label="Box net designer" data-i18n-aria-label="boxDesignerLabel">
+          <div class="workspace-wrap">
+            <svg id="workspace" role="img" aria-label="Interactive box net" data-i18n-aria-label="interactiveBoxNetLabel"></svg>
+          </div>
+        </section>
+        </div>
+      </section>
+
+      <section class="workflow-step artwork-step" id="artworkStep" hidden>
+          <div class="artwork-stage" id="artworkStage" data-left="pinned" data-right="pinned">
+          <aside class="artwork-sidebar artwork-sidebar-left" id="artworkSidebarLeft" aria-label="Artwork file and layers" data-i18n-aria-label="artworkLayersLabel">
+            <button type="button" class="panel-pin" id="pinLeftPanel" aria-pressed="true" aria-label="Pin left panel" data-i18n-aria-label="pinLeftPanel" title="Pin left panel" data-i18n-title="pinLeftPanel">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22"/>
+                <path d="M5 17h14l-1.5-6H18V4H6v7h.5L5 17z"/>
+              </svg>
+            </button>
+            <div hidden>
+              <span id="artworkFileName"></span>
+              <button type="button" id="selectArtworkButton"></button>
+              <button type="button" id="replaceArtworkButton"></button>
+              <button type="button" id="removeArtworkButton"></button>
+            </div>
+
+            <details open class="tool-section layers-tool-section">
+              <summary data-i18n="layers">Layers</summary>
+              <div class="adobe-layers-table">
+                <!-- Artwork Layer -->
+                <div class="adobe-layer-row" data-layer-id="artwork">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerArtwork" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockArtwork" type="checkbox" class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <button type="button" class="layer-twisty" id="artworkTwisty" aria-expanded="true" aria-label="Collapse Artwork group">
+                    <svg viewBox="0 0 8 8" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,1.5 5.5,4 2.5,6.5" /></svg>
+                  </button>
+                  <span class="layer-thumbnail">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
+                      <rect x="2" y="2" width="12" height="12" rx="1"/>
+                      <circle cx="5.5" cy="5.5" r="1.5"/>
+                      <path d="M14 11l-3-3-5 5"/>
+                    </svg>
+                  </span>
+                  <span class="layer-title"><span data-i18n="artwork">Artwork</span><span class="layer-count" id="artworkLayerCount" hidden></span></span>
+                </div>
+                <div class="artwork-sublayers" id="artworkSublayers" hidden></div>
+                <div class="layer-context-menu" id="layerContextMenu" role="menu" hidden>
+                  <button type="button" class="context-menu-item" data-action="rename"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 2.293L10.5 2.5 4 9.293V12h2.707l6.086-6.086z" fill="currentColor" fill-rule="evenodd"/></svg><span data-i18n="renameLayer">Rename</span></button>
+                  <button type="button" class="context-menu-item" data-action="duplicate"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M13 0H6a2 2 0 0 0-2 2v1H2a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1h2a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm-2 14H2V5h9v9zm4-3h-2V5a2 2 0 0 0-2-2H6V2h9v9z" fill="currentColor"/></svg><span data-i18n="duplicateLayer">Duplicate</span></button>
+                  <button type="button" class="context-menu-item" data-action="lock"><svg viewBox="0 0 16 16" width="12" height="12"><rect x="4" y="7" width="8" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg><span data-i18n="lockLayer">Lock</span></button>
+                  <hr class="context-menu-sep">
+                  <button type="button" class="context-menu-item danger" data-action="delete"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M5.5 5.5A.5.5 0 0 1 6 5h4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-7zM3 4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1H3V4zm2-1a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1H5z" fill="currentColor"/></svg><span data-i18n="deleteLayer">Delete</span></button>
+                </div>
+
+                <!-- Dieline Layer -->
+                <div class="adobe-layer-row" data-layer-id="dieline">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerDieline" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockDieline" type="checkbox" checked class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-thumbnail">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
+                      <rect x="2" y="2" width="12" height="12" rx="1" stroke-dasharray="2 2"/>
+                    </svg>
+                  </span>
+                  <span class="layer-title" data-i18n="dieline">Dieline</span>
+                </div>
+
+                <!-- Panel Names Layer -->
+                <div class="adobe-layer-row" data-layer-id="names">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerNames" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockNames" type="checkbox" checked class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-thumbnail text-thumbnail">
+                    <span>T</span>
+                  </span>
+                  <span class="layer-title" data-i18n="panelNames">Panel names</span>
+                </div>
+
+                <!-- Highlights Layer -->
+                <div class="adobe-layer-row" data-layer-id="highlights">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                    <input id="layerHighlights" type="checkbox" checked class="sr-only">
+                    <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </label>
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                    <input id="lockHighlights" type="checkbox" checked class="sr-only">
+                    <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </label>
+                  <span class="layer-thumbnail">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
+                      <polygon points="8,2 14,14 2,14"/>
+                    </svg>
+                  </span>
+                  <span class="layer-title" data-i18n="highlights">Front/Base highlight</span>
+                </div>
+              </div>
+            </details>
+
+            <details open class="tool-section pdf-layers-section" id="pdfLayersSection" hidden>
+              <summary data-i18n="pdfLayers">PDF layers</summary>
+              <div class="pdf-page-box-row">
+                <label for="pageBoxSelect" data-i18n="pageBox">Page area</label>
+                <select id="pageBoxSelect" class="page-box-select" data-i18n-aria-label="pageBox">
+                  <option value="CropBox" data-i18n="pageBoxCropBox">CropBox</option>
+                  <option value="MediaBox" data-i18n="pageBoxMediaBox">MediaBox</option>
+                  <option value="BleedBox" data-i18n="pageBoxBleedBox">BleedBox</option>
+                  <option value="TrimBox" data-i18n="pageBoxTrimBox">TrimBox</option>
+                  <option value="ArtBox" data-i18n="pageBoxArtBox">ArtBox</option>
+                </select>
+              </div>
+              <div class="adobe-layers-table" id="pdfLayersList"></div>
+            </details>
+          </aside>
+
+          <div class="artwork-canvas-wrap" id="artworkCanvasWrap" aria-busy="false">
+            <div class="drop-state" id="dropState">
+              <strong data-i18n="dropArtwork">Drop artwork here</strong>
+              <span data-i18n="fileHint">PNG, JPG, PDF or AI · maximum 100 MB</span>
+              <button class="primary-action" id="chooseArtworkButton" type="button" data-i18n="chooseFile">Choose file</button>
+            </div>
+            <svg id="artworkWorkspace" role="img" tabindex="0" aria-label="Artwork placement canvas" data-i18n-aria-label="artworkCanvasLabel"></svg>
+            <div class="processing-overlay" id="processingOverlay" role="status" aria-live="polite" aria-atomic="true" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <strong id="processingText" data-i18n="processing">Processing artwork…</strong>
+              <button type="button" id="cancelProcessingButton" data-i18n="cancel">Cancel</button>
+            </div>
+          </div>
+
+          <aside class="artwork-sidebar artwork-sidebar-right" id="artworkSidebarRight" aria-label="Artwork transform controls" data-i18n-aria-label="artworkTransformLabel">
+            <button type="button" class="panel-pin" id="pinRightPanel" aria-pressed="true" aria-label="Pin right panel" data-i18n-aria-label="pinRightPanel" title="Pin right panel" data-i18n-title="pinRightPanel">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22"/>
+                <path d="M5 17h14l-1.5-6H18V4H6v7h.5L5 17z"/>
+              </svg>
+            </button>
+            <details open class="tool-section">
+              <summary data-i18n="transform">Transform</summary>
+              <div class="transform-layout-row">
+                <svg class="reference-point-svg" id="referencePointGrid" viewBox="0 0 28 28" width="28" height="28" role="group" aria-label="Reference point" data-i18n-aria-label="referencePointLabel">
+                  <g class="reference-point-connectors" stroke="currentColor" stroke-width="1.5" stroke-linecap="square">
+                    <line x1="6.5" y1="3.5" x2="10.5" y2="3.5" />
+                    <line x1="17.5" y1="3.5" x2="21.5" y2="3.5" />
+                    <line x1="6.5" y1="24.5" x2="10.5" y2="24.5" />
+                    <line x1="17.5" y1="24.5" x2="21.5" y2="24.5" />
+                    <line x1="3.5" y1="6.5" x2="3.5" y2="10.5" />
+                    <line x1="24.5" y1="6.5" x2="24.5" y2="10.5" />
+                    <line x1="3.5" y1="17.5" x2="3.5" y2="21.5" />
+                    <line x1="24.5" y1="17.5" x2="24.5" y2="21.5" />
+                  </g>
+
+                  <g class="reference-point-button" data-point="top-left" role="button" tabindex="0" aria-label="Top left" aria-pressed="false" title="Top left" data-i18n-title="referencePointTopLeft" data-i18n-aria-label="referencePointTopLeft">
+                    <rect class="hitbox" x="0" y="0" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="0.75" y="0.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="top-center" role="button" tabindex="0" aria-label="Top center" aria-pressed="false" title="Top center" data-i18n-title="referencePointTopCenter" data-i18n-aria-label="referencePointTopCenter">
+                    <rect class="hitbox" x="9.5" y="0" width="9" height="8" fill="transparent" />
+                    <rect class="box" x="11.25" y="0.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="top-right" role="button" tabindex="0" aria-label="Top right" aria-pressed="false" title="Top right" data-i18n-title="referencePointTopRight" data-i18n-aria-label="referencePointTopRight">
+                    <rect class="hitbox" x="20" y="0" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="21.75" y="0.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+
+                  <g class="reference-point-button" data-point="middle-left" role="button" tabindex="0" aria-label="Middle left" aria-pressed="false" title="Middle left" data-i18n-title="referencePointMiddleLeft" data-i18n-aria-label="referencePointMiddleLeft">
+                    <rect class="hitbox" x="0" y="9.5" width="8" height="9" fill="transparent" />
+                    <rect class="box" x="0.75" y="11.25" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="center" role="button" tabindex="0" aria-label="Center" aria-pressed="true" title="Center" data-i18n-title="referencePointCenter" data-i18n-aria-label="referencePointCenter">
+                    <rect class="hitbox" x="9.5" y="9.5" width="9" height="9" fill="transparent" />
+                    <rect class="box" x="11.25" y="11.25" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="middle-right" role="button" tabindex="0" aria-label="Middle right" aria-pressed="false" title="Middle right" data-i18n-title="referencePointMiddleRight" data-i18n-aria-label="referencePointMiddleRight">
+                    <rect class="hitbox" x="20" y="9.5" width="8" height="9" fill="transparent" />
+                    <rect class="box" x="21.75" y="11.25" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+
+                  <g class="reference-point-button" data-point="bottom-left" role="button" tabindex="0" aria-label="Bottom left" aria-pressed="false" title="Bottom left" data-i18n-title="referencePointBottomLeft" data-i18n-aria-label="referencePointBottomLeft">
+                    <rect class="hitbox" x="0" y="20" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="0.75" y="21.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="bottom-center" role="button" tabindex="0" aria-label="Bottom center" aria-pressed="false" title="Bottom center" data-i18n-title="referencePointBottomCenter" data-i18n-aria-label="referencePointBottomCenter">
+                    <rect class="hitbox" x="9.5" y="20" width="9" height="8" fill="transparent" />
+                    <rect class="box" x="11.25" y="21.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                  <g class="reference-point-button" data-point="bottom-right" role="button" tabindex="0" aria-label="Bottom right" aria-pressed="false" title="Bottom right" data-i18n-title="referencePointBottomRight" data-i18n-aria-label="referencePointBottomRight">
+                    <rect class="hitbox" x="20" y="20" width="8" height="8" fill="transparent" />
+                    <rect class="box" x="21.75" y="21.75" width="5.5" height="5.5" rx="0.5" />
+                  </g>
+                </svg>
+                <div class="transform-fields">
+                  <label class="transform-axis" for="artworkX">X:</label>
+                  <span class="transform-input"><input id="artworkX" aria-label="Artwork X" data-i18n-aria-label="artworkCenterXLabel" type="number" step="0.1" disabled></span>
+                  <span class="transform-unit">mm</span>
+                  <label class="transform-axis" for="artworkWidth">W:</label>
+                  <span class="transform-input"><input id="artworkWidth" aria-label="Artwork width" data-i18n-aria-label="artworkWidthLabel" type="number" min="0.1" step="0.1" disabled></span>
+                  <span class="transform-unit">mm</span>
+                  <button type="button" id="constrainProportionsBtn" class="chain-toggle chain-toggle--inline" title="Constrain proportions" data-i18n-title="constrainProportions" aria-pressed="true">🔗</button>
+
+                  <label class="transform-axis" for="artworkY">Y:</label>
+                  <span class="transform-input"><input id="artworkY" aria-label="Artwork Y" data-i18n-aria-label="artworkCenterYLabel" type="number" step="0.1" disabled></span>
+                  <span class="transform-unit">mm</span>
+                  <label class="transform-axis" for="artworkHeight">H:</label>
+                  <span class="transform-input"><input id="artworkHeight" aria-label="Artwork height" data-i18n-aria-label="artworkHeightLabel" type="number" min="0.1" step="0.1" disabled></span>
+                  <span class="transform-unit">mm</span>
+                </div>
+              </div>
+              <div id="frontRelativeCoordinates" class="front-relative-coordinates" hidden aria-live="polite">
+                <span class="front-relative-label" data-i18n="frontRelativeLabel">Front-relative</span>
+                <div class="front-relative-fields">
+                  <span class="front-relative-axis" data-i18n="frontRelativeXLabel">Front X</span>
+                  <output id="frontRelativeX" aria-label="Front X" data-i18n-aria-label="frontRelativeXLabel">—</output>
+                  <span class="transform-unit">mm</span>
+                  <span class="front-relative-axis" data-i18n="frontRelativeYLabel">Front Y</span>
+                  <output id="frontRelativeY" aria-label="Front Y" data-i18n-aria-label="frontRelativeYLabel">—</output>
+                  <span class="transform-unit">mm</span>
+                </div>
+              </div>
+              <div class="scale-fields">
+                <span class="scale-group-label" data-i18n="scale">Scale</span>
+                <div class="scale-fields-values">
+                  <label class="transform-axis" for="artworkScaleX">X:</label>
+                  <span class="transform-input"><input id="artworkScaleX" aria-label="Artwork scale X" type="number" min="1" max="2000" step="0.1" disabled></span>
+                  <span class="transform-unit">%</span>
+                  <label class="transform-axis" for="artworkScaleY">Y:</label>
+                  <span class="transform-input"><input id="artworkScaleY" aria-label="Artwork scale Y" type="number" min="1" max="2000" step="0.1" disabled></span>
+                  <span class="transform-unit">%</span>
+                </div>
+              </div>
+              <div class="button-grid icon-button-grid">
+                <button type="button" class="tool-icon-btn" id="fitArtworkButton" disabled title="Fit artwork to dieline" data-i18n-title="fitDieline" aria-label="Fit artwork to dieline" data-i18n-aria-label="fitDieline">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 2" />
+                    <rect x="7" y="7" width="10" height="10" rx="1" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="fillArtworkButton" disabled title="Fill dieline with artwork" data-i18n-title="fillDieline" aria-label="Fill dieline with artwork" data-i18n-aria-label="fillDieline">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    <rect x="6" y="6" width="12" height="12" rx="1" stroke-dasharray="2 2" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="centerArtworkButton" disabled title="Center artwork on dieline" data-i18n-title="center" aria-label="Center artwork on dieline" data-i18n-aria-label="center">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9" stroke-dasharray="3 2" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                    <line x1="4" y1="12" x2="20" y2="12" />
+                    <circle cx="12" cy="12" r="2" fill="currentColor" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="rotateLeftButton" disabled title="Rotate −90° counter-clockwise" data-i18n-title="rotateLeft" aria-label="Rotate −90° counter-clockwise" data-i18n-aria-label="rotateLeft">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="rotateRightButton" disabled title="Rotate +90° clockwise" data-i18n-title="rotateRight" aria-label="Rotate +90° clockwise" data-i18n-aria-label="rotateRight">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="flipHorizontalButton" disabled title="Flip artwork horizontally" data-i18n-title="flipHorizontal" aria-label="Flip artwork horizontally" data-i18n-aria-label="flipHorizontal">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="3" x2="12" y2="21" />
+                    <path d="M8 6l-5 5 5 5" />
+                    <path d="M16 6l5 5-5 5" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="flipVerticalButton" disabled title="Flip artwork vertically" data-i18n-title="flipVertical" aria-label="Flip artwork vertically" data-i18n-aria-label="flipVertical">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <path d="M6 8l5-5 5 5" />
+                    <path d="M6 16l5 5 5-5" />
+                  </svg>
+                </button>
+                <button type="button" class="tool-icon-btn" id="resetArtworkButton" disabled title="Reset transform and scale" data-i18n-title="resetTransform" aria-label="Reset transform and scale" data-i18n-aria-label="resetTransform">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                    <path d="M3 21v-5h5" />
+                  </svg>
+                </button>
+              </div>
+            </details>
+
+            <details open class="tool-section" id="artworkQualitySection">
+              <summary data-i18n="renderArtworkQuality">Artwork quality</summary>
+              <p class="quality-line"><span data-i18n="effectiveDpi">Effective DPI:</span> <strong id="effectiveDpi">—</strong></p>
+              <div class="artwork-quality-fields" id="artworkQualityFields">
+                <label class="field"><span data-i18n="previewQuality">Preview quality</span>
+                  <select id="artworkPreviewQuality" aria-label="Preview quality" data-i18n-aria-label="previewQuality">
+                    <option value="auto" data-i18n="qualityAuto">Auto</option>
+                    <option value="150">150 DPI</option>
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
+                  </select>
+                </label>
+                <label class="field"><span data-i18n="renderQuality">Render quality</span>
+                  <select id="artworkRenderQuality" aria-label="Render quality" data-i18n-aria-label="renderQuality">
+                    <option value="auto" data-i18n="qualityAuto">Auto</option>
+                    <option value="150">150 DPI</option>
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
+                    <option value="1200">1200 DPI</option>
+                    <option value="2400">2400 DPI</option>
+                  </select>
+                </label>
+                <p class="quality-summary" id="artworkQualitySummary" role="status"></p>
+              </div>
+            </details>
+
+            <details open class="tool-section" id="prepressSection">
+              <summary>Prepress</summary>
+              <p class="quality-help">Production-assist dieline. Not PDF/X certified or a contract color proof.</p>
+              <div class="artwork-quality-fields">
+                <label class="field"><span>Preset</span><select id="prepressPreset"><option value="">—</option></select></label>
+                <label class="field"><span>Mode</span><select id="prepressMode"><option value="technical-proof">Technical proof</option><option value="production-assist">Production assist</option></select></label>
+                <label class="field"><span>Profile</span><select id="prepressProfile"><option value="generic-folding-carton">Generic folding carton</option><option value="custom">Custom</option></select></label>
+                <label class="field"><span>Bleed (mm)</span><input id="prepressBleed" type="number" min="0" max="20" step="0.1"></label>
+                <label class="field"><span>Safe (mm)</span><input id="prepressSafe" type="number" min="0" max="20" step="0.1"></label>
+                <label class="field"><span>Slug (mm)</span><input id="prepressSlug" type="number" min="0" max="30" step="0.1"></label>
+                <label class="field"><span>Required DPI</span><input id="prepressDpi" type="number" min="30" max="1200" step="1"></label>
+                <label class="field"><span>Cut offset (mm)</span><input id="prepressCutOffset" type="number" min="-5" max="5" step="0.1"></label>
+                <label class="field"><span>Crease offset (mm)</span><input id="prepressCreaseOffset" type="number" min="-5" max="5" step="0.1"></label>
+                <label class="field"><span>Glue delta (mm)</span><input id="prepressGlueDelta" type="number" min="-10" max="10" step="0.1"></label>
+                <label class="field"><span>Tuck clearance (mm)</span><input id="prepressTuckDelta" type="number" min="-10" max="10" step="0.1"></label>
+                <label class="field"><span>Crop marks</span><input id="prepressCropMarks" type="checkbox"></label>
+                <label class="field"><span>Registration marks</span><input id="prepressRegistrationMarks" type="checkbox"></label>
+                <label class="field"><span>Slug</span><input id="prepressSlugMark" type="checkbox"></label>
+              </div>
+              <p class="quality-summary" id="prepressStatus" role="status"></p>
+              <div class="button-row">
+                <button type="button" id="prepressReset">Reset</button>
+                <button type="button" id="prepressSavePreset">Save preset</button>
+                <button type="button" id="prepressRun">Run preflight</button>
+                <button type="button" id="prepressReport">JSON report</button>
+                <button type="button" id="prepressExport">Prepress PDF</button>
+              </div>
+            </details>
+
+            <details open class="tool-section artwork-finish-section" id="artworkFinishSection" hidden>
+              <summary data-i18n="artworkFinishHeading">Presentation finish</summary>
+              <label class="field"><span data-i18n="artworkFinishRole">Output</span>
+                <select id="artworkFinishRole" aria-label="Artwork output role" data-i18n-aria-label="artworkFinishRole">
+                  <option value="print" data-i18n="artworkFinishPrint">Print artwork</option>
+                  <option value="finish" data-i18n="artworkFinishMask">Finish mask only</option>
+                  <option value="print-and-finish" data-i18n="artworkFinishPrintAndFinish">Print + finish</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="artworkFinishType">Finish</span>
+                <select id="artworkFinishType" aria-label="Finish type" data-i18n-aria-label="artworkFinishType">
+                  <option value="spot-gloss" data-i18n="artworkFinishSpotGloss">Spot gloss varnish</option>
+                  <option value="foil" data-i18n="artworkFinishFoil">Metallic foil</option>
+                  <option value="emboss" data-i18n="artworkFinishEmboss">Emboss</option>
+                  <option value="deboss" data-i18n="artworkFinishDeboss">Deboss</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="artworkFinishMaskChannel">Mask source</span>
+                <select id="artworkFinishMaskChannel" aria-label="Finish mask source" data-i18n-aria-label="artworkFinishMaskChannel">
+                  <option value="auto" data-i18n="artworkFinishMaskAuto">Auto</option>
+                  <option value="alpha" data-i18n="artworkFinishMaskAlpha">Transparency</option>
+                  <option value="luminance" data-i18n="artworkFinishMaskLuminance">Brightness</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="artworkFinishInvert">Invert mask</span><input id="artworkFinishInvert" type="checkbox"></label>
+              <div class="light-control"><span data-i18n="artworkFinishIntensity">Intensity</span><input id="artworkFinishIntensity" type="range" min="0" max="100" step="1" value="100"><output id="artworkFinishIntensityValue">100%</output></div>
+              <label class="field"><span data-i18n="artworkFinishFoilColor">Foil color</span><input id="artworkFinishColor" type="color" value="#d4af37"></label>
+              <div class="light-control"><span data-i18n="artworkFinishRoughness">Finish roughness</span><input id="artworkFinishRoughness" type="range" min="4" max="80" step="1" value="22"><output id="artworkFinishRoughnessValue">22%</output></div>
+              <div class="light-control"><span data-i18n="artworkFinishReliefStrength">Relief strength</span><input id="artworkFinishRelief" type="range" min="2" max="100" step="1" value="35"><output id="artworkFinishReliefValue">35%</output></div>
+              <p class="quality-help" data-i18n="artworkFinishHelp">White or opaque areas receive the finish. Duplicate a layer to combine multiple finishes.</p>
+            </details>
+
+            <details open class="tool-section" id="opacitySection" hidden>
+              <summary data-i18n="opacityPanel">Opacity</summary>
+              <div class="opacity-row">
+                <b data-i18n="opacity">Artwork</b>
+                <span><input id="artworkOpacity" aria-label="Artwork opacity" data-i18n-aria-label="artworkOpacityLabel" type="range" min="0" max="100" value="100" disabled><output id="artworkOpacityValue">100%</output></span>
+              </div>
+              <div class="opacity-row">
+                <b data-i18n="bgOpacity">Bleed</b>
+                <span><input id="artworkBgOpacity" aria-label="Background opacity" data-i18n-aria-label="bgOpacityLabel" type="range" min="0" max="100" value="28" disabled><output id="artworkBgOpacityValue">28%</output></span>
+              </div>
+            </details>
+
+            <details open class="tool-section" id="cropSection" hidden>
+              <summary data-i18n="imageCrop">Image Crop</summary>
+              <div class="crop-actions" role="group" aria-label="Image crop tools" data-i18n-aria-label="imageCropTools">
+                <button type="button" class="crop-tool-btn" id="cropFrameButton" title="Crop by adjusting frame handles" data-i18n-title="cropFrameTitle" aria-label="Crop by adjusting frame handles" data-i18n-aria-label="cropFrameTitle">
+                  <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="13" height="13" rx="1.2"/><path d="M2.5 6.5h3M2.5 6.5v-3M15.5 11.5h-3M15.5 11.5v3"/></svg>
+                  <span class="sr-only" data-i18n="cropFrame">Crop</span>
+                </button>
+                <button type="button" class="crop-tool-btn" id="cropDrawButton" title="Draw a crop area on the artwork" data-i18n-title="cropDrawTitle" aria-label="Draw a crop area on the artwork" data-i18n-aria-label="cropDrawTitle">
+                  <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="10.5" height="11" rx="1.2"/><path d="m10.2 12.5 3.8-3.8 1.8 1.8-3.8 3.8-2.6.7zM12.9 9.8l1.8 1.8"/></svg>
+                  <span class="sr-only" data-i18n="cropDraw">Draw</span>
+                </button>
+                <button type="button" class="crop-tool-btn" id="clearCropButton" disabled title="Clear crop mask" data-i18n-title="clearCropTitle" aria-label="Clear crop mask" data-i18n-aria-label="clearCropTitle">
+                  <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.1 10.4 6.7-6.7a1.8 1.8 0 0 1 2.5 0l2 2a1.8 1.8 0 0 1 0 2.5l-6.7 6.7H5.4z"/><path d="m6.2 7.3 5.4 5.4M3.1 10.4l3.1 3.1"/></svg>
+                  <span class="sr-only" data-i18n="clearCrop">Clear</span>
+                </button>
+              </div>
+              <div class="crop-status" id="cropStatus" data-i18n="cropIdle">Click Crop or Draw to start.</div>
+            </details>
+
+            <details open class="tool-section" id="boxDimensionsSection">
+              <summary data-i18n="boxDimensions">Box Dimensions</summary>
+              <div class="box-dim-fields-wrap">
+                <div class="box-dim-fields">
+                  <div class="box-dim-row">
+                    <label for="artworkBoxWidth" data-i18n="width">Width:</label>
+                    <div class="box-dim-control">
+                      <span class="measure-input"><input id="artworkBoxWidth" type="number" min="0.1" step="0.01"></span>
+                      <svg class="dimension-icon dim-scrubber width-icon" data-dim="width" viewBox="0 0 24 24" aria-hidden="true"
+                           title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)">
+                        <path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="box-dim-row">
+                    <label for="artworkBoxHeight" data-i18n="height">Height:</label>
+                    <div class="box-dim-control">
+                      <span class="measure-input"><input id="artworkBoxHeight" type="number" min="0.1" step="0.01"></span>
+                      <svg class="dimension-icon dim-scrubber height-icon" data-dim="height" viewBox="0 0 24 24" aria-hidden="true"
+                           title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)">
+                        <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="box-dim-row">
+                    <label for="artworkBoxDepth" data-i18n="depth">Depth:</label>
+                    <div class="box-dim-control">
+                      <span class="measure-input"><input id="artworkBoxDepth" type="number" min="0.1" step="0.01"></span>
+                      <svg class="dimension-icon dim-scrubber depth-icon" data-dim="depth" viewBox="0 0 24 24" aria-hidden="true"
+                           title="Drag diagonally to adjust Depth">
+                        <g transform="rotate(45 12 12)">
+                          <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                <button type="button" id="boxConstrainProportionsBtn" class="chain-toggle chain-toggle--box" title="Constrain box proportions" data-i18n-title="constrainBoxProportions" aria-pressed="true">🔗</button>
+              </div>
+            </details>
+
+            <details open class="tool-section" id="historySection" hidden>
+              <summary data-i18n="history">History</summary>
+              <div class="button-row">
+                <button type="button" id="undoButton" disabled data-i18n="undo" title="Undo action (Ctrl+Z)" data-i18n-title="undoTitle">Undo</button>
+                <button type="button" id="redoButton" disabled data-i18n="redo" title="Redo action (Ctrl+Y or Ctrl+Shift+Z)" data-i18n-title="redoTitle">Redo</button>
+              </div>
+            </details>
+          </aside>
+
+          <div class="panel-edge panel-edge-left" id="panelEdgeLeft" role="button" tabindex="0" aria-expanded="false" aria-label="Show left panel" data-i18n-aria-label="showLeftPanel" hidden></div>
+          <div class="panel-edge panel-edge-right" id="panelEdgeRight" role="button" tabindex="0" aria-expanded="false" aria-label="Show right panel" data-i18n-aria-label="showRightPanel" hidden></div>
+        </div>
+      </section>
+
+      <section class="workflow-step preview-step" id="previewStep" hidden>
+        <div class="preview-toolbar">
+          <span class="preview-warning" id="previewWarning" role="status" aria-live="polite"></span>
+          <div id="quickPreviewActions" class="preview-toolbar-actions">
+            <button id="openRenderButton" type="button" data-i18n="openRender">Render</button>
+            <button id="export3dHtmlButton" type="button" data-i18n="export3dHtml">Export HTML</button>
+            <button id="publish3dHtmlButton" type="button" data-i18n="publishHtml">Publish link</button>
+            <a class="preview-showcase-link" id="previewShowcaseLink" href="https://shafranek-js.github.io/CartonBuilder/showcase/calmdownol/index.html" target="_blank" rel="noopener" data-i18n="viewShowcase">View live example</a>
+          </div>
+        </div>
+        <section id="technicalPreviewPanel" class="technical-preview-panel" hidden aria-label="Technical Preview" data-i18n-aria-label="technicalPreviewTitle">
+          <header class="technical-preview-toolbar">
+            <strong data-i18n="technicalPreviewTitle">Technical Preview · reference-only</strong>
+            <span id="technicalViewerStatus" class="technical-viewer-status" role="status" aria-live="polite" data-i18n="technicalViewerLoading">Waiting for CartonFoldViewer…</span>
+            <span id="technicalViewerModelInfo" class="technical-viewer-model-info" role="status" aria-live="polite"></span>
+          </header>
+          <iframe id="technicalViewerFrame" class="technical-viewer-frame" title="CartonFoldViewer Technical Preview" sandbox="allow-scripts" data-src="./plugins/carton-fold-viewer/2.4.0/index.html"></iframe>
+        </section>
+        <div id="quickPreviewContent">
+        <div class="preview-main-row">
+          <div class="preview-canvas-wrap preview-3d-panel" id="preview3dPanel" aria-busy="false">
+            <canvas id="preview3dCanvas" role="img" tabindex="0" aria-label="Interactive folded carton preview" data-i18n-aria-label="preview3dCanvasLabel"></canvas>
+            <div class="preview-export-viewport-overlay" id="previewExportViewportOverlay" aria-hidden="true">
+              <div class="preview-export-viewport-frame" id="previewExportViewportFrame">
+                <span class="preview-export-viewport-label" id="previewExportViewportLabel"></span>
+              </div>
+            </div>
+            <div class="preview-3d-busy" id="preview3dBusy" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span data-i18n="loading3d">Loading 3D preview…</span>
+            </div>
+            <div class="preview-3d-recovery" id="preview3dRecovery" role="status" aria-live="polite" hidden>
+              <strong id="preview3dRecoveryMessage" data-i18n="webglUnavailable3d">3D preview is unavailable in this browser.</strong>
+              <div>
+                <button id="retry3dButton" type="button" data-i18n="retry3d">Retry 3D</button>
+              </div>
+            </div>
+            <aside class="preview-3d-inspector" id="preview3dInspector" aria-live="polite" hidden>
+              <strong id="preview3dPanelName"></strong>
+              <span id="preview3dPanelDimensions"></span>
+            </aside>
+            <p class="sr-only" id="preview3dSummary" role="status" aria-live="polite" aria-atomic="true"></p>
+          </div>
+
+          <aside class="scene-sidebar preview-settings-panel preview-settings-panel-left" aria-label="Scene settings" data-i18n-aria-label="sceneSettingsLabel">
+            <details open class="tool-section">
+              <summary data-i18n="scenePresets3d">Scene presets</summary>
+              <div class="field">
+                <select id="scenePresetSelect" aria-label="Saved scene presets" data-i18n-aria-label="scenePresetSelectLabel">
+                  <option value="">—</option>
+                </select>
+              </div>
+              <div class="button-row">
+                <button id="applyScenePresetBtn" type="button" disabled data-i18n="applyPreset3d">Apply</button>
+                <button id="saveScenePresetBtn" type="button" data-i18n="savePreset3d">Save…</button>
+                <button id="deleteScenePresetBtn" type="button" disabled data-i18n="deletePreset3d">Delete</button>
+              </div>
+              <span class="sidebar-status" id="scenePresetStatus" role="status" aria-live="polite"></span>
+            </details>
+
+            <details open class="tool-section preview-export-section">
+              <summary data-i18n="previewExportFrameTitle">Export frame</summary>
+              <p class="quality-help" data-i18n="previewExportFrameHelp">The frame shows the crop used by presentation PNG/JPG exports. The 3D scene remains interactive.</p>
+              <label class="field preview-export-quality-field">
+                <span data-i18n="previewExportHtmlQuality">HTML texture quality</span>
+                <select id="previewExportHtmlQuality" aria-label="HTML texture quality" data-i18n-aria-label="previewExportHtmlQuality">
+                  <option value="auto" data-i18n="qualityAuto">Auto</option>
+                  <option value="600">600 DPI</option>
+                  <option value="1200">1200 DPI</option>
+                  <option value="2400">2400 DPI</option>
+                </select>
+              </label>
+              <p class="quality-help" data-i18n="previewExportHtmlQualityHelp">Auto follows the highest Render artwork quality, while raster sources remain limited by their native pixels.</p>
+              <div class="preview-export-details" aria-live="polite">
+                <p>
+                  <strong data-i18n="previewExportPresentation">Render PNG/JPG</strong>
+                  <span id="previewExportPresentationSummary"></span>
+                </p>
+                <p>
+                  <strong data-i18n="previewExportFlat">2D PNG/JPG, SVG and PDF</strong>
+                  <span id="previewExportFlatSummary"></span>
+                </p>
+                <p>
+                  <strong data-i18n="previewExportHtml">HTML</strong>
+                  <span id="previewExportHtmlSummary"></span>
+                </p>
+              </div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="sceneStyle3d">Style</summary>
+              <div class="field">
+                <span data-i18n="sceneStyle3d">Style</span>
+                <select id="scenePreset">
+                  <option value="technical" data-i18n="technicalPreset3d">Technical</option>
+                  <option value="studio" data-i18n="studioPreset3d">Studio</option>
+                  <option value="photorealistic" data-i18n="photorealisticPreset3d">Photorealistic</option>
+                </select>
+              </div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="environment3d">Environment</summary>
+              <div class="field">
+                <span data-i18n="environmentType3d">Type</span>
+                <select id="environment">
+                  <option value="none" data-i18n="environmentNone3d">None</option>
+                  <option value="studio" data-i18n="environmentStudio3d">Studio</option>
+                  <option value="neutral" data-i18n="environmentNeutral3d">Neutral</option>
+                  <option value="warm" data-i18n="environmentWarm3d">Warm</option>
+                  <option value="cool" data-i18n="environmentCool3d">Cool</option>
+                  <option value="bright" data-i18n="environmentBright3d">Bright</option>
+                  <option value="night" data-i18n="environmentNight3d">Night</option>
+                </select>
+              </div>
+              <div class="light-control">
+                <span data-i18n="environmentIntensity3d">Intensity</span>
+                <input id="environmentIntensity" type="range" min="0" max="2" step="0.05" value="0.65">
+                <output id="environmentIntensityValue" for="environmentIntensity">0.65</output>
+              </div>
+              <div class="field">
+                <span data-i18n="backgroundColor3d">Background</span>
+                <input id="backgroundColor" type="color" value="#e8eaeb">
+              </div>
+            </details>
+          </aside>
+
+          <aside class="scene-sidebar preview-settings-panel preview-settings-panel-right" aria-label="Camera, lighting, shadow and model settings">
+
+            <details open class="tool-section">
+              <summary data-i18n="camera3d">Camera</summary>
+              <div class="field">
+                <span data-i18n="cameraProjection3d">Projection</span>
+                <select id="cameraProjection">
+                  <option value="perspective" data-i18n="perspectiveCamera3d">Perspective</option>
+                  <option value="orthographic" data-i18n="orthographicCamera3d">Orthographic</option>
+                </select>
+              </div>
+              <div class="field">
+                <span data-i18n="cameraView3d">View</span>
+                <select id="cameraPreset">
+                  <option value="isometric" data-i18n="cameraViewIsometric3d">Isometric</option>
+                  <option value="front" data-i18n="cameraViewFront3d">Front</option>
+                  <option value="top" data-i18n="cameraViewTop3d">Top</option>
+                  <option value="right" data-i18n="cameraViewRight3d">Right</option>
+                </select>
+              </div>
+              <div class="light-control">
+                <span data-i18n="cameraFov3d">FOV</span>
+                <input id="cameraFov" type="range" min="10" max="120" step="1" value="35">
+                <output id="cameraFovValue" for="cameraFov">35°</output>
+              </div>
+              <button class="sidebar-button" id="reset3dViewButton" type="button" data-i18n="resetView3d">Reset View</button>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="lighting3d">Lighting</summary>
+              <div class="light-control">
+                <span data-i18n="lightAzimuth3d">Azimuth</span>
+                <input id="lightAzimuth" type="range" min="0" max="360" step="1" value="63">
+                <output id="lightAzimuthValue" for="lightAzimuth">63°</output>
+              </div>
+              <div class="light-control">
+                <span data-i18n="lightElevation3d">Elevation</span>
+                <input id="lightElevation" type="range" min="5" max="85" step="1" value="48">
+                <output id="lightElevationValue" for="lightElevation">48°</output>
+              </div>
+              <div class="light-control">
+                <span data-i18n="lightIntensity3d">Light</span>
+                <input id="lightIntensity" type="range" min="0" max="5" step="0.05" value="2.6">
+                <output id="lightIntensityValue" for="lightIntensity">2.6</output>
+              </div>
+              <div class="light-control">
+                <span data-i18n="hemisphere3d">Ambient</span>
+                <input id="hemisphereIntensity" type="range" min="0" max="5" step="0.1" value="1.7">
+                <output id="hemisphereIntensityValue" for="hemisphereIntensity">1.7</output>
+              </div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="shadows3d">Shadows</summary>
+              <div class="field">
+                <span data-i18n="shadowsEnabled3d">Enabled</span>
+                <input id="shadowEnabled" type="checkbox" checked>
+              </div>
+              <div class="light-control">
+                <span data-i18n="shadowIntensity3d">Intensity</span>
+                <input id="shadowIntensity" type="range" min="0" max="1" step="0.01" value="0.25">
+                <output id="shadowIntensityValue" for="shadowIntensity">0.25</output>
+              </div>
+              <div class="light-control">
+                <span data-i18n="shadowBlur3d">Blur</span>
+                <input id="shadowBlur" type="range" min="0" max="8" step="0.1" value="1.5">
+                <output id="shadowBlurValue" for="shadowBlur">1.5</output>
+              </div>
+              <div class="field">
+                <span data-i18n="shadowResolution3d">Resolution</span>
+                <select id="shadowMapSize">
+                  <option value="512">512</option>
+                  <option value="1024" selected>1024</option>
+                  <option value="2048">2048</option>
+                </select>
+              </div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="model3d">Model</summary>
+              <div class="light-control assembly-control">
+                <span data-i18n="foldProgress3d">Fold</span>
+                <input id="foldProgress" type="range" min="0" max="1" step="0.01" value="1">
+                <output id="foldProgressValue" for="foldProgress">100%</output>
+                <span id="assemblyStage" class="assembly-stage" role="status" aria-live="polite"></span>
+              </div>
+              <div class="button-row">
+                <button id="open3dButton" type="button" data-i18n="open3d">Open</button>
+                <button id="fold3dButton" type="button" data-i18n="fold3d">Fold</button>
+              </div>
+            </details>
+          </aside>
+        </div>
+        </div>
+      </section>
+
+      <section class="workflow-step render-step" id="renderStep" hidden>
+        <div class="render-toolbar">
+          <span class="render-status" id="renderStatus" role="status" aria-live="polite"></span>
+          <div class="render-toolbar-actions">
+            <button id="renderPngButton" type="button" data-i18n="renderPng">Render PNG</button>
+            <button id="renderJpgButton" type="button" data-i18n="renderJpg">Render JPG</button>
+          </div>
+        </div>
+        <div class="render-main-row">
+          <div class="render-canvas-wrap" id="renderPanel" aria-busy="false">
+            <canvas id="renderCanvas" role="img" tabindex="0" aria-label="Presentation carton render" data-i18n-aria-label="renderCanvasLabel"></canvas>
+            <div class="render-viewport-overlay" id="renderViewportOverlay" aria-hidden="true">
+              <div class="render-viewport-frame" id="renderViewportFrame">
+                <span class="render-viewport-label" id="renderViewportLabel"></span>
+              </div>
+            </div>
+            <div class="render-busy" id="renderBusy" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span data-i18n="rendering">Rendering…</span>
+            </div>
+            <div class="render-recovery" id="renderRecovery" role="alert" hidden>
+              <strong id="renderRecoveryMessage" data-i18n="renderUnavailable">Presentation render is unavailable.</strong>
+              <button id="retryRenderButton" type="button" data-i18n="retryRender">Retry Render</button>
+            </div>
+          </div>
+
+          <aside class="render-sidebar render-settings-panel render-settings-panel-left" aria-label="Render output settings" data-i18n-aria-label="renderSettingsLabel">
+            <details open class="tool-section">
+              <summary data-i18n="renderPresets">Presets</summary>
+              <div class="render-preset-grid render-preset-gallery">
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="clean-studio"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-clean" aria-hidden="true"></span><span data-i18n="renderPresetCleanStudio">Clean Studio</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="catalogue"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-catalogue" aria-hidden="true"></span><span data-i18n="renderPresetCatalogue">Catalogue</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="soft-grey"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-soft-grey" aria-hidden="true"></span><span data-i18n="renderPresetSoftGrey">Soft Grey</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="transparent"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-transparent" aria-hidden="true"></span><span data-i18n="renderPresetTransparent">Transparent</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="glossy-product"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-glossy" aria-hidden="true"></span><span data-i18n="renderPresetGlossyProduct">Glossy Product</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="warm-retail"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-warm" aria-hidden="true"></span><span data-i18n="renderPresetWarmRetail">Warm Retail</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="left-view"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-left-view" aria-hidden="true"></span><span data-i18n="renderPresetLeftView">Left view</span></button>
+                <button type="button" class="render-preset-button render-preset-card" data-render-preset="right-view"><span data-preset-thumbnail class="render-preset-thumbnail render-thumb-right-view" aria-hidden="true"></span><span data-i18n="renderPresetRightView">Right view</span></button>
+              </div>
+              <div class="render-view-preset-store">
+                <h3 data-i18n="renderViewPresets">View presets</h3>
+                <div id="renderViewPresetList" class="render-preset-grid render-view-preset-list"></div>
+                <div class="preset-store-row">
+                  <select id="renderViewPreset" aria-label="View preset"><option value="" data-i18n="renderViewPresetPlaceholder">View preset…</option></select>
+                  <div class="preset-store-actions">
+                    <button id="saveRenderViewPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                    <button id="duplicateRenderViewPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
+                    <button id="deleteRenderViewPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+                    <button id="undoRenderViewPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details open class="tool-section render-artwork-quality-section">
+              <summary data-i18n="renderArtworkQuality">Artwork quality</summary>
+              <p class="quality-help" data-i18n="renderArtworkQualityHelp">Choose the source quality used by Render and raster exports.</p>
+              <div id="renderArtworkQualityList" class="render-artwork-quality-list"></div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderCamera">Camera</summary>
+              <label class="field"><span data-i18n="renderCameraPreset">View</span>
+                <select id="renderCameraPreset">
+                  <option value="back" data-i18n="renderCameraBack">Back</option>
+                  <option value="front" data-i18n="renderCameraFront">Front</option>
+                  <option value="left" data-i18n="renderCameraLeft">Left</option>
+                  <option value="right" data-i18n="renderCameraRight">Right</option>
+                  <option value="top" data-i18n="renderCameraTop">Top</option>
+                  <option value="bottom" data-i18n="renderCameraBottom">Bottom</option>
+                  <option value="front-right" data-i18n="renderCameraFrontRight">Front-right</option>
+                  <option value="front-left" data-i18n="renderCameraFrontLeft">Front-left</option>
+                  <option value="top-front" data-i18n="renderCameraTopFront">Top-front</option>
+                  <option value="isometric" data-i18n="renderCameraIsometric">Isometric</option>
+                  <option value="custom" data-i18n="renderCameraCustom">Custom</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="renderProjection">Projection</span>
+                <select id="renderProjection">
+                  <option value="perspective" data-i18n="perspectiveCamera3d">Perspective</option>
+                  <option value="orthographic" data-i18n="orthographicCamera3d">Orthographic</option>
+                </select>
+              </label>
+              <div class="light-control"><span data-i18n="cameraFov3d">FOV</span><input id="renderFov" type="range" min="10" max="120" step="1" value="35"><output id="renderFovValue">35°</output></div>
+              <label class="field"><span data-i18n="renderCameraLens">Lens</span><select id="renderCameraLens"><option value="35">35 mm</option><option value="50">50 mm</option><option value="85">85 mm</option><option value="custom" data-i18n="renderCameraLensCustom">Custom</option></select></label>
+              <output id="renderCameraLensValue" class="camera-derived-value">35.0 mm · 35°</output>
+              <details class="render-camera-advanced"><summary data-i18n="renderCameraAdvanced">Advanced camera</summary>
+                <label class="field"><span data-i18n="renderCameraHeading">Heading</span><input id="renderCameraHeading" type="number" min="-360" max="360" step="1"></label>
+                <label class="field"><span data-i18n="renderCameraElevation">Elevation</span><input id="renderCameraElevation" type="number" min="-89" max="89" step="1"></label>
+                <label class="field"><span data-i18n="renderCameraPanX">Horizontal pan</span><input id="renderCameraPanX" type="number" step="0.1"></label>
+                <label class="field"><span data-i18n="renderCameraPanY">Vertical pan</span><input id="renderCameraPanY" type="number" step="0.1"></label>
+                <label class="field"><span data-i18n="renderCameraDistance">Camera distance</span><input id="renderCameraDistance" type="number" min="0.01" step="0.1"></label>
+                <label class="field"><span data-i18n="renderCameraFrameHeight">Frame height</span><input id="renderCameraFrameHeight" type="number" min="0.01" step="0.1"></label>
+              </details>
+              <label class="field"><span data-i18n="renderKeepVerticalsParallel">Keep verticals parallel</span><input id="renderKeepVerticalsParallel" type="checkbox"></label>
+              <div class="button-row"><button id="renderFitCameraButton" type="button" data-i18n="renderFitCamera">Fit</button><button id="renderMirrorCameraButton" type="button" data-i18n="renderMirrorCamera">Mirror</button><button id="renderResetCameraButton" type="button" data-i18n="resetView3d">Reset</button></div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderFrame">Frame</summary>
+              <label class="field"><span data-i18n="renderAspect">Aspect</span>
+                <select id="renderAspect">
+                  <option value="square">1:1</option>
+                  <option value="landscape">4:3</option>
+                  <option value="wide">16:9</option>
+                  <option value="portrait">3:4</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="renderLongEdge">Long edge</span>
+                <select id="renderLongEdge"><option value="2048">2048 px</option><option value="4096">4096 px</option></select>
+              </label>
+              <p class="render-viewport-summary" id="renderViewportSummary" role="status"></p>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderMaterial">Material</summary>
+              <label class="field"><span data-i18n="renderMaterialProfile">Board finish</span>
+                <select id="renderMaterialProfile">
+                  <option value="uncoated" data-i18n="renderMaterialUncoated">Uncoated</option>
+                  <option value="matte" data-i18n="renderMaterialMatte">Matte</option>
+                  <option value="gloss" data-i18n="renderMaterialGloss">Gloss</option>
+                </select>
+              </label>
+            </details>
+
+            <details open class="tool-section render-finishes-section">
+              <summary data-i18n="renderFinishes">Finishes</summary>
+              <p class="quality-help" data-i18n="renderFinishesHelp">Assigned artwork layers are rendered as physical presentation finishes.</p>
+              <div id="renderFinishSummary" class="render-finish-summary" role="status"></div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderBoardAppearance">Board appearance</summary>
+              <div class="light-control"><span data-i18n="renderThickness">Thickness</span><input id="renderBoardThickness" type="range" min="0.01" max="2" step="0.01" value="0.35"><output id="renderBoardThicknessValue">0.35 mm</output></div>
+              <div class="light-control"><span data-i18n="renderBevel">Bevel</span><input id="renderBoardBevel" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="renderBoardBevelValue">0.12 mm</output></div>
+              <label class="field"><span data-i18n="renderInteriorColor">Interior</span><input id="renderBoardInteriorColor" type="color" value="#f4f2ec"></label>
+              <label class="field"><span data-i18n="renderEdgeColor">Edges</span><input id="renderBoardEdgeColor" type="color" value="#c8c1b5"></label>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderQuality">Quality</summary>
+              <label class="field"><span data-i18n="renderQualityInteractive">Viewport</span><select id="renderQualityInteractive"><option value="fast" data-i18n="renderQualityFast">Fast</option><option value="balanced" data-i18n="renderQualityBalanced">Balanced</option><option value="high" data-i18n="renderQualityHigh">High</option></select></label>
+              <label class="field"><span data-i18n="renderQualityExport">Export</span><select id="renderQualityExport"><option value="fast" data-i18n="renderQualityFast">Fast</option><option value="balanced" data-i18n="renderQualityBalanced">Balanced</option><option value="high" data-i18n="renderQualityHigh">High</option></select></label>
+              <label class="field"><span data-i18n="renderQualityHtml">HTML export</span><select id="renderQualityHtml"><option value="auto" data-i18n="qualityAuto">Auto</option><option value="600">600 DPI</option><option value="1200">1200 DPI</option><option value="2400">2400 DPI</option></select></label>
+            </details>
+
+            <details open class="tool-section" id="renderNamedPresetSection">
+              <summary data-i18n="renderUserPresetsHeading">Render Presets</summary>
+              <div class="preset-store-row">
+                <select id="renderNamedPreset" aria-label="Named Render preset" data-i18n-aria-label="renderNamedPresetLabel"><option value="" data-i18n="renderNamedPresetPlaceholder">Named preset…</option></select>
+                <div class="preset-store-actions">
+                  <button id="saveRenderPresetButton" type="button" data-i18n="renderSavePreset">Save</button>
+                  <button id="updateRenderPresetButton" type="button" data-i18n="renderUpdatePreset">Update</button>
+                  <button id="duplicateRenderPresetButton" type="button" data-i18n="renderDuplicatePreset">Duplicate</button>
+                  <button id="deleteRenderPresetButton" type="button" data-i18n="renderDeletePreset">Delete</button>
+                  <button id="undoRenderPresetButton" type="button" hidden data-i18n="renderUndoDelete">Undo</button>
+                </div>
+              </div>
+              <div id="renderNamedPresetList" class="render-preset-grid render-user-preset-list" aria-label="My render presets"></div>
+            </details>
+          </aside>
+
+          <aside class="render-sidebar render-settings-panel render-settings-panel-right" aria-label="Render lighting and effects settings">
+
+            <details open class="tool-section">
+              <summary data-i18n="renderLighting">Lighting</summary>
+              <div class="light-control"><span data-i18n="lightAzimuth3d">Horizontal</span><input id="renderLightAzimuth" type="range" min="0" max="360" step="1" value="63"><output id="renderLightAzimuthValue">63°</output></div>
+              <div class="light-control"><span data-i18n="lightElevation3d">Vertical</span><input id="renderLightElevation" type="range" min="5" max="85" step="1" value="48"><output id="renderLightElevationValue">48°</output></div>
+              <div class="light-control"><span data-i18n="lightIntensity3d">Brightness</span><input id="renderLightIntensity" type="range" min="0" max="10" step="0.1" value="1.7"><output id="renderLightIntensityValue">1.7</output></div>
+              <label class="field"><span data-i18n="renderEnvironment">Environment</span>
+                <select id="renderEnvironment">
+                  <option value="none" data-i18n="renderEnvironmentNone">None</option>
+                  <option value="studio" data-i18n="renderEnvironmentStudio">Studio</option>
+                  <option value="neutral" data-i18n="renderEnvironmentNeutral">Neutral</option>
+                  <option value="warm" data-i18n="renderEnvironmentWarm">Warm</option>
+                  <option value="cool" data-i18n="renderEnvironmentCool">Cool</option>
+                  <option value="bright" data-i18n="renderEnvironmentBright">Bright</option>
+                  <option value="night" data-i18n="renderEnvironmentNight">Night</option>
+                </select>
+              </label>
+              <div class="light-control"><span data-i18n="environmentIntensity3d">Ambient</span><input id="renderEnvironmentIntensity" type="range" min="0" max="5" step="0.05" value="0.4"><output id="renderEnvironmentIntensityValue">0.40</output></div>
+              <label class="field"><span data-i18n="renderEnvironmentMap">HDRI / IBL map</span>
+                <select id="renderEnvironmentMapPreset">
+                  <option value="neutral-softbox" data-i18n="renderEnvironmentNeutralSoftbox">Neutral Softbox</option>
+                  <option value="high-key" data-i18n="renderEnvironmentHighKey">High Key</option>
+                  <option value="warm-studio" data-i18n="renderEnvironmentWarmStudio">Warm Studio</option>
+                  <option value="cool-studio" data-i18n="renderEnvironmentCoolStudio">Cool Studio</option>
+                  <option value="dark-studio" data-i18n="renderEnvironmentDarkStudio">Dark Studio</option>
+                  <option value="no-reflections" data-i18n="renderEnvironmentNoReflections">No Reflections</option>
+                  <option value="polyhaven-abandoned-hall-01" data-i18n="renderEnvironmentAbandonedHall">Abandoned Hall 01 · Poly Haven</option>
+                  <option value="polyhaven-abandoned-waterworks" data-i18n="renderEnvironmentAbandonedWaterworks">Abandoned Waterworks · Poly Haven</option>
+                  <option value="polyhaven-empty-warehouse-01" data-i18n="renderEnvironmentEmptyWarehouse">Empty Warehouse 01 · Poly Haven</option>
+                  <option value="polyhaven-abandoned-workshop" data-i18n="renderEnvironmentAbandonedWorkshop">Abandoned Workshop · Poly Haven</option>
+                  <option value="polyhaven-peppermint-powerplant" data-i18n="renderEnvironmentPeppermintPowerplant">Peppermint Powerplant · Poly Haven</option>
+                  <option value="custom" data-i18n="renderEnvironmentCustom">Custom file</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="renderEnvironmentFile">HDR / EXR file</span><input id="renderEnvironmentMapFile" type="file" accept=".hdr,.exr,image/vnd.radiance,application/vnd.openexr"></label>
+              <p class="quality-help" id="renderEnvironmentMapFileName" data-i18n="renderEnvironmentNoFile">No environment map selected.</p>
+              <p class="quality-help" data-i18n="renderEnvironmentAttribution">Poly Haven environments are bundled locally under CC0.</p>
+              <div class="button-row"><button id="renderClearEnvironmentMapButton" type="button" data-i18n="renderEnvironmentClear">Reset to neutral</button></div>
+              <label class="field"><span data-i18n="renderEnvironmentUsage">Use map for</span><select id="renderEnvironmentMapUsage"><option value="lighting" data-i18n="renderEnvironmentLightingOnly">Lighting</option><option value="background" data-i18n="renderEnvironmentBackgroundOnly">Background</option><option value="both" data-i18n="renderEnvironmentLightingAndBackground">Lighting + background</option></select></label>
+              <div class="light-control"><span data-i18n="renderEnvironmentRotation">Rotation</span><input id="renderEnvironmentMapRotation" type="range" min="-360" max="360" step="1" value="0"><output id="renderEnvironmentMapRotationValue">0°</output></div>
+              <div class="light-control"><span data-i18n="renderEnvironmentBackgroundIntensity">Background intensity</span><input id="renderEnvironmentMapBackgroundIntensity" type="range" min="0" max="5" step="0.05" value="1"><output id="renderEnvironmentMapBackgroundIntensityValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="renderEnvironmentBackgroundBlur">Background blur</span><input id="renderEnvironmentMapBackgroundBlur" type="range" min="0" max="1" step="0.01" value="0"><output id="renderEnvironmentMapBackgroundBlurValue">0.00</output></div>
+              <label class="field"><span data-i18n="renderEnvironmentResolution">Resolution cap</span><select id="renderEnvironmentResolution"><option value="1024">1K</option><option value="2048">2K</option><option value="4096">4K</option></select></label>
+              <div class="light-control"><span data-i18n="renderExposure">Exposure</span><input id="renderExposure" type="range" min="0.1" max="3" step="0.05" value="0.85"><output id="renderExposureValue">0.85</output></div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderBackground">Background</summary>
+              <label class="field"><span data-i18n="renderBackgroundMode">Mode</span>
+                <select id="renderBackgroundMode"><option value="solid" data-i18n="renderBackgroundSolid">Solid</option><option value="image" data-i18n="renderBackgroundImage">Image</option><option value="environment" data-i18n="renderBackgroundEnvironment">Environment</option><option value="transparent" data-i18n="renderBackgroundTransparent">Transparent</option></select>
+              </label>
+              <label class="field"><span data-i18n="backgroundColor3d">Color</span><input id="renderBackgroundColor" type="color" value="#d9dcde"></label>
+              <label class="field"><span data-i18n="renderBackgroundImageFile">Image file</span><input id="renderBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"></label>
+              <p class="quality-help" id="renderBackgroundFileName" data-i18n="renderBackgroundNoImage">No image selected.</p>
+              <div class="button-row"><button id="renderClearBackgroundButton" type="button" data-i18n="renderBackgroundClear">Clear image</button></div>
+              <label class="field"><span data-i18n="renderBackgroundFit">Fit</span><select id="renderBackgroundFit"><option value="cover" data-i18n="renderBackgroundCover">Cover</option><option value="contain" data-i18n="renderBackgroundContain">Contain</option></select></label>
+              <div class="light-control"><span data-i18n="renderBackgroundPositionX">Position X</span><input id="renderBackgroundPositionX" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderBackgroundPositionXValue">50%</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundPositionY">Position Y</span><input id="renderBackgroundPositionY" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderBackgroundPositionYValue">50%</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundZoom">Zoom</span><input id="renderBackgroundZoom" type="range" min="0.1" max="4" step="0.05" value="1"><output id="renderBackgroundZoomValue">1.00×</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundBrightness">Brightness</span><input id="renderBackgroundBrightness" type="range" min="0" max="2" step="0.05" value="1"><output id="renderBackgroundBrightnessValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="renderBackgroundOverlay">Overlay</span><input id="renderBackgroundOverlayOpacity" type="range" min="0" max="1" step="0.01" value="0"><output id="renderBackgroundOverlayOpacityValue">0%</output></div>
+              <label class="field"><span data-i18n="renderBackgroundOverlayColor">Overlay color</span><input id="renderBackgroundOverlayColor" type="color" value="#000000"></label>
+              <div class="light-control"><span data-i18n="renderBackgroundBlur">Blur</span><input id="renderBackgroundBlur" type="range" min="0" max="40" step="0.5" value="0"><output id="renderBackgroundBlurValue">0 px</output></div>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="shadows3d">Shadows</summary>
+              <label class="field"><span data-i18n="shadowsEnabled3d">Enabled</span><input id="renderShadowEnabled" type="checkbox" checked></label>
+              <div class="light-control"><span data-i18n="shadowIntensity3d">Intensity</span><input id="renderShadowIntensity" type="range" min="0" max="1" step="0.01" value="0.34"><output id="renderShadowIntensityValue">0.34</output></div>
+              <div class="light-control"><span data-i18n="shadowBlur3d">Softness</span><input id="renderShadowBlur" type="range" min="0" max="8" step="0.1" value="2"><output id="renderShadowBlurValue">2.0</output></div>
+              <label class="field"><span data-i18n="renderTransparentShadow">Shadow in transparent PNG</span><input id="renderTransparentShadow" type="checkbox" checked></label>
+              <label class="field"><span data-i18n="renderShadowMapSize">Shadow map</span><select id="renderShadowMapSize"><option value="512">512 px</option><option value="1024">1024 px</option><option value="2048">2048 px</option></select></label>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderFloorEffects">Floor effects</summary>
+              <label class="field"><span data-i18n="renderFloorReflection">Reflection</span><input id="renderFloorReflectionEnabled" type="checkbox"></label>
+              <div class="light-control"><span data-i18n="renderReflectionStrength">Strength</span><input id="renderFloorReflectionStrength" type="range" min="0" max="1" step="0.01" value="0.08"><output id="renderFloorReflectionStrengthValue">0.08</output></div>
+              <div class="light-control"><span data-i18n="renderReflectionBlur">Softness</span><input id="renderFloorReflectionBlur" type="range" min="0" max="1" step="0.01" value="0.65"><output id="renderFloorReflectionBlurValue">0.65</output></div>
+              <div class="light-control"><span data-i18n="renderReflectionFade">Fade distance</span><input id="renderFloorReflectionFade" type="range" min="0.05" max="5" step="0.05" value="0.65"><output id="renderFloorReflectionFadeValue">0.65</output></div>
+              <label class="field"><span data-i18n="renderTransparentReflection">Reflection in transparent PNG</span><input id="renderTransparentReflection" type="checkbox"></label>
+            </details>
+
+            <details open class="tool-section">
+              <summary data-i18n="renderEffects">Effects</summary>
+              <label class="field"><span data-i18n="renderGtao">GTAO</span><input id="renderEffectsGtao" type="checkbox" checked></label>
+              <div class="light-control"><span data-i18n="renderGtaoIntensity">AO intensity</span><input id="renderGtaoIntensity" type="range" min="0" max="1" step="0.01" value="0.5"><output id="renderGtaoIntensityValue">0.50</output></div>
+              <div class="light-control"><span data-i18n="renderGtaoRadius">AO radius</span><input id="renderGtaoRadius" type="range" min="0.01" max="2" step="0.01" value="0.18"><output id="renderGtaoRadiusValue">0.18</output></div>
+              <label class="field"><span data-i18n="renderGtaoResolution">AO resolution</span><select id="renderGtaoResolution"><option value="half">Half</option><option value="full">Full</option></select></label>
+              <label class="field"><span data-i18n="renderDof">Depth of field</span><input id="renderEffectsDof" type="checkbox"></label>
+              <label class="field"><span data-i18n="renderDofFocusMode">Focus</span><select id="renderDofFocusMode"><option value="carton-center">Carton center</option><option value="custom">Custom</option></select></label>
+              <div class="light-control"><span data-i18n="renderDofFocusDistance">Focus distance</span><input id="renderDofFocusDistance" type="range" min="0.01" max="10" step="0.01" value="1"><output id="renderDofFocusDistanceValue">1.00</output></div>
+              <div class="light-control"><span data-i18n="renderDofAperture">Aperture</span><input id="renderDofAperture" type="range" min="0" max="0.2" step="0.001" value="0.025"><output id="renderDofApertureValue">0.025</output></div>
+              <div class="light-control"><span data-i18n="renderDofMaxBlur">Max blur</span><input id="renderDofMaxBlur" type="range" min="0" max="1" step="0.01" value="0.01"><output id="renderDofMaxBlurValue">0.010</output></div>
+              <label class="field"><span data-i18n="renderAaInteractive">AA viewport</span><select id="renderAaInteractive"><option value="native" data-i18n="renderAaNative">Native</option><option value="smaa">SMAA</option><option value="taa">TAA</option></select></label>
+              <label class="field"><span data-i18n="renderAaSettled">AA settled</span><select id="renderAaSettled"><option value="native" data-i18n="renderAaNative">Native</option><option value="smaa">SMAA</option><option value="taa">TAA</option></select></label>
+              <label class="field"><span data-i18n="renderAaExport">AA export</span><select id="renderAaExport"><option value="native" data-i18n="renderAaNative">Native</option><option value="smaa">SMAA</option><option value="taa">TAA</option></select></label>
+              <div class="light-control"><span data-i18n="renderAaTaaSamples">TAA samples</span><input id="renderAaTaaSamples" type="range" min="1" max="64" step="1" value="16"><output id="renderAaTaaSamplesValue">16</output></div>
+              <button id="experimentalPathTracingButton" type="button" data-i18n="renderPathTracing" hidden>High Quality Experimental</button>
+            </details>
+
+            <details class="tool-section" id="renderDiagnosticsDrawer">
+              <summary data-i18n="renderDiagnostics">Diagnostics</summary>
+              <pre id="renderDiagnosticsOutput" class="diagnostics-output" aria-live="polite"></pre>
+            </details>
+          </aside>
+        </div>
+      </section>
+
+      <input id="artworkFileInput" type="file" accept="image/png,image/jpeg,image/gif,application/pdf,application/postscript,video/mp4,video/webm,.png,.jpg,.jpeg,.gif,.pdf,.ai,.mp4,.webm" hidden>
+      <input id="projectFileInput" type="file" accept=".carton,application/zip" hidden>
+
+      <dialog id="pageDialog" aria-labelledby="pageDialogTitle">
+        <form method="dialog">
+          <h2 id="pageDialogTitle" data-i18n="choosePdfPage">Choose PDF page</h2>
+          <label><span data-i18n="page">Page</span> <input id="pdfPageNumber" type="number" min="1" value="1"></label>
+          <p id="pdfPageCount"></p>
+          <div class="dialog-actions">
+            <button value="cancel" data-i18n="cancel">Cancel</button>
+            <button class="primary-action" value="confirm" data-i18n="openPage">Open page</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="passwordDialog" aria-labelledby="passwordDialogTitle">
+        <form method="dialog">
+          <h2 id="passwordDialogTitle" data-i18n="pdfPasswordTitle">PDF is password protected</h2>
+          <p data-i18n="pdfPasswordHint">Enter the password to open this PDF.</p>
+          <label><span data-i18n="pdfPasswordLabel">Password</span>
+            <input id="pdfPasswordInput" type="password" autocomplete="off">
+          </label>
+          <div class="dialog-actions">
+            <button value="cancel" data-i18n="cancel">Cancel</button>
+            <button class="primary-action" value="confirm" data-i18n="pdfPasswordUnlock">Unlock</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="separationsDialog" aria-labelledby="separationsDialogTitle">
+        <form method="dialog">
+          <h2 id="separationsDialogTitle" class="dialog-drag-handle" data-dialog-drag-handle data-i18n="separations">Separations</h2>
+          <p class="separations-hint" data-i18n="separationsHint">Show or hide individual ink plates. Works when Overprint Preview is on.</p>
+          <div class="separations-table" id="separationsList"></div>
+          <div class="dialog-actions">
+            <button class="primary-action" value="confirm" data-i18n="close">Close</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="unsavedChangesDialog" aria-labelledby="unsavedChangesTitle">
+        <form method="dialog">
+          <h2 id="unsavedChangesTitle" data-i18n="unsavedChangesTitle">Save changes before creating a new project?</h2>
+          <p data-i18n="unsavedChangesHint">Your changes will be lost if you don't save them.</p>
+          <div class="dialog-actions triple-actions">
+            <button type="button" class="danger-action" id="dontSaveProjectBtn" data-i18n="dontSave">Don't Save</button>
+            <button type="button" id="cancelNewProjectBtn" data-i18n="cancel">Cancel</button>
+            <button type="button" class="primary-action" id="saveAndNewProjectBtn" data-i18n="save">Save</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="renderExportDialog" aria-labelledby="renderExportDialogTitle">
+        <form method="dialog" id="renderExportForm">
+          <h2 id="renderExportDialogTitle" data-i18n="renderExportDialogTitle">Export render</h2>
+          <label class="field"><span data-i18n="renderExportKind">Export type</span><select id="renderExportKind"><option value="image" data-i18n="renderExportKindImage">Image</option><option value="sequence" data-i18n="renderExportKindSequence">Turntable sequence</option><option value="glb" data-i18n="renderExportKindGlb">Binary glTF (.glb)</option></select></label>
+          <div id="renderExportImageOptions">
+            <label class="field"><span data-i18n="renderExportFormat">Format</span><select id="renderExportFormat"><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
+            <label class="field"><span data-i18n="renderExportSizing">Sizing</span><select id="renderExportSizing"><option value="preset" data-i18n="renderExportSizingPreset">Preset</option><option value="pixels" data-i18n="renderExportSizingPixels">Pixels</option><option value="print" data-i18n="renderExportSizingPrint">Print size</option></select></label>
+            <div class="render-export-pixels"><label class="field"><span data-i18n="renderExportWidth">Width</span><input id="renderExportWidth" type="number" min="256" max="4096" step="1"></label><label class="field"><span data-i18n="renderExportHeight">Height</span><input id="renderExportHeight" type="number" min="256" max="4096" step="1"></label></div>
+            <div class="render-export-print"><label class="field"><span data-i18n="renderExportUnit">Unit</span><select id="renderExportUnit"><option value="cm">cm</option><option value="in">in</option></select></label><label class="field"><span data-i18n="renderExportWidth">Width</span><input id="renderExportPrintWidth" type="number" min="1" max="200" step="0.1"></label><label class="field"><span data-i18n="renderExportHeight">Height</span><input id="renderExportPrintHeight" type="number" min="1" max="200" step="0.1"></label><label class="field"><span data-i18n="renderExportPpi">PPI</span><input id="renderExportPpi" type="number" min="30" max="1200" step="1"></label></div>
+            <label class="field" id="renderJpegQualityField"><span data-i18n="renderJpegQuality">JPG quality</span><input id="renderJpegQuality" type="range" min="0.5" max="1" step="0.01" value="0.94"><output id="renderJpegQualityValue">94%</output></label>
+            <label class="field"><span data-i18n="renderExportLockAspect">Lock aspect</span><input id="renderExportLockAspect" type="checkbox" checked></label>
+          </div>
+          <div id="renderExportSequenceOptions" hidden>
+            <label class="field"><span data-i18n="renderTurntableFrames">Frames</span><select id="renderExportSequenceFrames"><option value="24">24</option><option value="36">36</option><option value="72">72</option></select></label>
+            <label class="field"><span data-i18n="renderTurntableResolution">Long edge</span><select id="renderExportSequenceLongEdge"><option value="512">512 px</option><option value="1024">1024 px</option><option value="2048">2048 px</option></select></label>
+            <label class="field"><span data-i18n="renderExportFormat">Format</span><select id="renderExportSequenceFormat"><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
+          </div>
+          <div id="renderExportGlbOptions" hidden>
+            <label class="field"><span data-i18n="renderGlbTextureSize">Texture size</span><select id="renderExportGlbTextureSize"><option value="auto" data-i18n="renderExportAuto">Auto</option><option value="1024">1024 px</option><option value="2048">2048 px</option><option value="4096">4096 px</option></select></label>
+            <label class="field"><span data-i18n="renderGlbMaterialMode">Materials</span><select id="renderExportGlbMaterialMode"><option value="full-pbr" data-i18n="renderGlbFullPbr">Full PBR</option><option value="basic-compatibility" data-i18n="renderGlbCompatibility">Basic compatibility</option></select></label>
+            <label class="field"><span data-i18n="renderGlbIncludeCamera">Include current camera</span><input id="renderExportGlbIncludeCamera" type="checkbox" checked></label>
+            <p class="render-export-warning" id="renderExportGlbWarning" role="status" hidden data-i18n="renderGlbCompatibilityWarning">Basic compatibility keeps print artwork but simplifies packaging finishes for viewers with limited PBR support.</p>
+          </div>
+          <p class="render-export-summary" id="renderExportSummary"></p>
+          <div id="renderExportPreflight" class="render-export-preflight" role="status" aria-live="polite"></div>
+          <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Cancel</button><button class="primary-action" id="renderExportConfirm" value="confirm" data-i18n="renderExportAction">Export</button></div>
+        </form>
+      </dialog>
+
+      <dialog id="renderPresetNameDialog" aria-labelledby="renderPresetNameDialogTitle">
+        <form method="dialog" id="renderPresetNameForm">
+          <h2 id="renderPresetNameDialogTitle" data-i18n="renderPresetNameDialogTitle">Name preset</h2>
+          <label class="field"><span data-i18n="renderPresetNameLabel">Name</span><input id="renderPresetNameInput" type="text" maxlength="64" required></label>
+          <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Cancel</button><button class="primary-action" value="confirm" data-i18n="save">Save</button></div>
+        </form>
+      </dialog>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+    </section>
+    <section class="operation-progress" id="operationProgress" role="status" aria-live="polite" aria-atomic="false" hidden>
+      <div class="operation-progress-heading">
+        <strong id="operationProgressLabel"></strong>
+        <button type="button" id="operationProgressCancel" data-i18n="cancel">Cancel</button>
+      </div>
+      <p id="operationProgressDetail"></p>
+      <progress id="operationProgressBar" role="progressbar" max="100" value="0" aria-valuemin="0" aria-valuemax="100" aria-label="Operation progress" data-i18n-aria-label="operationProgressLabel"></progress>
+    </section>
+  </main>
+
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "@cartonbuilder/workflow-v1",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "exports": {
+    ".": "./index.js",
+    "./validator": "./workflow/validator.js",
+    "./builder": "./workflow/builder.js",
+    "./crypto": "./workflow/crypto.js",
+    "./security": "./workflow/security.js",
+    "./compiledSchema": "./workflow/compiledSchema.js",
+    "./schema": "./schema/carton-workflow.v1.schema.json",
+    "./export/modelJson": "./export/modelJson.mjs",
+    "./export/svgMetadata": "./export/svgMetadata.mjs",
+    "./export/svgGeometry": "./export/svgGeometry.mjs",
+    "./export/svgAnnotations": "./export/svgAnnotations.mjs",
+    "./export/svgDiagnostics": "./export/svgDiagnostics.mjs",
+    "./export/svgBounds": "./export/svgBounds.mjs"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.11"
+  }
+}
