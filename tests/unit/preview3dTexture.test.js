@@ -194,6 +194,86 @@ describe('3D texture composition', () => {
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
+  it('keeps artwork-colored bleed outside the panel mask instead of covering it with white', async () => {
+    const { Canvas, createCanvas } = await import('@napi-rs/canvas');
+    vi.stubGlobal('OffscreenCanvas', Canvas);
+    const bitmap = createCanvas(100, 100);
+    const bitmapContext = bitmap.getContext('2d');
+    bitmapContext.fillStyle = '#ff0000';
+    bitmapContext.fillRect(0, 0, 100, 100);
+    const bounds = {
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 10,
+      width: 10,
+      height: 10,
+    };
+    const panel = {
+      id: 'front',
+      x: 2,
+      y: 2,
+      width: 6,
+      height: 6,
+      polygon: [
+        { x: 3, y: 2 },
+        { x: 7, y: 2 },
+        { x: 8, y: 8 },
+        { x: 2, y: 8 },
+      ],
+    };
+    const artwork = {
+      model: {
+        hasArtwork: true,
+        source: { previewWidthPx: 100, previewHeightPx: 100 },
+        centerXmm: 5,
+        centerYmm: 5,
+        unrotatedWidthMm: 10,
+        unrotatedHeightMm: 10,
+        rotation: 0,
+        opacity: 1,
+      },
+      visible: true,
+      previewBlob: new Blob(['red'], { type: 'image/png' }),
+    };
+    const result = await composeArtworkTexture({
+      boxModel: {
+        getBounds: () => bounds,
+        getElements: () => [panel],
+      },
+      artworks: [artwork],
+      createImageBitmapFn: vi.fn().mockResolvedValue(bitmap),
+      rasterize: null,
+      textureLimits: { maxEdge: 100, maxPixels: 10_000, bleedPixels: 2 },
+    });
+    const context = result.canvas.getContext('2d');
+    const readPixel = (x, y) => [...context.getImageData(x, y, 1, 1).data];
+
+    expect(readPixel(10, 50)).toEqual([255, 255, 255, 255]);
+    const leftBleed = readPixel(23, 50);
+    const rightBleed = readPixel(76, 50);
+    expect(leftBleed[0]).toBe(255);
+    expect(leftBleed[1]).toBeLessThan(128);
+    expect(rightBleed[0]).toBe(255);
+    expect(rightBleed[1]).toBeLessThan(128);
+
+    const technicalResult = await composeArtworkTexture({
+      boxModel: {
+        mode: 'technical',
+        getCanonicalViewBoxBounds: () => bounds,
+        getElements: () => [panel],
+      },
+      artworks: [artwork],
+      createImageBitmapFn: vi.fn().mockResolvedValue(bitmap),
+      rasterize: null,
+      textureLimits: { maxEdge: 100, maxPixels: 10_000, bleedPixels: 2 },
+    });
+    const technicalContext = technicalResult.canvas.getContext('2d');
+    const technicalOutside = [...technicalContext.getImageData(10, 50, 1, 1).data];
+    expect(technicalOutside[0]).toBe(255);
+    expect(technicalOutside[1]).toBeLessThan(32);
+  });
+
   it('redraws the baked static layer without touching the closed bitmap', async () => {
     vi.stubGlobal('OffscreenCanvas', CanvasMock);
     const bitmap = { close: vi.fn() };

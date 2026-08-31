@@ -638,6 +638,7 @@ async function refreshTechnicalArtwork() {
 
 function updateTechnicalPreviewUi() {
   const technical = workflowMode === 'technical' && currentStep === 'preview';
+  if (previewStep) previewStep.dataset.previewMode = technical ? 'technical' : 'quick';
   if (technicalPreviewPanel) technicalPreviewPanel.hidden = !technical;
   if (quickPreviewContent) quickPreviewContent.hidden = technical;
   if (quickPreviewActions) quickPreviewActions.hidden = workflowMode === 'technical';

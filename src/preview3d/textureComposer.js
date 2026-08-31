@@ -175,22 +175,42 @@ function baseRoughnessForProfile(profile) {
   return profile === 'uncoated' ? 0.94 : profile === 'matte' ? 0.82 : profile === 'gloss' ? 0.46 : 0.86;
 }
 
-function drawTransformedArtwork(context, entry, bitmap, bounds, pixelsPerMm, panels, { includeOpacity = false } = {}) {
+function drawTransformedArtwork(
+  context,
+  entry,
+  bitmap,
+  bounds,
+  pixelsPerMm,
+  panels,
+  { includeOpacity = false, clipToPanels = true } = {},
+) {
   context.save();
   context.scale(pixelsPerMm, pixelsPerMm);
   context.translate(-bounds.minX, -bounds.minY);
-  drawPanelUnion(context, panels);
-  context.clip();
+  if (clipToPanels) {
+    drawPanelUnion(context, panels);
+    context.clip();
+  }
   drawArtwork(context, entry, bitmap, { includeOpacity });
   context.restore();
 }
 
-function readMaskPixels({ entry, bitmap, width, height, bounds, pixelsPerMm, panels, documentRef }) {
+function readMaskPixels({
+  entry,
+  bitmap,
+  width,
+  height,
+  bounds,
+  pixelsPerMm,
+  panels,
+  documentRef,
+  clipToPanels,
+}) {
   const canvas = createCanvas(width, height, documentRef);
   const context = canvas.getContext('2d', { alpha: true });
   if (!context?.getImageData) return null;
   context.clearRect?.(0, 0, width, height);
-  drawTransformedArtwork(context, entry, bitmap, bounds, pixelsPerMm, panels);
+  drawTransformedArtwork(context, entry, bitmap, bounds, pixelsPerMm, panels, { clipToPanels });
   const image = context.getImageData(0, 0, width, height).data;
   const { maskChannel, invert } = sanitizeArtworkFinish(entry).finish;
   const values = new Uint8Array(width * height);
@@ -253,6 +273,7 @@ async function composeFinishMaps({
   documentRef,
   textureLimits,
   materialProfile,
+  clipToPanels,
   signal,
 }) {
   const hasFinishes = entries.some((entry) => entry.outputRole !== 'print' && entry.finish);
@@ -270,7 +291,17 @@ async function composeFinishMaps({
   for (const { entry, index } of maskEntries) {
     throwIfAborted(signal);
     const finish = sanitizeArtworkFinish(entry).finish;
-    const mask = readMaskPixels({ entry, bitmap: bitmaps[index], width, height, bounds, pixelsPerMm, panels, documentRef });
+    const mask = readMaskPixels({
+      entry,
+      bitmap: bitmaps[index],
+      width,
+      height,
+      bounds,
+      pixelsPerMm,
+      panels,
+      documentRef,
+      clipToPanels,
+    });
     if (!mask) continue;
     const intensity = Number(finish.intensity) || 0;
     const foilRgb = hexToRgb(finish.foilColor);
@@ -342,8 +373,9 @@ export async function composeArtworkTexture({
   }
   throwIfAborted(signal);
 
-  const bounds = boxModel.getBounds();
+  const bounds = boxModel.getCanonicalViewBoxBounds?.() || boxModel.getBounds();
   const panels = boxModel.getElements?.() || boxModel.getPanels();
+  const clipToPanels = boxModel.mode !== 'technical';
   const { width, height, pixelsPerMm } = getTextureSize(
     bounds,
     entries,
@@ -408,19 +440,23 @@ export async function composeArtworkTexture({
         documentRef,
         textureLimits,
         materialProfile,
+        clipToPanels,
         signal,
       })
       : null;
     throwIfAborted(signal);
 
     const bakeStaticLayer = () => {
+      staticLayerContext.clearRect(0, 0, width, height);
       staticLayerContext.save();
       staticLayerContext.scale(pixelsPerMm, pixelsPerMm);
       staticLayerContext.translate(-bounds.minX, -bounds.minY);
-      drawPanelUnion(staticLayerContext, panels);
-      staticLayerContext.clip();
-      staticLayerContext.fillStyle = '#ffffff';
-      staticLayerContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+      if (clipToPanels) {
+        drawPanelUnion(staticLayerContext, panels);
+        staticLayerContext.clip();
+        staticLayerContext.fillStyle = '#ffffff';
+        staticLayerContext.fillRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+      }
       for (let index = 0; index < entries.length; index += 1) {
         if (isPrintEntry(entries[index])) drawArtwork(staticLayerContext, entries[index], bitmaps[index]);
       }
@@ -428,14 +464,20 @@ export async function composeArtworkTexture({
     };
 
     const redrawCanvas = () => {
+      outputContext.save();
+      outputContext.fillStyle = '#ffffff';
+      outputContext.fillRect(0, 0, width, height);
+      outputContext.restore();
       rawContext.save();
       rawContext.clearRect(0, 0, width, height);
       rawContext.drawImage(staticLayerCanvas, 0, 0);
       rawContext.save();
       rawContext.scale(pixelsPerMm, pixelsPerMm);
       rawContext.translate(-bounds.minX, -bounds.minY);
-      drawPanelUnion(rawContext, panels);
-      rawContext.clip();
+      if (clipToPanels) {
+        drawPanelUnion(rawContext, panels);
+        rawContext.clip();
+      }
       for (let index = 0; index < entries.length; index += 1) {
         if (isPrintEntry(entries[index]) && isVideoEntry(entries[index])) {
           drawArtwork(rawContext, entries[index], bitmaps[index]);

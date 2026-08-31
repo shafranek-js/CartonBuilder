@@ -1496,9 +1496,17 @@ button.workflow-mode-card {
 
 .preview-step {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   padding: 0 16px 14px;
+}
+
+.preview-step[data-preview-mode="technical"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.preview-step[data-preview-mode="technical"] > .preview-toolbar {
+  display: none;
 }
 
 .artwork-step {
@@ -2727,7 +2735,7 @@ input[type="checkbox"].sr-only::after {
 
 .technical-preview-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--panel-border, #5a5a5a);

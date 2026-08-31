@@ -30,7 +30,11 @@ export function makeTechMaterials(spec){
 export function makeCreaseMaterial(foldId, creaseMeshName){
   const surface=new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:1,metalness:0,side:THREE.FrontSide});
   surface.name=`${creaseMeshName(foldId)}_outer_paper`;
-  return surface;
+  const inner=new THREE.MeshStandardMaterial({color:0xfafaf6,roughness:1,metalness:0,side:THREE.FrontSide});
+  inner.name=`${creaseMeshName(foldId)}_inner_paper`;
+  const edge=new THREE.MeshStandardMaterial({color:0xeadfcf,roughness:1,metalness:0,side:THREE.DoubleSide});
+  edge.name=`${creaseMeshName(foldId)}_edge`;
+  return [surface,inner,edge];
 }
 
 export function getArtworkSurfaceMaterials(root) {

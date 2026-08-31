@@ -128,6 +128,7 @@ export function createTechnicalBoxModelAdapter(document) {
     get construction() { return { templateId: 'technical-pbd', templateVersion: 1, parameters: {} }; },
     get rootId() { return surfaces[0]?.id || null; },
     getBounds: () => clone(presentation.geometryBounds),
+    getCanonicalViewBoxBounds: () => document.getCanonicalViewBoxBounds(),
     getElements: () => clone(surfaces),
     getPanels: () => clone(surfaces),
     getPanel: (id) => clone(byId.get(id) || null),

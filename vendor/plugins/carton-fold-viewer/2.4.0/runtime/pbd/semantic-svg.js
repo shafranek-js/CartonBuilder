@@ -76,74 +76,8 @@ export function parseSemanticCartonSvg(svgText) {
     while(parentOf[q]){ if(seen.has(q)) throw new Error(`Cycle detected in foldGraph at ${q}`); seen.add(q); q=parentOf[q]; }
   }
 
-  // Apply packaging CAD bend compensation (caliper compensation) to tuck-insertion closure flaps.
-  // In 2D CAD die-lines, major closure panels are drafted shorter by 1x caliper (d2d = W - t).
-  // In physical folding, outer corner bend expansion gives the full box depth W.
-  for (const r of (metadata.interactions || [])) {
-    if (r.type === 'tuck-insertion' && r.closureFoldId && r.tongueFoldId && r.closurePanelId && r.tonguePanelId) {
-      const cf = folds[r.closureFoldId], tf = folds[r.tongueFoldId];
-      const cp = panels[r.closurePanelId], tp = panels[r.tonguePanelId];
-      if (cf && tf && cp && tp) {
-        const midC = [(cf.line.a[0] + cf.line.b[0]) / 2, (cf.line.a[1] + cf.line.b[1]) / 2];
-        const midT = [(tf.line.a[0] + tf.line.b[0]) / 2, (tf.line.a[1] + tf.line.b[1]) / 2];
-        const d2d = Math.hypot(midT[0] - midC[0], midT[1] - midC[1]);
-        const targetDepth = dims.width || dims.widthMm || 60.0;
-        const comp = targetDepth - d2d;
-        if (comp > 0.1 && d2d > 0.1) {
-          const n = [(midT[0] - midC[0]) / d2d, (midT[1] - midC[1]) / d2d];
-          cp.polygon.forEach(p => {
-            const dp = (p[0] - cf.line.a[0]) * n[0] + (p[1] - cf.line.a[1]) * n[1];
-            if (dp > 0.01) {
-              p[0] += n[0] * dp * (comp / d2d);
-              p[1] += n[1] * dp * (comp / d2d);
-            }
-          });
-          tf.line.a[0] += n[0] * comp; tf.line.a[1] += n[1] * comp;
-          tf.line.b[0] += n[0] * comp; tf.line.b[1] += n[1] * comp;
-          tf.points.forEach(p => { p[0] += n[0] * comp; p[1] += n[1] * comp; });
-          tp.polygon.forEach(p => { p[0] += n[0] * comp; p[1] += n[1] * comp; });
-        }
-      }
-    }
-  }
-
-  // Apply packaging CAD bend compensation (caliper compensation) to manufacturer's glue seam.
-  // In physical folding, the back panel must fold 1x caliper earlier (L_back = L - t) so that
-  // the glue flap is positioned along the inner face of the mating side panel.
-  for (const f of Object.values(folds)) {
-    const childMeta = panelMeta.find(p => p.id === f.childPanelId) || {};
-    const isGlue = childMeta.layerClass === 'glue' || String(childMeta.kind || '').toUpperCase() === 'GLUE_FLAP';
-    if (isGlue && f.parentPanelId && panels[f.parentPanelId] && panels[f.childPanelId]) {
-      const parentP = panels[f.parentPanelId], childP = panels[f.childPanelId];
-      const t = dims.thickness || dims.thicknessMm || 3.2;
-      const u = [f.line.axis[0], f.line.axis[1]];
-      const childC = polyCentroid(childP.polygon);
-      const mid = [(f.line.a[0] + f.line.b[0]) / 2, (f.line.a[1] + f.line.b[1]) / 2];
-      let n = [-u[1], u[0]];
-      if ((childC[0] - mid[0]) * n[0] + (childC[1] - mid[1]) * n[1] < 0) {
-        n[0] = -n[0];
-        n[1] = -n[1];
-      }
-
-      const shift = [-n[0] * t, -n[1] * t];
-      f.line.a[0] += shift[0]; f.line.a[1] += shift[1];
-      f.line.b[0] += shift[0]; f.line.b[1] += shift[1];
-      f.points.forEach(p => { p[0] += shift[0]; p[1] += shift[1]; });
-
-      parentP.polygon.forEach(p => {
-        const dp = (p[0] - mid[0]) * n[0] + (p[1] - mid[1]) * n[1];
-        if (dp > -1.0) {
-          p[0] += shift[0];
-          p[1] += shift[1];
-        }
-      });
-
-      childP.polygon.forEach(p => {
-        p[0] += shift[0];
-        p[1] += shift[1];
-      });
-    }
-  }
+  // Invariant: parseSemanticCartonSvg is a pure parser that preserves canonical
+  // semantic SVG panel polygons, fold lines, panel positions, and origins untouched.
 
   const origins={}; origins[rootId]=polyCentroid(panels[rootId].polygon);
   for(const f of Object.values(folds)) origins[f.childPanelId]=f.line.a;

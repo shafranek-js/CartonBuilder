@@ -203,45 +203,50 @@ function creaseIndices(segments, isFlipped = false) {
   //   k=5: inner s0 (rim -u normal)
   //   k=6: outer s1 (rim +u normal)
   //   k=7: inner s1 (rim +u normal)
-  const idx = [], v = (q, k) => q * 8 + k;
+  const outer = [], inner = [], rims = [], v = (q, k) => q * 8 + k;
 
   for (let q = 0; q < segments; q++) {
     if (!isFlipped) {
       // Outside skin (CCW for outward +Z normal when cross(u, n) > 0)
-      idx.push(v(q, 0), v(q, 2), v(q + 1, 2));
-      idx.push(v(q, 0), v(q + 1, 2), v(q + 1, 0));
+      outer.push(v(q, 0), v(q, 2), v(q + 1, 2));
+      outer.push(v(q, 0), v(q + 1, 2), v(q + 1, 0));
 
       // Inside skin (CCW for inward -Z normal when cross(u, n) > 0)
-      idx.push(v(q, 1), v(q + 1, 1), v(q + 1, 3));
-      idx.push(v(q, 1), v(q + 1, 3), v(q, 3));
+      inner.push(v(q, 1), v(q + 1, 1), v(q + 1, 3));
+      inner.push(v(q, 1), v(q + 1, 3), v(q, 3));
 
       // s0 rim (dedicated vertices k=4, 5 with exact outward normal -u)
-      idx.push(v(q, 4), v(q + 1, 5), v(q, 5));
-      idx.push(v(q, 4), v(q + 1, 4), v(q + 1, 5));
+      rims.push(v(q, 4), v(q + 1, 5), v(q, 5));
+      rims.push(v(q, 4), v(q + 1, 4), v(q + 1, 5));
 
       // s1 rim (dedicated vertices k=6, 7 with exact outward normal +u)
-      idx.push(v(q, 6), v(q, 7), v(q + 1, 7));
-      idx.push(v(q, 6), v(q + 1, 7), v(q + 1, 6));
+      rims.push(v(q, 6), v(q, 7), v(q + 1, 7));
+      rims.push(v(q, 6), v(q + 1, 7), v(q + 1, 6));
     } else {
       // Outside skin (CCW for outward +Z normal when cross(u, n) < 0)
-      idx.push(v(q, 0), v(q + 1, 2), v(q, 2));
-      idx.push(v(q, 0), v(q + 1, 0), v(q + 1, 2));
+      outer.push(v(q, 0), v(q + 1, 2), v(q, 2));
+      outer.push(v(q, 0), v(q + 1, 0), v(q + 1, 2));
 
       // Inside skin (CCW for inward -Z normal when cross(u, n) < 0)
-      idx.push(v(q, 1), v(q + 1, 3), v(q + 1, 1));
-      idx.push(v(q, 1), v(q, 3), v(q + 1, 3));
+      inner.push(v(q, 1), v(q + 1, 3), v(q + 1, 1));
+      inner.push(v(q, 1), v(q, 3), v(q + 1, 3));
 
       // s0 rim (dedicated vertices k=4, 5 with exact outward normal -u)
-      idx.push(v(q, 4), v(q, 5), v(q + 1, 5));
-      idx.push(v(q, 4), v(q + 1, 5), v(q + 1, 4));
+      rims.push(v(q, 4), v(q, 5), v(q + 1, 5));
+      rims.push(v(q, 4), v(q + 1, 5), v(q + 1, 4));
 
       // s1 rim (dedicated vertices k=6, 7 with exact outward normal +u)
-      idx.push(v(q, 6), v(q + 1, 7), v(q, 7));
-      idx.push(v(q, 6), v(q + 1, 6), v(q + 1, 7));
+      rims.push(v(q, 6), v(q + 1, 7), v(q, 7));
+      rims.push(v(q, 6), v(q + 1, 6), v(q + 1, 7));
     }
   }
 
-  return idx;
+  return {
+    indices: [...outer, ...inner, ...rims],
+    outerCount: outer.length,
+    innerCount: inner.length,
+    rimsCount: rims.length
+  };
 }
 
 export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, flatNetUv = null) {
@@ -253,7 +258,7 @@ export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, fl
   const isFlipped = (u.x * n.y - u.y * n.x) < 0;
 
   const seg = 16;
-  const indices = creaseIndices(seg, isFlipped);
+  const { indices, outerCount, innerCount, rimsCount } = creaseIndices(seg, isFlipped);
   const base = creaseShapeArraysAndNormals(
     fold,
     parsed,
@@ -269,6 +274,9 @@ export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, fl
   g.setAttribute('position', new THREE.Float32BufferAttribute(base.positions, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(base.normals, 3));
   g.setIndex(indices);
+  g.addGroup(0, outerCount, 0);
+  g.addGroup(outerCount, innerCount, 1);
+  g.addGroup(outerCount + innerCount, rimsCount, 2);
   if (flatNetUv) applyFlatNetUv(g, flatNetUv, parentOrigin);
   g.morphTargetsRelative = true;
 

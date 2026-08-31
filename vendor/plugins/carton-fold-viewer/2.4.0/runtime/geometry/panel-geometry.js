@@ -70,20 +70,23 @@ function assignPanelSurfaceGroups(geometry, outsideNormal = '+Z') {
   if (!capGroup || capGroup.count < 6 || !geometry.attributes.normal) return geometry;
 
   const normal = geometry.attributes.normal;
+  const idx = geometry.index;
   const outsideIsPositiveZ = outsideNormal !== '-Z';
-  const materialIndexForTriangle = (vertexIndex) => {
-    const isPositiveZ = normal.getZ(vertexIndex) > 0.5;
+  const getVertexIndex = (i) => (idx ? idx.getX(i) : i);
+  const materialIndexForTriangle = (indexOffset) => {
+    const v0 = getVertexIndex(indexOffset);
+    const isPositiveZ = normal.getZ(v0) > 0.5;
     return isPositiveZ === outsideIsPositiveZ ? 0 : 1;
   };
   const capRuns = [];
   let runStart = capGroup.start;
   let runMaterialIndex = materialIndexForTriangle(runStart);
   for (let offset = 3; offset < capGroup.count; offset += 3) {
-    const vertexIndex = capGroup.start + offset;
-    const materialIndex = materialIndexForTriangle(vertexIndex);
+    const indexOffset = capGroup.start + offset;
+    const materialIndex = materialIndexForTriangle(indexOffset);
     if (materialIndex === runMaterialIndex) continue;
-    capRuns.push({ start: runStart, count: vertexIndex - runStart, materialIndex: runMaterialIndex });
-    runStart = vertexIndex;
+    capRuns.push({ start: runStart, count: indexOffset - runStart, materialIndex: runMaterialIndex });
+    runStart = indexOffset;
     runMaterialIndex = materialIndex;
   }
   capRuns.push({

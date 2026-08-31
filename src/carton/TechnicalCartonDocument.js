@@ -9,6 +9,16 @@ import { AppError } from '../errors.js';
 import { contourPathData } from '../model/dieline.js';
 import { presentationTransformFromSvg } from './technicalPresentation.js';
 
+function decodeSvgMetadata(markup) {
+  const match = typeof markup === 'string' ? markup.match(/<metadata id="cartonbuilder-metadata"[^>]*>([\s\S]*?)<\/metadata>/) : null;
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+  } catch {
+    return null;
+  }
+}
+
 function deepFreeze(value, seen = new WeakSet()) {
   if (!value || typeof value !== 'object' || seen.has(value)) return value;
   seen.add(value);
@@ -131,6 +141,22 @@ export class TechnicalCartonDocument extends CartonDocument {
 
   getPresentationTransform() {
     return presentationTransformFromSvg(this._bundle.semanticSvg?.markup);
+  }
+
+  getCanvasMetadata() {
+    const metadata = decodeSvgMetadata(this._bundle.semanticSvg?.markup);
+    return metadata?.canvas ? clone(metadata.canvas) : null;
+  }
+
+  getCanonicalViewBoxBounds() {
+    const canvas = this.getCanvasMetadata();
+    if (Array.isArray(canvas?.viewBox) && canvas.viewBox.length === 4) {
+      const [minX, minY, width, height] = canvas.viewBox.map(Number);
+      if ([minX, minY, width, height].every(Number.isFinite) && width > 0 && height > 0) {
+        return { minX, minY, width, height, maxX: minX + width, maxY: minY + height };
+      }
+    }
+    return null;
   }
 
   getBounds() {
