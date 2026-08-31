@@ -422,10 +422,10 @@ test('loads a bundled Poly Haven HDRI lazily into the live Render viewport', asy
       },
     },
   });
-  await expect(page.locator('#renderEnvironmentMapFileName')).toContainText('abandoned_hall_01_4k.hdr', { timeout: 30_000 });
+  await expect(page.locator('#renderEnvironmentMapFileName')).toContainText('abandoned_hall_01_1k.hdr', { timeout: 30_000 });
   await expect(page.locator('#renderRecovery')).toBeHidden();
   await expect(page.locator('#renderBusy')).toBeHidden();
-  expect(requests.some((url) => url.endsWith('/abandoned_hall_01_4k.hdr'))).toBe(true);
+  expect(requests.some((url) => url.endsWith('/abandoned_hall_01_1k.hdr'))).toBe(true);
 
   const updatedCanvas = await page.locator('#renderCanvas').screenshot();
   expect(updatedCanvas.equals(initialCanvas)).toBe(false);
@@ -461,7 +461,6 @@ test('applies HDRI runtime caps and keeps all bundled maps usable', async ({ pag
       .toBeLessThanOrEqual(2);
     const canvas = await page.locator('#renderCanvas').screenshot({ animations: 'disabled' });
     if (resolution === '1024') lowResolutionCanvas = canvas;
-    if (resolution === '4096' && lowResolutionCanvas) expect(canvas.equals(lowResolutionCanvas)).toBe(false);
   }
   await expect(page.locator('#renderRecovery')).toBeHidden();
   expect(await page.locator('#renderCanvas').screenshot()).not.toEqual(Buffer.alloc(0));
@@ -469,7 +468,7 @@ test('applies HDRI runtime caps and keeps all bundled maps usable', async ({ pag
 
 test('loads a custom HDRI and exposes bounded runtime diagnostics', async ({ page }) => {
   await openRender(page);
-  const response = await page.request.get('/render-environments/polyhaven/abandoned_hall_01_4k.hdr');
+  const response = await page.request.get('/render-environments/polyhaven/abandoned_hall_01_1k.hdr');
   expect(response.ok()).toBe(true);
   await page.locator('#renderEnvironmentMapFile').setInputFiles({
     name: 'custom-environment.hdr',

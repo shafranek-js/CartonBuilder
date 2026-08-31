@@ -2,16 +2,16 @@
 
 These five Radiance HDR files are bundled as the Render step's built-in
 environment presets. They are downloaded from the official Poly Haven asset
-pages at 4K HDR resolution and distributed under Poly Haven's CC0 license.
+pages at 1K HDR resolution and distributed under Poly Haven's CC0 license.
 They are loaded lazily when selected in the UI and are not copied into project
 archives; user-uploaded maps remain project assets.
 
 | File | Poly Haven source | SHA-256 |
 | --- | --- | --- |
-| `abandoned_hall_01_4k.hdr` | https://polyhaven.com/a/abandoned_hall_01 | `126ed2e92a494f80fce24cea5281062e14af90d093be058768f5e53658a7a1fa` |
-| `abandoned_waterworks_4k.hdr` | https://polyhaven.com/a/abandoned_waterworks | `7a95c26525aa3fd8568b4294ea277acc4cce98fa352a038d178e6129bf11eec7` |
-| `empty_warehouse_01_4k.hdr` | https://polyhaven.com/a/empty_warehouse_01 | `8b5f158ecfde7239bec31ff3855b55e390b3fd81f9172bde8c04ba535ae31d3d` |
-| `abandoned_workshop_4k.hdr` | https://polyhaven.com/a/abandoned_workshop | `85ca08fe9358afe7ced2db630482cbd9e3ae1aac6a6429971a10c0b5fe3bcac7` |
-| `peppermint_powerplant_4k.hdr` | https://polyhaven.com/a/peppermint_powerplant | `cbdda515e559362a419f621fad5dfdff1b949873d9cb70dd235f4d4734ab9d0e` |
+| `abandoned_hall_01_1k.hdr` | https://polyhaven.com/a/abandoned_hall_01 | `f16c526542d633b2be92fcf14d3fe9edb757c99895d772c199b02031d28daa76` |
+| `abandoned_waterworks_1k.hdr` | https://polyhaven.com/a/abandoned_waterworks | `69af649f2ffbd7750f2cf93cf8834735604c3e98a414d2fb3dd28212ba33728b` |
+| `empty_warehouse_01_1k.hdr` | https://polyhaven.com/a/empty_warehouse_01 | `9b3d611cadc32c3a0c7e084ce5611c0650293881c4a041e7fa13748fe0dc6451` |
+| `abandoned_workshop_1k.hdr` | https://polyhaven.com/a/abandoned_workshop | `b77e1f3286de70f21df2ac0f55c9bec64775b99ecc1f7c648b6e0fda21233399` |
+| `peppermint_powerplant_1k.hdr` | https://polyhaven.com/a/peppermint_powerplant | `9b60b6426ffa0db92964ee5ee2a342d3ab6930c842a2ce5338f8976625f58a49` |
 
 License reference: https://polyhaven.com/af/license

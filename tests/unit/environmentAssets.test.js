@@ -29,7 +29,7 @@ describe('HDR/EXR environment assets', () => {
     }));
     const asset = await loadBuiltInEnvironmentAsset('polyhaven-abandoned-hall-01', fetchFn);
     expect(fetchFn).toHaveBeenCalledWith(
-      '/render-environments/polyhaven/abandoned_hall_01_4k.hdr',
+      '/render-environments/polyhaven/abandoned_hall_01_1k.hdr',
       { cache: 'force-cache' },
     );
     expect(asset).toMatchObject({
