@@ -300,11 +300,12 @@ export class WebGLCartonRenderer {
   }
 
   resize(width, height, pixelRatio) {
-    this.scene.resize({ width, height, pixelRatio });
-    this.postProcessing.resize(
-      width || this.container.clientWidth || 1,
-      height || this.container.clientHeight || 1,
-    );
+    const nextWidth = Number(width) > 0 ? Number(width) : Number(this.container.clientWidth);
+    const nextHeight = Number(height) > 0 ? Number(height) : Number(this.container.clientHeight);
+    if (!(nextWidth > 0) || !(nextHeight > 0)) return false;
+    if (this.scene.resize({ width: nextWidth, height: nextHeight, pixelRatio }) === false) return false;
+    this.postProcessing.resize(nextWidth, nextHeight);
+    return true;
   }
 
   render() {

@@ -1987,8 +1987,19 @@ export class BoxScene {
 
   resize({ render = true, width: requestedWidth, height: requestedHeight, pixelRatio } = {}) {
     if (this.disposed) return;
-    const width = Math.max(1, Number(requestedWidth) || this.container.clientWidth);
-    const height = Math.max(1, Number(requestedHeight) || this.container.clientHeight);
+    const width = Number(requestedWidth) > 0
+      ? Number(requestedWidth)
+      : Number(this.container.clientWidth);
+    const height = Number(requestedHeight) > 0
+      ? Number(requestedHeight)
+      : Number(this.container.clientHeight);
+    // ResizeObserver reports 0 x 0 when a workflow step is hidden. Resizing
+    // the WebGL canvas to 1 x 1 at that point replaces its useful intrinsic
+    // aspect ratio with a square one. On the next activation that intrinsic
+    // size participates in CSS grid sizing before layout settles, which can
+    // make the Render viewport square and change the apparent camera framing.
+    // Keep the last valid surface size until the container is visible again.
+    if (!(width > 0) || !(height > 0)) return false;
     if (Number.isFinite(pixelRatio) && pixelRatio > 0) this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
     this.perspectiveCamera.aspect = width / height;
@@ -1997,6 +2008,7 @@ export class BoxScene {
     this.applyVerticalCorrection();
     this.updateBackgroundBackplate();
     if (render) this.render();
+    return true;
   }
 
   render() {

@@ -296,6 +296,61 @@ test('keeps the 3D canvas rendered when Render artwork quality increases', async
   expect(lowQualityCanvas.equals(highQualityCanvas)).toBe(false);
 });
 
+test('preserves the Render viewport size across Preview re-entry', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 925 });
+  await openRender(page, 'render-reentry-fixture.png');
+
+  const measure = () => page.evaluate(() => {
+    const step = document.getElementById('renderStep');
+    const panel = document.getElementById('renderPanel');
+    const canvas = document.getElementById('renderCanvas');
+    const frame = document.getElementById('renderViewportFrame');
+    const stepRect = step.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    return {
+      stepBottom: stepRect.bottom,
+      panelWidth: panelRect.width,
+      panelHeight: panelRect.height,
+      panelBottom: panelRect.bottom,
+      frameWidth: frameRect.width,
+      frameHeight: frameRect.height,
+      bufferWidth: canvas.width,
+      bufferHeight: canvas.height,
+    };
+  });
+
+  const before = await measure();
+  expect(before.panelWidth).toBeGreaterThan(1);
+  expect(before.panelHeight).toBeGreaterThan(1);
+  expect(Math.abs(before.panelBottom - before.stepBottom)).toBeLessThanOrEqual(1);
+
+  await page.locator('.step[data-step-target="preview"]').click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+  const hiddenBuffer = await page.locator('#renderCanvas').evaluate((canvas) => ({
+    width: canvas.width,
+    height: canvas.height,
+  }));
+  expect(hiddenBuffer).toEqual({
+    width: before.bufferWidth,
+    height: before.bufferHeight,
+  });
+
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderStep')).toBeVisible();
+  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+  const after = await measure();
+
+  expect(Math.abs(after.panelWidth - before.panelWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.panelHeight - before.panelHeight)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.panelBottom - after.stepBottom)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.frameWidth - before.frameWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.frameHeight - before.frameHeight)).toBeLessThanOrEqual(1);
+});
+
 test('persists an artwork finish and warns before Basic GLB export', async ({ page }) => {
   await openRender(page);
   await page.locator('.step[data-step-target="preview"]').click();

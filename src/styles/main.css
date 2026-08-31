@@ -1505,6 +1505,10 @@ button.workflow-mode-card {
   grid-template-rows: minmax(0, 1fr);
 }
 
+.preview-step[data-preview-mode="quick"] {
+  padding: 0;
+}
+
 .preview-step[data-preview-mode="technical"] > .preview-toolbar {
   display: none;
 }
@@ -2725,6 +2729,8 @@ input[type="checkbox"].sr-only::after {
 }
 
 #quickPreviewContent {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -2810,7 +2816,9 @@ input[type="checkbox"].sr-only::after {
   display: grid;
   grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(260px, 330px);
   grid-template-areas: "left canvas right";
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .scene-sidebar {
@@ -4013,7 +4021,9 @@ dialog input {
 .render-step {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .render-toolbar {
@@ -4037,8 +4047,10 @@ dialog input {
   display: grid;
   grid-template-columns: minmax(280px, 330px) minmax(0, 1fr) minmax(280px, 350px);
   grid-template-areas: "left canvas right";
-  flex: 1;
+  flex: 1 1 0;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .render-canvas-wrap {

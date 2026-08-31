@@ -64,6 +64,47 @@ async function openPreview(page) {
   await expect(page.locator('#previewStep')).toBeVisible();
 }
 
+test('fills the available Quick Preview height like Render', async ({ page }) => {
+  await page.goto('/');
+  await page.setViewportSize({ width: 1920, height: 925 });
+  await openPreview(page);
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 15_000 });
+
+  const previewLayout = await page.evaluate(() => {
+    const step = document.getElementById('previewStep').getBoundingClientRect();
+    const content = document.getElementById('quickPreviewContent').getBoundingClientRect();
+    const row = document.querySelector('.preview-main-row').getBoundingClientRect();
+    const panel = document.getElementById('preview3dPanel').getBoundingClientRect();
+    return {
+      stepBottom: step.bottom,
+      contentBottom: content.bottom,
+      rowBottom: row.bottom,
+      panelBottom: panel.bottom,
+      panelHeight: panel.height,
+    };
+  });
+
+  expect(previewLayout.panelHeight).toBeGreaterThan(700);
+  expect(Math.abs(previewLayout.stepBottom - previewLayout.contentBottom)).toBeLessThanOrEqual(1);
+  expect(Math.abs(previewLayout.stepBottom - previewLayout.rowBottom)).toBeLessThanOrEqual(1);
+  expect(Math.abs(previewLayout.stepBottom - previewLayout.panelBottom)).toBeLessThanOrEqual(1);
+
+  await page.locator('#openRenderButton').click();
+  await expect(page.locator('#renderStep')).toBeVisible();
+  const renderLayout = await page.evaluate(() => {
+    const step = document.getElementById('renderStep').getBoundingClientRect();
+    const panel = document.getElementById('renderPanel').getBoundingClientRect();
+    return {
+      stepBottom: step.bottom,
+      panelBottom: panel.bottom,
+      panelHeight: panel.height,
+    };
+  });
+
+  expect(Math.abs(renderLayout.stepBottom - renderLayout.panelBottom)).toBeLessThanOrEqual(1);
+  expect(Math.abs(renderLayout.panelHeight - previewLayout.panelHeight)).toBeLessThanOrEqual(2);
+});
+
 test('lazy-loads the complete 3D workflow without mutating canonical state', async ({ page }) => {
   const preview3dRequests = [];
   page.on('request', (request) => {
