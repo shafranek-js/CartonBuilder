@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
-import { migrateProjectSnapshot } from '../../src/project/projectSchema.js';
+import { CURRENT_PROJECT_SCHEMA_VERSION, migrateProjectSnapshot } from '../../src/project/projectSchema.js';
 import { buildProductionDieline } from '../../src/prepress/productionDieline.js';
 import { runPrepressPreflight } from '../../src/prepress/prepressPreflight.js';
 import { DEFAULT_PREPRESS_SETTINGS, sanitizePrepressSettings } from '../../src/prepress/prepressState.js';
@@ -16,11 +16,11 @@ describe('Wave 9A prepress foundations', () => {
     expect(DEFAULT_PREPRESS_SETTINGS.technicalLines.cutSpotName).toBe('CutContour');
   });
 
-  it('migrates v14 to v17 without changing the archive-facing quick box', () => {
+  it('migrates v14 to current schema without changing the archive-facing quick box', () => {
     const model = new BoxNetModel();
     const snapshot = { schemaVersion: 14, workflowStep: 'artwork', box: model.toJSON(), artworks: [], activeArtworkIndex: -1 };
     const migrated = migrateProjectSnapshot(snapshot);
-    expect(migrated.schemaVersion).toBe(18);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(migrated.prepress.mode).toBe('technical-proof');
     expect(migrated.cartonSource.box).toEqual(snapshot.box);
   });

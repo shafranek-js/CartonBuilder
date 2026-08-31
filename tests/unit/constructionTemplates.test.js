@@ -4,7 +4,7 @@ import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import { buildConstructionTemplate, validateConstructionElements } from '../../src/model/ConstructionTemplates.js';
 import { buildFoldGraph, computePanelTransforms } from '../../src/preview3d/foldGraph.js';
 import { getDielineSegments, getPanelMaskPath } from '../../src/model/dieline.js';
-import { migrateProjectSnapshot } from '../../src/project/projectSchema.js';
+import { CURRENT_PROJECT_SCHEMA_VERSION, migrateProjectSnapshot } from '../../src/project/projectSchema.js';
 
 const dimensions = { width: 150, height: 90, depth: 40 };
 
@@ -57,7 +57,7 @@ describe('parametric carton constructions', () => {
     };
     delete snapshot.box.construction;
     const migrated = migrateProjectSnapshot(snapshot);
-    expect(migrated.schemaVersion).toBe(18);
+    expect(migrated.schemaVersion).toBe(CURRENT_PROJECT_SCHEMA_VERSION);
     expect(migrated.cartonSource.mode).toBe('quick');
     expect(migrated.cartonSource.box.construction.templateId).toBe('legacy-six-panel');
     expect(migrated.cartonSource.box.panels).toEqual(snapshot.box.panels);
