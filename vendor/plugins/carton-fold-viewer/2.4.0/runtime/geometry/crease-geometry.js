@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { polyCentroid } from '../pbd/path-parser.js';
 import { applyFlatNetUv } from './flat-net-uv.js';
+import { trimmedPanelPolygonGlobal } from './panel-geometry.js';
 
 export const CREASE_MORPH_FACTORS = [0.25, 0.50, 0.75, 1.00, 1.25];
 
@@ -8,13 +9,31 @@ export function creaseMeshName(foldId) {
   return 'Crease__' + String(foldId).replace(/[^A-Za-z0-9_-]+/g, '_');
 }
 
-export function resolveCreaseProfile(metadata, dims) {
-  const cp = metadata.material?.creaseProfile || {}, t = Math.max(dims.thickness, 0.01);
+export function resolveCreaseProfile(metadata, dims, fold = null) {
+  const cp = metadata.material?.creaseProfile || {};
   const cw = Number(cp.creaseWidthMm), br = Number(cp.bendRadiusMm);
+  const hasCertifiedPhysicalProfile = metadata.capabilities?.physicalCreaseProfile === true
+    && Number.isFinite(cw) && cw > 0
+    && Number.isFinite(br) && br > 0;
+  let creaseWidthMm = hasCertifiedPhysicalProfile ? cw : 0;
+  let bendRadiusMm = hasCertifiedPhysicalProfile ? br : 0;
+
+  // For tongue folds with throat relief notches (where relief depth is ~ 2mm),
+  // clamp creaseWidthMm so that halfCrease fits within the throat notch clearance (<= 2mm)
+  // preventing the crease from cutting past the throat notch and distorting the locking ears.
+  const isTongue = fold && (
+    String(fold.foldId || '').toLowerCase().includes('tongue') ||
+    String(fold.childPanelId || '').toLowerCase().includes('tongue')
+  );
+  if (isTongue) {
+    creaseWidthMm = Math.min(creaseWidthMm, 2.0);
+    bendRadiusMm = Math.min(bendRadiusMm, 1.0);
+  }
+
   return {
-    creaseWidthMm: Number.isFinite(cw) && cw > 0 ? cw : 3.0 * t,
-    bendRadiusMm: Number.isFinite(br) && br > 0 ? br : 1.5 * t,
-    source: (Number.isFinite(cw) && cw > 0 && Number.isFinite(br) && br > 0) ? 'svg' : 'generic-fallback'
+    creaseWidthMm,
+    bendRadiusMm,
+    source: hasCertifiedPhysicalProfile ? 'svg' : 'canonical-hinge'
   };
 }
 
@@ -38,61 +57,93 @@ function hermitePoint(p0, p1, t0, t1, q) {
  * Generates vertex positions and exact analytical normals for the finite crease ribbon.
  * Returns { positions, normals } arrays for Three.js BufferGeometry.
  */
+function findLinePolySpan(poly, linePt, u, L) {
+  if (!poly || poly.length < 3) return [0, L];
+  const perp = [-u[1], u[0]];
+  const lineDist = linePt[0] * perp[0] + linePt[1] * perp[1];
+  const sIntersections = [];
+
+  for (let i = 0; i < poly.length; i++) {
+    const p1 = poly[i], p2 = poly[(i + 1) % poly.length];
+    const d1 = p1[0] * perp[0] + p1[1] * perp[1] - lineDist;
+    const d2 = p2[0] * perp[0] + p2[1] * perp[1] - lineDist;
+
+    if (Math.abs(d1 - d2) > 1e-9) {
+      if ((d1 >= -1e-5 && d2 <= 1e-5) || (d1 <= 1e-5 && d2 >= -1e-5)) {
+        const t = d1 / (d1 - d2);
+        const ix = p1[0] + (p2[0] - p1[0]) * t;
+        const iy = p1[1] + (p2[1] - p1[1]) * t;
+        const s = (ix - linePt[0]) * u[0] + (iy - linePt[1]) * u[1];
+        sIntersections.push(s);
+      }
+    }
+  }
+
+  if (sIntersections.length >= 2) {
+    const minS = Math.min(...sIntersections);
+    const maxS = Math.max(...sIntersections);
+    return [
+      Math.max(0, Math.min(L, minS)),
+      Math.min(L, Math.max(0, maxS))
+    ];
+  }
+  return [0, L];
+}
+
 /**
  * Computes exact miter start and end curves s0At(q) and s1At(q) along the fold ribbon.
- * - At q = 0 (parent panel boundary): insets by halfWidthMm to meet the trimmed parent panel.
- * - At q = 0.5 (crease centerline): extends to s = 0 / s = L to reach the 2D corner apex.
- * - At q = 1.0 (child panel boundary): extends to meet the child panel cut/hinge edge.
- * In 2D (unfolded 0%), this ensures 100% watertight tiling with zero notches or holes.
+ * By intersecting the crease offset boundary lines on parent (q=0) and child (q=1) sides
+ * with their respective trimmed polygons, this guarantees 100% watertight coupling with
+ * zero notches, overhangs, or splay steps across all thickness and flap geometries.
  */
 function foldEndpointMiterProfile(fold, parsed, halfWidthMm) {
-  const near = (p, q, tol = 1.5) =>
-    Math.hypot((p?.[0] || 0) - (q?.[0] || 0), (p?.[1] || 0) - (q?.[1] || 0)) <= tol;
-  const dot2 = (a, b) => a[0] * b[0] + a[1] * b[1];
-
   const u = [fold.line.axis[0], fold.line.axis[1]];
-  const childC = polyCentroid(parsed.panels[fold.childPanelId].polygon);
-  const mid = [(fold.line.a[0] + fold.line.b[0]) / 2, (fold.line.a[1] + fold.line.b[1]) / 2];
+  const a = fold.line.a, b = fold.line.b, L = fold.line.length;
+
   let n = [-u[1], u[0]];
+  const childPoly = parsed.panels[fold.childPanelId]?.polygon || [];
+  const childC = polyCentroid(childPoly);
+  const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
   if ((childC[0] - mid[0]) * n[0] + (childC[1] - mid[1]) * n[1] < 0) {
-    n[0] = -n[0];
-    n[1] = -n[1];
+    n[0] = -n[0]; n[1] = -n[1];
   }
 
-  let aParentMiter = 0, aChildMiter = 0;
-  let bParentMiter = 0, bChildMiter = 0;
+  const ptParent = [a[0] - n[0] * halfWidthMm, a[1] - n[1] * halfWidthMm];
+  const ptChild  = [a[0] + n[0] * halfWidthMm, a[1] + n[1] * halfWidthMm];
 
-  for (const other of Object.values(parsed.folds)) {
-    if (other.foldId === fold.foldId) continue;
-    const v = [other.line.axis[0], other.line.axis[1]];
-    if (Math.abs(dot2(u, v)) > 0.96) continue; // Ignore collinear neighbours
+  const parentTrimmed = trimmedPanelPolygonGlobal(fold.parentPanelId, parsed, halfWidthMm);
+  const childTrimmed  = trimmedPanelPolygonGlobal(fold.childPanelId, parsed, halfWidthMm);
 
-    const atA = near(fold.line.a, other.line.a) || near(fold.line.a, other.line.b);
-    const atB = near(fold.line.b, other.line.a) || near(fold.line.b, other.line.b);
-
-    if (atA) {
-      if (other.parentPanelId === fold.parentPanelId || other.childPanelId === fold.parentPanelId) {
-        aParentMiter = Math.max(aParentMiter, halfWidthMm);
-      }
-      if (other.parentPanelId === fold.childPanelId || other.childPanelId === fold.childPanelId) {
-        aChildMiter = Math.max(aChildMiter, halfWidthMm);
-      }
-    }
-
-    if (atB) {
-      if (other.parentPanelId === fold.parentPanelId || other.childPanelId === fold.parentPanelId) {
-        bParentMiter = Math.max(bParentMiter, halfWidthMm);
-      }
-      if (other.parentPanelId === fold.childPanelId || other.childPanelId === fold.childPanelId) {
-        bChildMiter = Math.max(bChildMiter, halfWidthMm);
-      }
-    }
-  }
+  const [s0_p, s1_p] = findLinePolySpan(parentTrimmed, ptParent, u, L);
+  const [s0_c, s1_c] = findLinePolySpan(childTrimmed, ptChild, u, L);
 
   return {
-    s0At: (q) => (aParentMiter * Math.max(0, 1 - 2 * q) + aChildMiter * Math.max(0, 2 * q - 1)) * 0.001,
-    s1At: (q) => (fold.line.length - (bParentMiter * Math.max(0, 1 - 2 * q) + bChildMiter * Math.max(0, 2 * q - 1))) * 0.001
+    s0At: (q) => ((s0_p * (1 - q) + s0_c * q)) * 0.001,
+    s1At: (q) => ((s1_p * (1 - q) + s1_c * q)) * 0.001
   };
+}
+
+function computeArcPoint(p0, p1, u, thetaRad, q) {
+  if (Math.abs(thetaRad) < 1e-5) {
+    return p0.clone().lerp(p1, q);
+  }
+
+  const chord = p1.clone().sub(p0);
+  const chordLen = chord.length();
+  if (chordLen < 1e-7) return p0.clone();
+
+  const mid = p0.clone().addScaledVector(chord, 0.5);
+  const perp = new THREE.Vector3().crossVectors(u, chord).normalize();
+  const sagittaDist = (chordLen * 0.5) / Math.tan(Math.abs(thetaRad) * 0.5);
+
+  let C = mid.clone().addScaledVector(perp, sagittaDist);
+  let testP1 = C.clone().add(rotateAroundAxis(p0.clone().sub(C), u, thetaRad));
+  if (testP1.distanceTo(p1) > 1e-4) {
+    C = mid.clone().addScaledVector(perp, -sagittaDist);
+  }
+
+  const r0 = p0.clone().sub(C);
+  return C.clone().add(rotateAroundAxis(r0, u, thetaRad * q));
 }
 
 function creaseShapeArraysAndNormals(
@@ -119,24 +170,17 @@ function creaseShapeArraysAndNormals(
 
   const meta = parsed.panelById?.[fold.childPanelId] || parsed.panels?.[fold.childPanelId]?.meta || {};
   const r = String(meta.semanticRole || '').toUpperCase();
-  const k = String(meta.kind || '').toUpperCase();
 
   let childLayerOffset = 0.0;
   if (r.includes('SNAP_LOCK.SUPPORT') || r.includes('SUPPORT_FLAP')) childLayerOffset = 2.0;
   else if (r.includes('SNAP_LOCK.SIDE') || r.includes('SIDE_FLAP')) childLayerOffset = 1.0;
-  else if (k.includes('DUST') || r.includes('DUST')) childLayerOffset = 1.0;
 
   const childOffset = childLayerOffset > 0
-    ? z.clone().applyQuaternion(qEnd).multiplyScalar(1.02 * thick * childLayerOffset * factor)
+    ? z.clone().applyQuaternion(qEnd).multiplyScalar(-1.02 * thick * childLayerOffset * factor)
     : new THREE.Vector3();
 
   const p0 = n.clone().multiplyScalar(-half);
   const p1 = n.clone().multiplyScalar(half).applyQuaternion(qEnd).add(childOffset);
-
-  // Cubic-Hermite handle length for smooth circular fillet approximation
-  const handle = Math.max(0.40 * (2 * half), Math.min(1.20 * (2 * half), 1.656854249 * bendRadiusMm * 0.001));
-  const t0 = n.clone().multiplyScalar(handle);
-  const t1 = n.clone().applyQuaternion(qEnd).multiplyScalar(handle);
 
   const start = new THREE.Vector3(
     (fold.line.a[0] - parentOrigin[0]) * 0.001,
@@ -152,7 +196,7 @@ function creaseShapeArraysAndNormals(
 
   for (let i = 0; i <= segments; i++) {
     const q = i / segments;
-    const c = hermitePoint(p0, p1, t0, t1, q);
+    const c = computeArcPoint(p0, p1, u, theta, q);
     // Exact analytical normal along the cylindrical/curved fold surface
     const normalOut = rotateAroundAxis(z, u, theta * q).normalize();
     const normalIn = normalOut.clone().negate();

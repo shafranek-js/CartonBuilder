@@ -84,8 +84,9 @@ export function parseSemanticCartonSvg(svgText) {
   const creaseProfile=resolveCreaseProfile(metadata,dims), halfCrease=creaseProfile.creaseWidthMm/2;
   const specs=[];
 
-  // Build rigid panel zones with a finite band removed around every incident fold.
-  // The removed bands are filled by morphing Crease meshes below.
+  // Only an explicitly certified physical crease profile may remove a finite
+  // band from the canonical panel regions. Otherwise halfCrease is zero and
+  // the generated panel caps preserve the semantic SVG diecut exactly.
   const parsedForTrim={panels,folds};
   for(const p of panelMeta){
     const id=p.id, foldId=incoming.get(id), fold=foldId?folds[foldId]:null, org=origins[id];

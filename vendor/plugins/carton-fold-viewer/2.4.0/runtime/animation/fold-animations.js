@@ -19,7 +19,7 @@ function makeInwardTranslationTrack(nodeName, times, factors, thicknessMm, layer
   const t = Math.max(thicknessMm, 0.01) * 0.001;
   const values = [];
   factors.forEach(f => {
-    values.push(0, 0, 1.02 * t * layerOffset * f);
+    values.push(0, 0, -1.02 * t * layerOffset * f);
   });
   return new THREE.VectorKeyframeTrack(`${nodeName}__mesh.position`, times, values);
 }
@@ -27,11 +27,9 @@ function makeInwardTranslationTrack(nodeName, times, factors, thicknessMm, layer
 function getPanelLayerOffset(panelId, parsed) {
   const meta = parsed.panelById?.[panelId] || parsed.panels?.[panelId]?.meta || {};
   const r = String(meta.semanticRole || '').toUpperCase();
-  const k = String(meta.kind || '').toUpperCase();
 
   if (r.includes('SNAP_LOCK.SUPPORT') || r.includes('SUPPORT_FLAP')) return 2.0; // Innermost layer #1
   if (r.includes('SNAP_LOCK.SIDE') || r.includes('SIDE_FLAP')) return 1.0; // Middle layer #2/#3
-  if (k.includes('DUST') || r.includes('DUST')) return 1.0;
   return 0.0;
 }
 
@@ -54,6 +52,33 @@ function buildSimultaneousAnimation(parsed) {
       tracks.push(new THREE.NumberKeyframeTrack(`${p.nodeName}__mesh.morphTargetInfluences[0]`, [0, 0.7, 1], [0, 0, 1]));
     }
   }
+
+  // Dynamic kinematic bend compensation for tuck-insertion relations in simultaneous animation
+  for (const r of (parsed.metadata?.interactions || [])) {
+    if (r.type === 'tuck-insertion' && r.closureFoldId && r.tongueFoldId) {
+      const cf = parsed.folds[r.closureFoldId], tf = parsed.folds[r.tongueFoldId];
+      if (cf && tf && parsed.panels[tf.childPanelId]) {
+        const midC = [(cf.line.a[0] + cf.line.b[0]) / 2, (cf.line.a[1] + cf.line.b[1]) / 2];
+        const midT = [(tf.line.a[0] + tf.line.b[0]) / 2, (tf.line.a[1] + tf.line.b[1]) / 2];
+        const d2d = Math.hypot(midT[0] - midC[0], midT[1] - midC[1]);
+        const targetDepth = parsed.dimensions.W || parsed.dimensions.width || parsed.dimensions.widthMm || 60.0;
+        const comp = targetDepth - d2d;
+        if (comp > 0.05 && d2d > 0.1) {
+          const n = [(midT[0] - midC[0]) / d2d, (midT[1] - midC[1]) / d2d];
+          const tfNode = parsed.panels[tf.childPanelId].nodeName;
+          const tfSpec = parsed.specs?.find(s => s.id === tf.childPanelId);
+          const baseX = (tfSpec?.translation?.[0] || 0) * 0.001;
+          const baseY = (tfSpec?.translation?.[1] || 0) * 0.001;
+          tracks.push(new THREE.VectorKeyframeTrack(
+            `${tfNode}.position`,
+            [0, 1],
+            [baseX, baseY, 0, baseX + n[0] * comp * 0.001, baseY + n[1] * comp * 0.001, 0]
+          ));
+        }
+      }
+    }
+  }
+
   return new THREE.AnimationClip('Fold_Simultaneous', 1, tracks);
 }
 
@@ -88,8 +113,11 @@ function getActionSortKey(a, parsed) {
     const f = parsed.folds[a.foldId];
     if (f) {
       const childMeta = parsed.panelById?.[f.childPanelId] || parsed.panels?.[f.childPanelId]?.meta || {};
-      const k = String(childMeta.kind || '').toUpperCase(), l = String(childMeta.layerClass || '').toLowerCase();
-      if (l === 'glue' || k === 'GLUE_FLAP') order -= 1000;
+      const kind = String(childMeta.kind || '').toUpperCase();
+      const layerClass = String(childMeta.layerClass || '').toLowerCase();
+      // The side-seam glue flap must be pre-folded to 90 degrees before the
+      // body panels erect. It then travels with its parent back panel.
+      if (layerClass === 'glue' || kind === 'GLUE_FLAP') order -= 1000;
     }
   }
   return order;
