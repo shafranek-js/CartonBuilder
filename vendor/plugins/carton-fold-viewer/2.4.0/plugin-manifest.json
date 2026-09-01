@@ -5,10 +5,10 @@
   "name": "CartonFoldViewer",
   "description": "Deterministic 3D fold simulation and interactive carton folding preview engine",
   "entrypoint": "index.html",
-  "sourceCommit": "d48c5405ecdbe8018d0eda5dc51c3f08fda6f52a",
+  "sourceCommit": "a9ec05e93f5bd28f0822ed8f5c110897a36a135a",
   "artifact": {
-    "byteLength": 1096646,
-    "sha256": "0e5b895d9d6c781fb6eaa9d269bfc0b509b3efed677c2c72e6fabd4cb3ff08d8"
+    "byteLength": 1096653,
+    "sha256": "32777906a7dcee477732b3248e3afce844b5e618c3a71b65bfcb816d12456e7b"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -38,8 +38,8 @@
     },
     {
       "path": "index.html",
-      "byteLength": 1096646,
-      "sha256": "0e5b895d9d6c781fb6eaa9d269bfc0b509b3efed677c2c72e6fabd4cb3ff08d8"
+      "byteLength": 1096653,
+      "sha256": "32777906a7dcee477732b3248e3afce844b5e618c3a71b65bfcb816d12456e7b"
     },
     {
       "path": "runtime/animation/fold-animations.js",
@@ -53,13 +53,13 @@
     },
     {
       "path": "runtime/FoldRuntime.js",
-      "byteLength": 8838,
-      "sha256": "c5faa557331a36803d101ed2a8a109de6a62062336c8429855d3c4c7ccf3787f"
+      "byteLength": 8976,
+      "sha256": "14861fc8848e5d24725321d8026cf27036fb6b59f22669f1c6822d8df0f41c5c"
     },
     {
       "path": "runtime/geometry/crease-geometry.js",
-      "byteLength": 14954,
-      "sha256": "7b3cc9252f8ac89761c5b35d219db511b5d8000d5fafc60db9b7f48523c8f8a0"
+      "byteLength": 14870,
+      "sha256": "4bdab083398348aed4125be83c49b5d599b63c10d9394b36234f177e698d35ef"
     },
     {
       "path": "runtime/geometry/flat-net-uv.js",
@@ -68,8 +68,8 @@
     },
     {
       "path": "runtime/geometry/materials.js",
-      "byteLength": 2449,
-      "sha256": "4d56ba404e18ebd9079e5476381297bc86379b11c0c86fa7d891f25f68fbe320"
+      "byteLength": 2653,
+      "sha256": "dc571d0e67faa7679a6b2f0e84d4efa47f2db8fc52d5a8b5feadb6e90b5c5e07"
     },
     {
       "path": "runtime/geometry/panel-geometry.js",
@@ -89,7 +89,7 @@
     {
       "path": "runtime/package-manifest.json",
       "byteLength": 2252,
-      "sha256": "e67ca017f452bca3936c87d8b16cf5ee19aa392fc3e25544e17f911218d118af"
+      "sha256": "7ad1c8b08938da6689f472159c8916718ce47ac3b019856c4251b9fd869d415e"
     },
     {
       "path": "runtime/package.json",

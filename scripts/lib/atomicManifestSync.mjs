@@ -212,6 +212,45 @@ function removePath(targetPath) {
   else fs.rmSync(targetPath, { force: true });
 }
 
+function clearDirectoryContents(directoryPath) {
+  if (!fs.existsSync(directoryPath)) return;
+  for (const entry of fs.readdirSync(directoryPath)) {
+    removePath(path.join(directoryPath, entry));
+  }
+}
+
+function copyDirectoryContents(sourcePath, destinationPath) {
+  fs.mkdirSync(destinationPath, { recursive: true });
+  for (const entry of fs.readdirSync(sourcePath)) {
+    fs.cpSync(path.join(sourcePath, entry), path.join(destinationPath, entry), {
+      recursive: true,
+      force: true,
+      errorOnExist: false,
+    });
+  }
+}
+
+function isWindowsDirectoryRenameLock(error, replacement) {
+  return (
+    process.platform === "win32" &&
+    replacement.kind === "directory" &&
+    (error?.code === "EPERM" || error?.code === "EACCES")
+  );
+}
+
+function activateLockedDirectoryInPlace(replacement) {
+  // File watchers on Windows may keep a directory handle open and reject a
+  // directory rename even though its files remain replaceable. Preserve the
+  // verified package transaction by snapshotting the old contents first, then
+  // replacing only entries inside the stable directory path.
+  copyDirectoryContents(replacement.targetPath, replacement.backupPath);
+  replacement.activationMode = "in-place";
+  replacement.activated = true;
+  clearDirectoryContents(replacement.targetPath);
+  copyDirectoryContents(replacement.stagingPath, replacement.targetPath);
+  removePath(replacement.stagingPath);
+}
+
 export function activatePreparedReplacements(replacements) {
   const targetKeys = new Set();
   for (const replacement of replacements) {
@@ -227,16 +266,32 @@ export function activatePreparedReplacements(replacements) {
     for (const replacement of replacements) {
       if (fs.existsSync(replacement.targetPath)) {
         replacement.backupPath = siblingTemporaryPath(replacement.targetPath, "bak");
-        fs.renameSync(replacement.targetPath, replacement.backupPath);
+        try {
+          fs.renameSync(replacement.targetPath, replacement.backupPath);
+        } catch (renameError) {
+          if (!isWindowsDirectoryRenameLock(renameError, replacement)) throw renameError;
+          activateLockedDirectoryInPlace(replacement);
+          continue;
+        }
       }
       fs.renameSync(replacement.stagingPath, replacement.targetPath);
+      replacement.activationMode = "rename";
       replacement.activated = true;
     }
   } catch (activationError) {
     const rollbackErrors = [];
     for (const replacement of [...replacements].reverse()) {
       try {
-        if (replacement.activated && fs.existsSync(replacement.targetPath)) {
+        if (
+          replacement.activated &&
+          replacement.activationMode === "in-place" &&
+          replacement.backupPath &&
+          fs.existsSync(replacement.backupPath)
+        ) {
+          clearDirectoryContents(replacement.targetPath);
+          copyDirectoryContents(replacement.backupPath, replacement.targetPath);
+          removePath(replacement.backupPath);
+        } else if (replacement.activated && fs.existsSync(replacement.targetPath)) {
           removePath(replacement.targetPath);
         }
         if (

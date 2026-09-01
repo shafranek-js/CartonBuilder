@@ -8,7 +8,10 @@ import { syncPbdPlugin } from "../../../scripts/sync-pbd-plugin.mjs";
 import { syncViewerPlugin } from "../../../scripts/sync-viewer-plugin.mjs";
 import { findForbiddenNetworkReferences } from "../../../scripts/lib/offlinePolicy.mjs";
 import {
+  activatePreparedReplacements,
   isPathSafe,
+  prepareFileReplacement,
+  prepareManifestPackageReplacement,
   sha256File,
   atomicSyncManifestPackage,
 } from "../../../scripts/lib/atomicManifestSync.mjs";
@@ -440,4 +443,67 @@ describe("Atomic manifest package replacement", () => {
     expect(fs.readFileSync(path.join(destination, "payload.txt"), "utf8")).toBe("payload");
     expect(fs.existsSync(path.join(destination, "original.txt"))).toBe(false);
   });
+
+  it.runIf(process.platform === "win32")(
+    "replaces a valid package when a Windows watcher blocks the destination directory rename",
+    () => {
+      const { sourceDir, destination } = createAtomicFixture();
+      const originalRename = fs.renameSync.bind(fs);
+      vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+        if (path.resolve(source) === path.resolve(destination) && String(target).includes(".bak-")) {
+          const error = new Error("simulated Windows directory watcher lock");
+          error.code = "EPERM";
+          throw error;
+        }
+        return originalRename(source, target);
+      });
+
+      const manifest = atomicSyncManifestPackage({ sourceDir, destDir: destination });
+      expect(manifest.manifestVersion).toBe("test.manifest.v1");
+      expect(fs.readFileSync(path.join(destination, "payload.txt"), "utf8")).toBe("payload");
+      expect(fs.existsSync(path.join(destination, "original.txt"))).toBe(false);
+      expect(
+        fs.readdirSync(path.dirname(destination)).some((entry) => entry.includes(".bak-"))
+      ).toBe(false);
+    }
+  );
+
+  it.runIf(process.platform === "win32")(
+    "rolls back the Windows locked-directory fallback when a later activation fails",
+    () => {
+      const { sourceDir, destination } = createAtomicFixture();
+      const catalogPath = path.join(tempDir, "catalog.json");
+      fs.writeFileSync(catalogPath, "old catalog", "utf8");
+      const directoryReplacement = prepareManifestPackageReplacement({
+        sourceDir,
+        destDir: destination,
+      });
+      const fileReplacement = prepareFileReplacement({
+        destFile: catalogPath,
+        content: Buffer.from("new catalog", "utf8"),
+      });
+      const originalRename = fs.renameSync.bind(fs);
+      vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+        if (path.resolve(source) === path.resolve(destination) && String(target).includes(".bak-")) {
+          const error = new Error("simulated Windows directory watcher lock");
+          error.code = "EPERM";
+          throw error;
+        }
+        if (
+          path.resolve(source) === path.resolve(fileReplacement.stagingPath) &&
+          path.resolve(target) === path.resolve(catalogPath)
+        ) {
+          throw new Error("simulated catalog activation failure after in-place package replacement");
+        }
+        return originalRename(source, target);
+      });
+
+      expect(() =>
+        activatePreparedReplacements([directoryReplacement, fileReplacement])
+      ).toThrow(/simulated catalog activation failure/);
+      expect(fs.readFileSync(path.join(destination, "original.txt"), "utf8")).toBe("original");
+      expect(fs.existsSync(path.join(destination, "payload.txt"))).toBe(false);
+      expect(fs.readFileSync(catalogPath, "utf8")).toBe("old catalog");
+    }
+  );
 });

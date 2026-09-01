@@ -68,17 +68,21 @@ export function createHeadlessFoldRuntime(options = {}) {
   let parsed = null;
   let artworkTextures = new Set();
   const artworkMaterialStates = new WeakMap();
+  const maxTextureAnisotropy = Math.max(
+    1,
+    Math.floor(Number(options.maxTextureAnisotropy) || 1)
+  );
 
   function textureFromSource(source, label) {
-    if (source?.isTexture === true) {
-      return source;
+    let texture = source;
+    if (source?.isTexture !== true) {
+      if (!source || typeof source !== 'object') {
+        throw new Error(`Invalid artwork atlas ${label}: expected a canvas, bitmap, image data, or THREE.Texture.`);
+      }
+      texture = new THREE.Texture(source);
+      texture.name = `ArtworkAtlas_${label}`;
     }
-    if (!source || typeof source !== 'object') {
-      throw new Error(`Invalid artwork atlas ${label}: expected a canvas, bitmap, image data, or THREE.Texture.`);
-    }
-    const texture = new THREE.Texture(source);
-    texture.name = `ArtworkAtlas_${label}`;
-    texture.anisotropy = 16;
+    texture.anisotropy = maxTextureAnisotropy;
     texture.needsUpdate = true;
     return texture;
   }
