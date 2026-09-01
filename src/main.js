@@ -539,18 +539,23 @@ async function createTechnicalArtworkPayload() {
     throw new Error('Technical Preview requires an accepted technical dieline.');
   }
   const artworks = artworkApp?.getArtworks?.() || [];
+  const hasFinishes = artworks.some((entry) => (
+    (entry?.outputRole && entry.outputRole !== 'print') || entry?.finish || entry?.model?.finish
+  ));
   const composed = await composeArtworkTexture({
     boxModel: cartonModelBridge,
     artworks,
     documentRef: document,
     purpose: 'preview',
-    includeFinishMaps: true,
+    includeFinishMaps: hasFinishes,
     materialProfile: 'matte',
   });
   const artworkAtlas = await viewerCanvasToBinary(composed.canvas, 'Artwork atlas');
   const maps = {};
-  for (const key of ['alpha', 'normal', 'roughness', 'metalness']) {
-    if (composed.materialMaps?.[key]) maps[key] = await viewerCanvasToBinary(composed.materialMaps[key], `${key} artwork map`);
+  if (hasFinishes && composed.materialMaps) {
+    for (const key of ['alpha', 'normal', 'roughness', 'metalness']) {
+      if (composed.materialMaps?.[key]) maps[key] = await viewerCanvasToBinary(composed.materialMaps[key], `${key} artwork map`);
+    }
   }
   let artworkMetadata = null;
   try {
@@ -587,6 +592,7 @@ async function createTechnicalViewerPayload() {
       sha256: canonicalSvg.sha256,
     },
     ...artworkPayload,
+    exportGlb: false,
     state: technicalViewerState,
     name: `${sourceIdentity.cartonType || 'technical'}-technical.svg`,
     finishMetadata: {

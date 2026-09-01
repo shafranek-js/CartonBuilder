@@ -406,6 +406,12 @@ export function createViewerHost({
       }
       onModelLoaded({ ...payload });
       if (payload.state !== undefined) acceptViewerState(payload);
+      if (!pendingLoad.exportGlb) {
+        const request = pendingLoad;
+        pendingLoad = null;
+        windowRef.clearTimeout?.(request.timeoutId);
+        request.resolve({ ...payload });
+      }
       return;
     }
     if (data.type === VIEWER_MESSAGE_TYPES.STATE_UPDATED) {
@@ -507,7 +513,7 @@ export function createViewerHost({
     state.loadId = loadId;
     return new Promise((resolve, reject) => {
       const timeoutId = windowRef.setTimeout?.(() => rejectLoad(createError('viewer-load-timeout', 'load', 'Viewer did not export the loaded model in time.')), timeoutMs);
-      pendingLoad = { resolve, reject, timeoutId };
+      pendingLoad = { resolve, reject, timeoutId, exportGlb: payload.exportGlb !== false };
       if (!post(VIEWER_MESSAGE_TYPES.LOAD, payload, transfer)) {
         rejectLoad(createError('viewer-message-too-large', 'payload-validation', 'Could not send viewer:load.'));
       }
