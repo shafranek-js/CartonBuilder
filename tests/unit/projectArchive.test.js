@@ -11,6 +11,7 @@ import {
 } from '../../src/project/projectArchive.js';
 import { DEFAULT_RENDER_SETTINGS } from '../../src/render/RenderSettings.js';
 import { CURRENT_PROJECT_SCHEMA_VERSION } from '../../src/project/projectSchema.js';
+import { createDefaultTechnicalViewerState } from '../../src/project/technicalViewerState.js';
 import { DEFAULT_BOARD_APPEARANCE } from '../../src/render/BoardAppearance.js';
 import { BlobReader, BlobWriter, ZipReader, ZipWriter } from '@zip.js/zip.js';
 
@@ -279,6 +280,16 @@ describe('.carton project archive', () => {
       .toEqual(new Uint8Array(await fixture.technicalAssets.modelBlob.arrayBuffer()));
     expect(new Uint8Array(await restored.technicalAssets.svgBlob.arrayBuffer()))
       .toEqual(new Uint8Array(await fixture.technicalAssets.svgBlob.arrayBuffer()));
+  });
+
+  it('canonicalizes a missing Technical Viewer state before archive packaging', async () => {
+    const fixture = createTechnicalFixture('rte');
+    fixture.snapshot.technicalViewer = null;
+
+    const archive = await createProjectArchive(fixture);
+    const restored = await readProjectArchive(archive);
+
+    expect(restored.snapshot.technicalViewer).toEqual(createDefaultTechnicalViewerState());
   });
 
   it('rejects creating a technical archive without both technical assets', async () => {

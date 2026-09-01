@@ -8,6 +8,7 @@ import {
   migrateProjectSnapshot,
   validateProjectBundle,
 } from '../../src/project/projectSchema.js';
+import { createDefaultTechnicalViewerState } from '../../src/project/technicalViewerState.js';
 
 async function createBundle() {
   const originalBlob = new Blob([
@@ -360,7 +361,27 @@ describe('project schema', () => {
         },
       },
     };
-    expect(migrateProjectSnapshot(technical).technicalViewer.foldProgress).toBe(0.65);
+
+    const defaultTechnical = migrateProjectSnapshot({ ...technical, technicalViewer: null });
+    expect(defaultTechnical.technicalViewer).toEqual(createDefaultTechnicalViewerState());
+
+    const normalizedTechnical = migrateProjectSnapshot(technical);
+    expect(normalizedTechnical.technicalViewer).toMatchObject({
+      version: 1,
+      animationName: 'assembly',
+      foldProgress: 0.65,
+      camera: {
+        projection: 'perspective',
+        heading: 20,
+        elevation: 30,
+        horizontalPan: 0,
+        verticalPan: 0,
+        distanceFactor: 4,
+        frameHeightFactor: 0,
+        fov: 42,
+        verticalCorrection: false,
+      },
+    });
     expect(() => migrateProjectSnapshot({ ...technical, technicalViewer: { version: 1, foldProgress: 2 } }))
       .toThrow();
   });

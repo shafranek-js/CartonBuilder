@@ -767,7 +767,10 @@ export function createArtworkApp({
   }
 
   async function createProjectCheckpoint(options = {}) {
-    const payload = createCheckpointPayload();
+    // Store the validated snapshot, not the pre-validation payload. Technical
+    // schema v18 canonicalizes a missing viewer state to its non-null default;
+    // keeping that result makes checkpoint creation and restore equivalent.
+    const payload = await validateProjectBundle(createCheckpointPayload());
     return projectCheckpoint.createProjectCheckpoint(payload, {
       verify: verifyCheckpointPayload,
       write: options.writeCheckpoint || options.faultInjector || (async () => {}),

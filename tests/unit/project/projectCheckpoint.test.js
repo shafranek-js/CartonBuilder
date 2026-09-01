@@ -23,6 +23,42 @@ describe('ProjectCheckpointStore', () => {
     expect(await checkpoint.renderAssets[0].blob.text()).toBe('render');
   });
 
+  it('retains canonical Technical Viewer state across restore and recreation', async () => {
+    const store = new ProjectCheckpointStore();
+    const payload = {
+      snapshot: {
+        schemaVersion: 18,
+        workflowSelection: 'technical',
+        cartonSource: { mode: 'technical' },
+        technicalViewer: {
+          version: 1,
+          animationName: 'assembly',
+          foldProgress: 0.65,
+          camera: {
+            projection: 'perspective',
+            heading: 20,
+            elevation: 30,
+            horizontalPan: 0,
+            verticalPan: 0,
+            distanceFactor: 4,
+            frameHeightFactor: 0,
+            fov: 42,
+            verticalCorrection: false,
+          },
+        },
+      },
+      artworkBlobs: [],
+      renderAssets: [],
+      technicalAssets: null,
+    };
+
+    await store.createProjectCheckpoint(payload);
+    const restored = await store.restoreProjectCheckpoint();
+    await store.createProjectCheckpoint(restored);
+
+    expect(store.getProjectCheckpoint()).toEqual(payload);
+  });
+
   it('keeps the previous checkpoint when verification or persistence fails', async () => {
     const store = new ProjectCheckpointStore();
     await store.createProjectCheckpoint({ snapshot: { id: 'stable' } });
