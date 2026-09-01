@@ -2711,8 +2711,8 @@ input[type="checkbox"].sr-only::after {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 14px;
-  min-height: 44px;
-  padding: 8px 16px;
+  min-height: 42px;
+  padding: 6px 14px;
   border-bottom: 1px solid var(--panel-border, #444444);
   color: #fff;
 }
