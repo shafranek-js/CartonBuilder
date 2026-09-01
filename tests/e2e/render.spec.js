@@ -750,7 +750,22 @@ test('exports a numbered turntable ZIP and restores the live Render camera', asy
 });
 
 test('restores Render settings and workflow step through autosave', async ({ page }) => {
-  await openRender(page);
+  await buildReferenceNet(page);
+  await page.locator('.step[data-step-target="artwork"]').click();
+  await expect(page.locator('#artworkStep')).toBeVisible();
+  await loadArtwork(page);
+
+  await page.locator('.step[data-step-target="preview"]').click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
+  await page.locator('#previewExportHtmlQuality').selectOption('2400');
+
+  await page.locator('[data-step-target="render"]').click();
+  await expect(page.locator('#renderStep')).toBeVisible();
+  expect(await page.evaluate(
+    () => window.cartonBuilderApp.render.whenStable({ timeoutMs: 30_000 }),
+  )).toBe(true);
+
   await page.locator('#renderAspect').selectOption('portrait');
   await page.locator('#renderLongEdge').selectOption('4096');
   await page.locator('#renderProjection').selectOption('orthographic');
@@ -765,16 +780,37 @@ test('restores Render settings and workflow step through autosave', async ({ pag
   await page.locator('#renderEffectsGtao').uncheck();
   await page.locator('#renderEffectsDof').check();
 
-  await page.locator('.step[data-step-target="preview"]').click();
-  await expect(page.locator('#previewStep')).toBeVisible();
-  await page.locator('#previewExportHtmlQuality').selectOption('2400');
-  await page.locator('[data-step-target="render"]').click();
-  await expect(page.locator('#renderStep')).toBeVisible();
-  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
-  await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave());
+  await expect.poll(() => page.evaluate(() => ({
+    settings: window.cartonBuilderApp.render.getState(),
+    board: window.cartonBuilderApp.render.getBoardAppearance(),
+  }))).toMatchObject({
+    settings: {
+      aspect: 'portrait',
+      longEdge: 4096,
+      camera: { projection: 'orthographic', fov: 52 },
+      material: { profile: 'gloss' },
+      lighting: { environment: 'cool' },
+      background: { mode: 'transparent' },
+      quality: { html: 2400 },
+      effects: { gtao: { enabled: false }, dof: { enabled: true } },
+    },
+    board: {
+      thicknessMm: 0.8,
+      bevelRadiusMm: 0.2,
+      interiorColor: '#abcdef',
+      edgeColor: '#123456',
+    },
+  });
+
+  expect(
+    await page.evaluate(() => window.cartonBuilderApp.artwork.flushPendingSave()),
+  ).toBe(true);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#renderStep')).toBeVisible({ timeout: 30_000 });
+  expect(await page.evaluate(
+    () => window.cartonBuilderApp.render.whenStable({ timeoutMs: 30_000 }),
+  )).toBe(true);
   await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
   await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getState())).toMatchObject({
     aspect: 'portrait',
