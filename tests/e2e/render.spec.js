@@ -542,10 +542,26 @@ test('captures a stable bundled HDRI 2K both baseline', async ({ page }) => {
   await openRender(page, 'wave7b-hdri-baseline-fixture.png');
   await page.locator('#renderEnvironmentMapPreset').selectOption('polyhaven-abandoned-hall-01');
   await page.locator('#renderEnvironmentResolution').selectOption('2048');
+  await expect.poll(() => page.evaluate(
+    () => window.cartonBuilderApp.render.getState().lighting.environmentMap.resolutionCap,
+  )).toBe(2048);
   await page.locator('#renderEnvironmentMapUsage').selectOption('both');
   await page.locator('#renderBackgroundMode').selectOption('environment');
-  await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.render.getDiagnostics().environmentMap), { timeout: 60_000 })
-    .toMatchObject({ presetId: 'polyhaven-abandoned-hall-01', effectiveResolution: 2048, fallbackReason: null });
+  // The bundled Poly Haven asset is 1K; resolutionCap never upsamples it.
+  await expect.poll(
+    () => page.evaluate(
+      () => window.cartonBuilderApp.render.getDiagnostics().environmentMap,
+    ),
+    { timeout: 60_000 },
+  ).toMatchObject({
+    source: 'builtin',
+    presetId: 'polyhaven-abandoned-hall-01',
+    requestedResolution: 2048,
+    effectiveResolution: 1024,
+    width: 1024,
+    height: 512,
+    fallbackReason: null,
+  });
   await expect(page.locator('#renderRecovery')).toBeHidden();
   expect(await page.locator('#renderCanvas').screenshot({ animations: 'disabled' })).toMatchSnapshot('wave7b-hdri-both.png', {
     threshold: 0.15,
