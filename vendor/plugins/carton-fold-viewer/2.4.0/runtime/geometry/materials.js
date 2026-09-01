@@ -20,7 +20,7 @@ export function panelColor(spec){
 export function makeTechMaterials(spec){
   const surface=new THREE.MeshStandardMaterial({color:panelColor(spec),roughness:1,metalness:0,side:THREE.FrontSide});
   surface.name=`${spec.nodeName}_outer_paper`;
-  const inner=new THREE.MeshStandardMaterial({color:0xfafaf6,roughness:1,metalness:0,side:THREE.FrontSide});
+  const inner=new THREE.MeshStandardMaterial({color:0xfafaf6,roughness:1,metalness:0,side:THREE.FrontSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
   inner.name=`${spec.nodeName}_inner_paper`;
   const edge=new THREE.MeshStandardMaterial({color:0xeadfcf,roughness:1,metalness:0,side:THREE.DoubleSide});
   edge.name=`${spec.nodeName}_edge`;
@@ -28,7 +28,7 @@ export function makeTechMaterials(spec){
 }
 
 export function makeCreaseMaterial(foldId, creaseMeshName){
-  const surface=new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:1,metalness:0,side:THREE.FrontSide});
+  const surface=new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:1,metalness:0,side:THREE.FrontSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
   surface.name=`${creaseMeshName(foldId)}_outer_paper`;
   const inner=new THREE.MeshStandardMaterial({color:0xfafaf6,roughness:1,metalness:0,side:THREE.FrontSide});
   inner.name=`${creaseMeshName(foldId)}_inner_paper`;

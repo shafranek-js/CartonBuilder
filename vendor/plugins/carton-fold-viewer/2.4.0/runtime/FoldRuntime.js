@@ -78,6 +78,7 @@ export function createHeadlessFoldRuntime(options = {}) {
     }
     const texture = new THREE.Texture(source);
     texture.name = `ArtworkAtlas_${label}`;
+    texture.anisotropy = 16;
     texture.needsUpdate = true;
     return texture;
   }

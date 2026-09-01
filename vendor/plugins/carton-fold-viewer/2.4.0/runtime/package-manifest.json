@@ -15,13 +15,13 @@
     },
     {
       "path": "FoldRuntime.js",
-      "byteLength": 8809,
-      "sha256": "081e56f503424b5dc55c47b5f4397460270fb5ccf7c197111858aca055b250ac"
+      "byteLength": 8838,
+      "sha256": "c5faa557331a36803d101ed2a8a109de6a62062336c8429855d3c4c7ccf3787f"
     },
     {
       "path": "geometry/crease-geometry.js",
-      "byteLength": 14870,
-      "sha256": "4bdab083398348aed4125be83c49b5d599b63c10d9394b36234f177e698d35ef"
+      "byteLength": 14954,
+      "sha256": "7b3cc9252f8ac89761c5b35d219db511b5d8000d5fafc60db9b7f48523c8f8a0"
     },
     {
       "path": "geometry/flat-net-uv.js",
@@ -30,8 +30,8 @@
     },
     {
       "path": "geometry/materials.js",
-      "byteLength": 2321,
-      "sha256": "82239ccb8bcb92a63de65569e2088f533b778cc776a4c005468f426ab2a91dd8"
+      "byteLength": 2449,
+      "sha256": "4d56ba404e18ebd9079e5476381297bc86379b11c0c86fa7d891f25f68fbe320"
     },
     {
       "path": "geometry/panel-geometry.js",

@@ -15,8 +15,8 @@ export function resolveCreaseProfile(metadata, dims, fold = null) {
   const hasCertifiedPhysicalProfile = metadata.capabilities?.physicalCreaseProfile === true
     && Number.isFinite(cw) && cw > 0
     && Number.isFinite(br) && br > 0;
-  let creaseWidthMm = hasCertifiedPhysicalProfile ? cw : 0;
-  let bendRadiusMm = hasCertifiedPhysicalProfile ? br : 0;
+  let creaseWidthMm = hasCertifiedPhysicalProfile ? cw : Math.max(dims?.thickness || 0.46, 0.46);
+  let bendRadiusMm = hasCertifiedPhysicalProfile ? br : Math.max((dims?.thickness || 0.46) * 0.5, 0.23);
 
   // For tongue folds with throat relief notches (where relief depth is ~ 2mm),
   // clamp creaseWidthMm so that halfCrease fits within the throat notch clearance (<= 2mm)
