@@ -352,11 +352,10 @@ test('preserves the Render viewport size across Preview re-entry', async ({ page
 });
 
 test('persists an artwork finish and warns before Basic GLB export', async ({ page }) => {
-  await openRender(page);
-  await page.locator('.step[data-step-target="preview"]').click();
-  await expect(page.locator('#previewStep')).toBeVisible();
+  await buildReferenceNet(page);
   await page.locator('.step[data-step-target="artwork"]').click();
   await expect(page.locator('#artworkStep')).toBeVisible();
+  await loadArtwork(page);
 
   await page.locator('#artworkFinishRole').selectOption('finish');
   await page.locator('#artworkFinishType').selectOption('foil');
@@ -366,28 +365,28 @@ test('persists an artwork finish and warns before Basic GLB export', async ({ pa
   });
 
   await page.locator('.step[data-step-target="preview"]').click();
+  await expect(page.locator('#previewStep')).toBeVisible();
   await expect(page.locator('#preview3dBusy')).toBeHidden({ timeout: 20_000 });
   await page.locator('[data-step-target="render"]').click();
-  await expect(page.locator('#renderBusy')).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('#renderStep')).toBeVisible();
+  expect(await page.evaluate(
+    () => window.cartonBuilderApp.render.whenStable({ timeoutMs: 30_000 }),
+  )).toBe(true);
   await expect(page.locator('#renderFinishSummary')).toContainText('foil');
 
-  // Keep this assertion scoped to the finish warning. The GLB export test
-  // below covers the native export-kind selector and the actual download;
-  // opening the already-selected kind avoids a Chromium native-dialog race
-  // while Render controls are refreshing asynchronously.
   await page.evaluate(() => window.cartonBuilderApp.render.openExportDialog('png', 'glb'));
   await expect(page.locator('#renderExportDialog')).toBeVisible();
   await expect(page.locator('#renderExportGlbOptions')).toBeVisible();
-  await page.evaluate(() => {
-    const select = document.getElementById('renderExportGlbMaterialMode');
-    if (!select) throw new Error('GLB material control is missing.');
-    select.value = 'basic-compatibility';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await page.locator('#renderExportGlbMaterialMode').selectOption('basic-compatibility');
   await expect(page.locator('#renderExportGlbWarning')).toBeVisible();
-  // The per-test context teardown closes the native dialog and releases its
-  // page; invoking close() here synchronously re-enters the heavy preflight
-  // refresh on slower SwiftShader runs.
+  expect(await page.evaluate(() => window.cartonBuilderApp.render.runExportPreflight({
+    kind: 'glb',
+    format: 'glb',
+  }))).not.toMatchObject({ status: 'blocked' });
+  expect(await page.evaluate(() => window.cartonBuilderApp.artwork.getArtworks()[0])).toMatchObject({
+    outputRole: 'finish',
+    finish: { type: 'foil' },
+  });
 });
 
 test('uses a separate closed presentation scene and persists render controls', async ({ page }) => {
