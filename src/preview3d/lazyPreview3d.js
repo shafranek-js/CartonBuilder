@@ -15,25 +15,32 @@ export function createLazyPreview3DFacade({
   let disposed = false;
   let requestedActive = false;
   const statePatch = {};
-  const patchTokens = new Map();
+  const pendingPatches = new Map();
 
-  function queueStatePatch(key, value, apply) {
-    const token = Symbol(key);
-    statePatch[key] = value;
-    patchTokens.set(key, token);
-    ensureController()
-      .then((target) => {
-        if (!target) return;
-        apply(target);
-        if (patchTokens.get(key) === token) {
-          delete statePatch[key];
-          patchTokens.delete(key);
-        }
-      })
-      .catch(() => {
-        // Keep the requested value visible through getState(); a later
-        // activation/retry will apply it to the controller.
-      });
+  function applyPendingPatch(target, key, patch) {
+    if (pendingPatches.get(key) !== patch) return;
+    try {
+      patch.apply(target, patch.value);
+    } catch {
+      // Keep the requested value queued so a later activation or setter can
+      // retry it without creating an unhandled rejection.
+      return;
+    }
+    if (pendingPatches.get(key) === patch) {
+      pendingPatches.delete(key);
+      if (patch.expose) delete statePatch[key];
+    }
+  }
+
+  function applyPendingPatches(target) {
+    for (const [key, patch] of pendingPatches) applyPendingPatch(target, key, patch);
+  }
+
+  function queuePatch(key, value, apply, { expose = true } = {}) {
+    const patch = { value, apply, expose };
+    pendingPatches.set(key, patch);
+    if (expose) statePatch[key] = value;
+    if (controller) applyPendingPatch(controller, key, patch);
   }
 
   async function ensureController() {
@@ -63,6 +70,8 @@ export function createLazyPreview3DFacade({
       const busy = globalThis.document?.getElementById?.('preview3dBusy');
       if (busy) busy.hidden = false;
       const target = await ensureController();
+      if (!target) return false;
+      applyPendingPatches(target);
       return target?.activate() || false;
     },
     deactivate() {
@@ -74,22 +83,22 @@ export function createLazyPreview3DFacade({
     },
     setFoldProgress(value) {
       const next = Math.max(0, Math.min(1, Number(value)));
-      if (Number.isFinite(next)) queueStatePatch('foldProgress', next, (target) => target.setFoldProgress(next));
+      if (Number.isFinite(next)) queuePatch('foldProgress', next, (target, current) => target.setFoldProgress(current));
     },
     setCameraProjection(value) {
-      queueStatePatch('cameraProjection', value, (target) => target.setCameraProjection(value));
+      queuePatch('cameraProjection', value, (target, current) => target.setCameraProjection(current));
     },
     setScenePreset(value) {
-      queueStatePatch('scenePreset', value, (target) => target.setScenePreset(value));
+      queuePatch('scenePreset', value, (target, current) => target.setScenePreset(current));
     },
     setBoardAppearance(value) {
-      ensureController().then((target) => target?.setBoardAppearance(value));
+      queuePatch('boardAppearance', value, (target, current) => target.setBoardAppearance(current), { expose: false });
     },
     setBoardCaliper(value) {
-      ensureController().then((target) => target?.setBoardCaliper(value));
+      queuePatch('boardCaliper', value, (target, current) => target.setBoardCaliper(current), { expose: false });
     },
     selectPanel(panelId) {
-      queueStatePatch('selectedPanelId', panelId, (target) => target.selectPanel(panelId));
+      queuePatch('selectedPanelId', panelId, (target, current) => target.selectPanel(current));
     },
     resetView() {
       controller?.resetView();
@@ -119,7 +128,7 @@ export function createLazyPreview3DFacade({
     },
     resetForProject() {
       for (const key of Object.keys(statePatch)) delete statePatch[key];
-      patchTokens.clear();
+      pendingPatches.clear();
       controller?.resetForProject();
     },
     dispose() {
@@ -128,6 +137,7 @@ export function createLazyPreview3DFacade({
       controller?.dispose();
       controller = null;
       loadPromise = null;
+      pendingPatches.clear();
     },
   };
 

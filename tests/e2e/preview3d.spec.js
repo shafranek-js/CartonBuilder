@@ -261,6 +261,7 @@ test('lazy-loads the complete 3D workflow without mutating canonical state', asy
 });
 
 test('shows the Render frame and format-specific export summaries in Preview', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.goto('/');
   await page.setViewportSize({ width: 1440, height: 900 });
   await openPreview(page);
@@ -275,9 +276,23 @@ test('shows the Render frame and format-specific export summaries in Preview', a
   await expect(page.locator('#previewExportHtmlSummary')).toContainText('texture quality: 1200 DPI');
   expect(await page.evaluate(() => window.cartonBuilderApp.render.getState().quality.html)).toBe(1200);
 
-  await page.getByRole('button', { name: 'Render', exact: true }).click();
+  await page.locator('#openRenderButton').click();
+  await expect(page.locator('#renderStep')).toBeVisible();
+  expect(await page.evaluate(
+    () => window.cartonBuilderApp.render.whenStable({ timeoutMs: 15_000 }),
+  )).toBe(true);
   await page.locator('#renderAspect').selectOption('wide');
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.render.getState().aspect),
+  ).toBe('wide');
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.render.getState().longEdge),
+  ).toBe(2048);
   await page.locator('.step[data-step-target="preview"]').click();
+  await expect(page.locator('#previewStep')).toBeVisible();
+  await expect.poll(
+    () => page.evaluate(() => window.cartonBuilderApp.render.getState().aspect),
+  ).toBe('wide');
   await expect(page.locator('#previewExportViewportLabel')).toHaveText('Render frame · 2048 × 1152 px');
 
   const frame = await page.evaluate(() => {

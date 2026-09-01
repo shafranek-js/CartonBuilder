@@ -899,7 +899,7 @@ function showStep(step) {
   } else if (step === 'render') {
     preview3dFacade?.suspend();
     requestAnimationFrame(() => {
-      renderApp?.activate();
+      if (currentStep === 'render') renderApp?.activate?.();
     });
   } else {
     preview3dFacade?.suspend();
