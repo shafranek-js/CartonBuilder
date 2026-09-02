@@ -161,6 +161,15 @@ describe('TechnicalRenderMaterialController', () => {
     });
   });
 
+  it('applies the initial matte profile to the current Technical model before allowing a no-op', () => {
+    const scene = makeTechnicalScene();
+    const { controller } = makeController(scene);
+
+    expect(controller.setMaterialProfile('matte')).toBe(true);
+    expect(scene.outer.roughness).toBe(0.72);
+    expect(controller.setMaterialProfile('matte')).toBe(false);
+  });
+
   it('classifies outside, interior, edge and crease slots and applies board colors only to board surfaces', () => {
     const scene = makeTechnicalScene();
     const { controller } = makeController(scene);
@@ -204,6 +213,24 @@ describe('TechnicalRenderMaterialController', () => {
     expect(controller.getDiagnostics().profile).toBe('matte');
   });
 
+  it('keeps the committed replacement installed when releasing the previous material fails', () => {
+    const scene = makeTechnicalScene();
+    const releaseError = new Error('outer material release failed');
+    scene.outer.dispose.mockImplementation(() => { throw releaseError; });
+    const { controller } = makeController(scene);
+
+    expect(() => controller.setMaterialProfile('gloss')).toThrow(releaseError);
+
+    const replacement = scene.panel.material[0];
+    expect(replacement).toBeInstanceOf(MeshPhysicalMaterial);
+    expect(replacement).not.toBe(scene.outer);
+    expect(replacement.roughness).toBe(0.26);
+    expect(controller.getDiagnostics()).toMatchObject({
+      profile: 'gloss',
+      ownedMaterialCount: 3,
+    });
+  });
+
   it('rolls back board colors atomically when an interior/edge material rejects a color', () => {
     const scene = makeTechnicalScene();
     const originalInnerColor = scene.inner.color.clone();
@@ -233,5 +260,38 @@ describe('TechnicalRenderMaterialController', () => {
     expect(textureDispose).not.toHaveBeenCalled();
     expect(scene.source.dispose).not.toHaveBeenCalled();
     expect(controller.getDiagnostics()).toMatchObject({ disposed: true, ownedMaterialCount: 0 });
+  });
+
+  it('does not double-dispose a replacement after source disposal before scene-controller disposal', () => {
+    const scene = makeTechnicalScene();
+    const { controller } = makeController(scene);
+    controller.setMaterialProfile('gloss');
+    const replacement = scene.panel.material[0];
+    const replacementDispose = vi.spyOn(replacement, 'dispose');
+    const textureDispose = scene.texture.dispose;
+    scene.source.getDiagnostics.mockReturnValue({ source: 'technical', built: false, disposed: true });
+    scene.source.dispose.mockImplementation(() => {
+      const materials = new Set();
+      scene.model.traverse((object) => {
+        const entries = Array.isArray(object.material) ? object.material : [object.material];
+        entries.filter(Boolean).forEach((material) => materials.add(material));
+      });
+      const textures = new Set();
+      for (const material of materials) {
+        for (const value of Object.values(material)) {
+          if (value?.isTexture) textures.add(value);
+        }
+        material.dispose?.();
+      }
+      for (const texture of textures) texture.dispose?.();
+      scene.source.model = null;
+    });
+    const sceneController = { dispose: () => controller.dispose() };
+
+    scene.source.dispose();
+    expect(sceneController.dispose()).toBe(true);
+
+    expect(replacementDispose).toHaveBeenCalledTimes(1);
+    expect(textureDispose).toHaveBeenCalledTimes(1);
   });
 });

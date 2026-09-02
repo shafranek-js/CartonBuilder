@@ -224,6 +224,7 @@ export class TechnicalRenderMaterialController {
     this.profile = 'matte';
     this.boardAppearance = null;
     this.disposed = false;
+    this._appliedModel = null;
     this._ownedMaterials = new Set();
     this._materialClassCounts = {
       outsideArtwork: 0,
@@ -254,17 +255,33 @@ export class TechnicalRenderMaterialController {
       outside: 0,
     };
     for (const slot of slots) counts[slot.className] += 1;
-    return { source, slots, counts };
+    return { source, model: source.model, slots, counts };
+  }
+
+  _trackOwnedMaterial(material) {
+    const originalDispose = typeof material.dispose === 'function'
+      ? material.dispose.bind(material)
+      : null;
+    let disposed = false;
+    const release = (...args) => {
+      if (disposed) return false;
+      disposed = true;
+      this._ownedMaterials.delete(material);
+      return originalDispose ? originalDispose(...args) : true;
+    };
+    material.dispose = release;
+    this._ownedMaterials.add(material);
   }
 
   _applyMaterialProfile(profile, context = null) {
     const resolvedContext = context || this._getSourceAndSlots();
     if (!resolvedContext) return false;
-    const { slots, counts } = resolvedContext;
+    const { model, slots, counts } = resolvedContext;
     const presentation = PROFILE_PRESENTATION[profile];
     const replacements = new Map();
     const prepared = [];
     const snapshots = materialSlotsSnapshot(slots);
+    let committed = false;
 
     try {
       for (const { material } of slots) {
@@ -288,6 +305,12 @@ export class TechnicalRenderMaterialController {
         material.needsUpdate = true;
       }
 
+      for (const material of prepared) this._trackOwnedMaterial(material);
+      this.profile = profile;
+      this._appliedModel = model;
+      this._materialClassCounts = counts;
+      committed = true;
+
       let disposalError = null;
       for (const [oldMaterial] of replacements) {
         if (typeof oldMaterial.dispose === 'function') {
@@ -295,12 +318,9 @@ export class TechnicalRenderMaterialController {
         }
       }
       if (disposalError) throw disposalError;
-
-      for (const material of prepared) this._ownedMaterials.add(material);
-      this.profile = profile;
-      this._materialClassCounts = counts;
       return true;
     } catch (error) {
+      if (committed) throw error;
       restoreMeshMaterials(slots, replacements);
       // The snapshots contain only the source materials. Any in-place
       // presentation mutation is restored before the prepared replacements
@@ -322,7 +342,7 @@ export class TechnicalRenderMaterialController {
   setMaterialProfile(profile) {
     if (this.disposed || !assertProfile(profile)) return false;
     const context = this._getSourceAndSlots();
-    if (profile === this.profile) return false;
+    if (profile === this.profile && context.model === this._appliedModel) return false;
     return this._applyMaterialProfile(profile, context);
   }
 
