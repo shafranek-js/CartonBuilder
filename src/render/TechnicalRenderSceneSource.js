@@ -238,8 +238,9 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
 
   /**
    * Build the derived Three.js model from canonical semantic SVG text.
-   * The input bundle is read-only from this adapter's perspective; only the
-   * runtime-owned model root receives the mm-to-metre presentation scale.
+   * The input bundle is read-only from this adapter's perspective. Viewer
+   * runtime geometry is already expressed in metres, so its root transform
+   * must remain untouched here.
    */
   buildScene(input = {}, positionalArtworkAtlas, positionalMaps, positionalName) {
     this._assertActive();
@@ -264,7 +265,6 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
         throw new Error('Technical runtime did not return a Three.js model root.');
       }
 
-      candidateModel.scale.setScalar(TECHNICAL_UNIT_SCALE);
       candidateModel.updateMatrixWorld?.(true);
       this._renderSurface.scene.add(candidateModel);
       this.runtime.setFoldProgress(1);

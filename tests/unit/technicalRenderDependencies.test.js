@@ -30,14 +30,13 @@ describe('technicalRenderDependencies', () => {
     expect(() => runtime.dispose()).not.toThrow();
   });
 
-  it('resolves translated, millimetre-scaled model geometry in metres without changing source transforms', () => {
+  it('resolves translated Viewer runtime metre geometry without changing source transforms', () => {
     const model = new Group();
     const mesh = new Mesh(
-      new BoxGeometry(200, 100, 50),
+      new BoxGeometry(0.2, 0.1, 0.05),
       new MeshBasicMaterial(),
     );
     model.add(mesh);
-    model.scale.setScalar(0.001);
     model.position.set(1, 2, 3);
 
     const sourceScale = model.scale.clone();
@@ -46,20 +45,20 @@ describe('technicalRenderDependencies', () => {
 
     const bounds = resolveTechnicalRenderBounds({ model });
 
-    expect(bounds.minX).toBeCloseTo(0.9, 12);
-    expect(bounds.minY).toBeCloseTo(1.95, 12);
-    expect(bounds.minZ).toBeCloseTo(2.975, 12);
-    expect(bounds.maxX).toBeCloseTo(1.1, 12);
-    expect(bounds.maxY).toBeCloseTo(2.05, 12);
-    expect(bounds.maxZ).toBeCloseTo(3.025, 12);
-    expect(bounds.width).toBeCloseTo(0.2, 12);
-    expect(bounds.height).toBeCloseTo(0.1, 12);
-    expect(bounds.depth).toBeCloseTo(0.05, 12);
-    expect(bounds.centerX).toBeCloseTo(1, 12);
-    expect(bounds.centerY).toBeCloseTo(2, 12);
-    expect(bounds.centerZ).toBeCloseTo(3, 12);
+    expect(bounds.minX).toBeCloseTo(0.9, 7);
+    expect(bounds.minY).toBeCloseTo(1.95, 7);
+    expect(bounds.minZ).toBeCloseTo(2.975, 7);
+    expect(bounds.maxX).toBeCloseTo(1.1, 7);
+    expect(bounds.maxY).toBeCloseTo(2.05, 7);
+    expect(bounds.maxZ).toBeCloseTo(3.025, 7);
+    expect(bounds.width).toBeCloseTo(0.2, 7);
+    expect(bounds.height).toBeCloseTo(0.1, 7);
+    expect(bounds.depth).toBeCloseTo(0.05, 7);
+    expect(bounds.centerX).toBeCloseTo(1, 7);
+    expect(bounds.centerY).toBeCloseTo(2, 7);
+    expect(bounds.centerZ).toBeCloseTo(3, 7);
     expect(bounds.units).toBe('m');
-    expect(bounds.radius).toBeCloseTo(Math.sqrt(0.2 ** 2 + 0.1 ** 2 + 0.05 ** 2) / 2, 12);
+    expect(bounds.radius).toBeCloseTo(Math.sqrt(0.2 ** 2 + 0.1 ** 2 + 0.05 ** 2) / 2, 7);
     expect(model.scale).toEqual(sourceScale);
     expect(model.position).toEqual(sourcePosition);
     expect(Array.from(mesh.geometry.attributes.position.array)).toEqual(sourceGeometry);

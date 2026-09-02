@@ -82,7 +82,7 @@ describe('TechnicalRenderSceneSource', () => {
     expect(() => new TechnicalRenderSceneSource({ renderSurface: { scene: createScene() } })).toThrow(/runtime/);
   });
 
-  it('loads semantic SVG, folds to 100%, scales only the derived root, and preserves the input', () => {
+  it('loads semantic SVG, folds to 100%, preserves the runtime metre scale, and keeps the input unchanged', () => {
     const bundle = { semanticSvg: { markup: CANONICAL_SVG, units: 'mm' }, modelJson: { text: '{"canonical":true}' } };
     const before = structuredClone(bundle);
     const { source, runtime, renderSurface, scene } = createSource();
@@ -97,8 +97,8 @@ describe('TechnicalRenderSceneSource', () => {
       ARTWORK_ATLAS,
       { alpha: { id: 'alpha' } },
     );
-    expect(runtime.model.scale.setScalar).toHaveBeenCalledWith(0.001);
-    expect(runtime.model.scale.value).toBe(0.001);
+    expect(runtime.model.scale.setScalar).not.toHaveBeenCalled();
+    expect(runtime.model.scale.value).toBe(1);
     expect(scene.children).toEqual([runtime.model]);
     expect(bundle).toEqual(before);
     expect(source.getRenderSurface()).toBe(renderSurface);
