@@ -3,6 +3,11 @@ import { cloneBoardAppearance, sanitizeBoardAppearance } from './BoardAppearance
 import { RenderPostProcessing } from './RenderPostProcessing.js';
 import { RenderQualityManager } from './RenderQualityManager.js';
 import { getRenderHealth } from './renderPreflight.js';
+import {
+  assertRenderSceneController,
+  assertRenderSceneSource,
+  assertSharedRenderSurface,
+} from './renderSceneActors.js';
 
 function getFinishSummary(sceneModel) {
   return (sceneModel?.artworks || [])
@@ -13,20 +18,6 @@ function getFinishSummary(sceneModel) {
       outputRole: entry.outputRole,
       maskChannel: entry.finish.maskChannel,
     }));
-}
-
-function assertSharedRenderSurface(source, sceneController) {
-  const sourceSurface = source?.renderSurface;
-  const controllerSurface = sceneController?.renderSurface;
-  if (!sourceSurface || !controllerSurface) {
-    throw new TypeError('Render source and scene controller must provide a renderSurface.');
-  }
-
-  for (const key of ['scene', 'camera', 'renderer']) {
-    if (sourceSurface[key] !== controllerSurface[key]) {
-      throw new Error(`Render source and scene controller must share renderSurface.${key}.`);
-    }
-  }
 }
 
 export class WebGLCartonRenderer {
@@ -121,11 +112,9 @@ export class WebGLCartonRenderer {
       ? sceneSourceFactory(sourceOptions)
       : new LegacyRenderSceneSource(sourceOptions);
     this.sceneController = sceneController || this.source;
-    if (this.sceneController !== this.source) {
-      assertSharedRenderSurface(this.source, this.sceneController);
-    } else if (!this.sceneController?.renderSurface) {
-      throw new TypeError('Render source must provide a renderSurface.');
-    }
+    assertRenderSceneSource(this.source);
+    assertRenderSceneController(this.sceneController);
+    assertSharedRenderSurface(this.source, this.sceneController);
     // Keep the established internal scene handle while routing scene
     // operations through the source boundary. The public renderer API is
     // unchanged; future sources can replace this adapter without changing
@@ -170,7 +159,7 @@ export class WebGLCartonRenderer {
 
   updateSettings(settings, { render = true } = {}) {
     const previous = this.currentSettings;
-    const previousCameraObject = this.sceneController.camera;
+    const previousCameraObject = this.sceneController.renderSurface.camera;
     if (!previous || previous.material.profile !== settings.material.profile) {
       this.sceneController.setMaterialProfile(settings.material.profile);
     }
@@ -214,7 +203,7 @@ export class WebGLCartonRenderer {
       this.sceneController.setCameraState(presetChanged
         ? { ...settings.camera, position: undefined, target: undefined }
         : settings.camera);
-      if (this.sceneController.camera !== previousCameraObject) {
+      if (this.sceneController.renderSurface.camera !== previousCameraObject) {
         // BoxScene swaps between its perspective and orthographic camera
         // objects. Every post-processing pass keeps its own camera reference,
         // so rebuild the composer when that identity changes.
@@ -241,9 +230,9 @@ export class WebGLCartonRenderer {
   }
 
   updateCamera(camera) {
-    const previousCameraObject = this.sceneController.camera;
+    const previousCameraObject = this.sceneController.renderSurface.camera;
     this.sceneController.setCameraState(camera);
-    if (this.sceneController.camera !== previousCameraObject) {
+    if (this.sceneController.renderSurface.camera !== previousCameraObject) {
       this.postProcessing.setScene(
         this.sceneController.renderSurface.scene,
         this.sceneController.renderSurface.camera,
