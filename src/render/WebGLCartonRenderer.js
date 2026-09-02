@@ -31,6 +31,7 @@ export class WebGLCartonRenderer {
     onContextLost = () => {},
     onContextRestored = () => {},
     onCameraChange = () => {},
+    sceneSourceFactory = null,
   }) {
     this.sceneModel = sceneModel;
     this.finishSummary = getFinishSummary(sceneModel);
@@ -46,7 +47,7 @@ export class WebGLCartonRenderer {
     this.boardAppearance = sanitizeBoardAppearance(boardAppearance);
     this.effects = structuredClone(renderSettings.effects);
     this.settleTimer = null;
-    this.source = new LegacyRenderSceneSource({
+    const sourceOptions = {
       canvas,
       container,
       boxModel,
@@ -97,7 +98,13 @@ export class WebGLCartonRenderer {
         onContextRestored();
       },
       onCameraChange,
-    });
+    };
+    if (sceneSourceFactory !== null && typeof sceneSourceFactory !== 'function') {
+      throw new TypeError('sceneSourceFactory must be a function when provided.');
+    }
+    this.source = sceneSourceFactory
+      ? sceneSourceFactory(sourceOptions)
+      : new LegacyRenderSceneSource(sourceOptions);
     // Keep the established internal scene handle while routing scene
     // operations through the source boundary. The public renderer API is
     // unchanged; future sources can replace this adapter without changing
