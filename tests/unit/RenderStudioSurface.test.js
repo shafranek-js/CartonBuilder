@@ -233,3 +233,136 @@ describe('RenderStudioSurface', () => {
     expect(options.canvas.removeEventListener).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('RenderStudioSurface camera optics', () => {
+  it('clamps perspective FOV, updates the projection once, and does not render', () => {
+    const options = makeSurfaceOptions();
+    const surface = new RenderStudioSurface(options);
+    const updateProjectionMatrix = vi.spyOn(surface.perspectiveCamera, 'updateProjectionMatrix');
+    const render = vi.spyOn(surface, 'render');
+
+    expect(surface.setPerspectiveFov(5)).toBe(true);
+    expect(surface.perspectiveCamera.fov).toBe(10);
+    expect(updateProjectionMatrix).toHaveBeenCalledTimes(1);
+    expect(render).not.toHaveBeenCalled();
+
+    expect(surface.setPerspectiveFov(130)).toBe(true);
+    expect(surface.perspectiveCamera.fov).toBe(120);
+    expect(updateProjectionMatrix).toHaveBeenCalledTimes(2);
+    expect(surface.setPerspectiveFov(120)).toBe(false);
+    expect(updateProjectionMatrix).toHaveBeenCalledTimes(2);
+    expect(surface.setPerspectiveFov('52')).toBe(false);
+    expect(surface.setPerspectiveFov(Number.NaN)).toBe(false);
+    expect(surface.setPerspectiveFov(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(updateProjectionMatrix).toHaveBeenCalledTimes(2);
+
+    surface.dispose();
+  });
+
+  it('recalculates orthographic frustum from the current aspect without rendering', () => {
+    const options = makeSurfaceOptions({
+      container: { clientWidth: 1000, clientHeight: 500 },
+    });
+    const surface = new RenderStudioSurface(options);
+    const updateProjectionMatrix = vi.spyOn(surface.orthographicCamera, 'updateProjectionMatrix');
+    const render = vi.spyOn(surface, 'render');
+
+    expect(surface.setOrthographicHeight(4)).toBe(true);
+    expect(surface.orthographicCamera.left).toBe(-4);
+    expect(surface.orthographicCamera.right).toBe(4);
+    expect(surface.orthographicCamera.top).toBe(2);
+    expect(surface.orthographicCamera.bottom).toBe(-2);
+    expect(updateProjectionMatrix).toHaveBeenCalledTimes(1);
+    expect(render).not.toHaveBeenCalled();
+
+    expect(surface.resize({ width: 300, height: 600, render: false })).toBe(true);
+    expect(surface.orthographicCamera.left).toBe(-1);
+    expect(surface.orthographicCamera.right).toBe(1);
+    expect(surface.orthographicCamera.top).toBe(2);
+    expect(surface.orthographicCamera.bottom).toBe(-2);
+    expect(surface.getCameraOptics()).toMatchObject({
+      orthographicHeight: 4,
+      aspect: 0.5,
+    });
+    expect(render).not.toHaveBeenCalled();
+
+    surface.dispose();
+  });
+
+  it('preserves orthographic height across resize and ignores a hidden zero viewport', () => {
+    const options = makeSurfaceOptions({
+      container: { clientWidth: 0, clientHeight: 0 },
+    });
+    const surface = new RenderStudioSurface(options);
+
+    expect(surface.getCameraOptics().aspect).toBe(1);
+    expect(surface.setOrthographicHeight(4)).toBe(true);
+    const beforeResize = {
+      left: surface.orthographicCamera.left,
+      right: surface.orthographicCamera.right,
+      top: surface.orthographicCamera.top,
+      bottom: surface.orthographicCamera.bottom,
+    };
+    expect(beforeResize).toEqual({ left: -2, right: 2, top: 2, bottom: -2 });
+
+    expect(surface.resize({ width: 800, height: 400, render: false })).toBe(true);
+    expect(surface.getCameraOptics()).toMatchObject({
+      orthographicHeight: 4,
+      aspect: 2,
+    });
+    expect(surface.orthographicCamera.left).toBe(-4);
+    expect(surface.orthographicCamera.right).toBe(4);
+    expect(surface.orthographicCamera.top).toBe(2);
+    expect(surface.orthographicCamera.bottom).toBe(-2);
+
+    const lastViewport = surface.getLastViewport();
+    expect(surface.resize({ width: 0, height: 0, render: false })).toBe(false);
+    expect(surface.getLastViewport()).toEqual(lastViewport);
+    expect(surface.orthographicCamera.left).toBe(-4);
+    expect(surface.orthographicCamera.right).toBe(4);
+    expect(surface.orthographicCamera.top).toBe(2);
+    expect(surface.orthographicCamera.bottom).toBe(-2);
+
+    surface.dispose();
+  });
+
+  it('rejects invalid optics, reflects projection switching, and keeps a snapshot after disposal', () => {
+    const surface = new RenderStudioSurface(makeSurfaceOptions());
+    const updatePerspective = vi.spyOn(surface.perspectiveCamera, 'updateProjectionMatrix');
+    const updateOrthographic = vi.spyOn(surface.orthographicCamera, 'updateProjectionMatrix');
+
+    expect(surface.setPerspectiveFov('52')).toBe(false);
+    expect(surface.setPerspectiveFov(Number.NaN)).toBe(false);
+    expect(surface.setPerspectiveFov(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(surface.setOrthographicHeight(0)).toBe(false);
+    expect(surface.setOrthographicHeight(-2)).toBe(false);
+    expect(surface.setOrthographicHeight('3')).toBe(false);
+    expect(updatePerspective).not.toHaveBeenCalled();
+    expect(updateOrthographic).not.toHaveBeenCalled();
+
+    expect(surface.setPerspectiveFov(52)).toBe(true);
+    expect(surface.setOrthographicHeight(3)).toBe(true);
+    expect(surface.setCameraProjection('orthographic')).toBe(true);
+    const snapshot = surface.getCameraOptics();
+    expect(snapshot).toEqual({
+      projection: 'orthographic',
+      perspectiveFov: 52,
+      orthographicHeight: 3,
+      aspect: 800 / 600,
+    });
+    expect(surface.getCameraOptics()).not.toBe(snapshot);
+
+    expect(surface.setPerspectiveFov(null)).toBe(false);
+    expect(surface.setPerspectiveFov(52)).toBe(false);
+    expect(surface.setOrthographicHeight(3)).toBe(false);
+    expect(updatePerspective).toHaveBeenCalledTimes(1);
+    expect(updateOrthographic).toHaveBeenCalledTimes(1);
+
+    surface.dispose();
+    expect(surface.setPerspectiveFov(90)).toBe(false);
+    expect(surface.setOrthographicHeight(8)).toBe(false);
+    expect(surface.getCameraOptics()).toEqual(snapshot);
+    expect(surface.perspectiveCamera.fov).toBe(52);
+    expect(surface.orthographicCamera.top).toBe(1.5);
+  });
+});

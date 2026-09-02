@@ -166,6 +166,10 @@ export class RenderStudioSurface {
       );
       assertCamera('perspective', this.perspectiveCamera);
       assertCamera('orthographic', this.orthographicCamera);
+      this._perspectiveFov = Number.isFinite(this.perspectiveCamera.fov)
+        ? this.perspectiveCamera.fov
+        : DEFAULT_PERSPECTIVE_FOV;
+      this.perspectiveCamera.fov = this._perspectiveFov;
       this.scene.add(this.perspectiveCamera, this.orthographicCamera);
       this._updateOrthographicFrame(1, 1);
       this._activeCamera = initialProjection === 'orthographic'
@@ -244,6 +248,35 @@ export class RenderStudioSurface {
     return this.setCameraProjection(projection);
   }
 
+  setPerspectiveFov(fov) {
+    if (this.disposed || !Number.isFinite(fov)) return false;
+    const nextFov = Math.max(10, Math.min(120, fov));
+    if (nextFov === this._perspectiveFov) return false;
+    this._perspectiveFov = nextFov;
+    this.perspectiveCamera.fov = nextFov;
+    this.perspectiveCamera.updateProjectionMatrix();
+    return true;
+  }
+
+  setOrthographicHeight(height) {
+    if (this.disposed || !Number.isFinite(height) || !(height > 0)) return false;
+    if (height === this._orthographicHeight) return false;
+    this._orthographicHeight = height;
+    this._applyOrthographicFrame(this._getViewportAspect());
+    return true;
+  }
+
+  getCameraOptics() {
+    return {
+      projection: this._activeCamera === this.orthographicCamera
+        ? 'orthographic'
+        : 'perspective',
+      perspectiveFov: this._perspectiveFov,
+      orthographicHeight: this._orthographicHeight,
+      aspect: this._getViewportAspect(),
+    };
+  }
+
   setRenderCallback(callback = null) {
     if (this.disposed) return false;
     this._renderCallback = typeof callback === 'function' ? callback : null;
@@ -307,9 +340,24 @@ export class RenderStudioSurface {
     return this._lastViewport ? { ...this._lastViewport } : null;
   }
 
+  _getViewportAspect() {
+    if (this._lastViewport
+      && this._lastViewport.width > 0
+      && this._lastViewport.height > 0) {
+      return this._lastViewport.width / this._lastViewport.height;
+    }
+    const width = Number(this._container?.clientWidth);
+    const height = Number(this._container?.clientHeight);
+    return width > 0 && height > 0 ? width / height : 1;
+  }
+
   _updateOrthographicFrame(width, height) {
+    this._applyOrthographicFrame(width / height);
+  }
+
+  _applyOrthographicFrame(aspect) {
     const halfHeight = this._orthographicHeight / 2;
-    const halfWidth = halfHeight * (width / height);
+    const halfWidth = halfHeight * aspect;
     this.orthographicCamera.left = -halfWidth;
     this.orthographicCamera.right = halfWidth;
     this.orthographicCamera.top = halfHeight;
