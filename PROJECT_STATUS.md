@@ -29,16 +29,19 @@
 
 ## 2. Текущая цель и обязательные границы
 
-**Release 2 visual/resource gate закрыт локально.** Следующий рабочий рубеж —
-bounded **Stage 7B — `TechnicalRenderSceneSource`**.
+**Release 2 visual/resource gate закрыт локально.** Инфраструктура
+**Stage 7B/7C Technical Render source** реализована; следующий кодовый рубеж —
+bounded **Stage 7D.1**.
 
-Для Stage 7B сохраняются следующие границы:
+Для Stage 7B/7C сохраняются следующие границы:
 
 - Quick workflow использует существующие Quick geometry, Preview и Render пути.
 - Technical workflow использует canonical `pbd.model.v1`, canonical
   `pbd.svg.v4` и один CartonFoldViewer runtime.
 - Для Technical остаются `referenceOnly=true`, `productionCertified=false` и
   `technicalRender=false`.
+- Общий Render UI ещё не подключён к production factory; Technical Step 4
+  остаётся неактивным, а готовность всего Stage 7 ещё не подтверждена.
 - Technical Render нельзя подменять Quick `BoxNetModel`, `Preview3D`,
   `BoxScene` или второй SVG/3D parser.
 - Canonical PBD model/SVG являются источником diecut, panel IDs, fold lines,
@@ -107,6 +110,31 @@ bounded **Stage 7B — `TechnicalRenderSceneSource`**.
 - Release 2 полный unit/build/browser gate выполнен на свежем `dist`; единственный
   custom HDRI timeout из полного browser run был вызван приостановкой host и
   прошёл при изолированном повторе без изменений кода.
+
+### Stage 7B/7C — Technical Render source infrastructure
+
+Инфраструктура Technical source реализована отдельными bounded-коммитами:
+
+| Commit | Срез |
+|---|---|
+| `be7e3cd` | Technical scene source adapter |
+| `657e769` | Versioned runtime dependencies и scene bounds |
+| `91b4032` | Technical portable scene |
+| `0a216be` | Real-runtime integration coverage |
+| `6474c12` | Injectable scene source |
+| `cebb1aa` | Scene controller separation |
+| `dc32bb3` | Render scene actor validation |
+| `7b7abdd` | Technical/WebGL composition acceptance |
+| `fd047f1` | Production Technical source factory |
+
+Текущий результат: `TechnicalRenderSceneSource`, локальные зависимости
+versioned Viewer runtime, bounds resolver, export-owned portable scene,
+source/controller seam, actor validation и production factory существуют в
+source. Production factory пока не подключена к общему Render UI.
+
+Проверочный статус Stage 7C.5: до `fd047f1` focused spec завершился как
+`6/6 PASS`. Для `fd047f1` выполнены только syntax, `graphify` и diff gates;
+новые или изменённые regression cases этим коммитом повторно не запускались.
 
 ## 4. Ключевые технические решения
 
@@ -218,8 +246,9 @@ host был приостановлен, trace содержит скачок ча
 - Известных падающих Release 2 focused/browser tests после acceptance gate нет.
 - Release 2 закрыт как reference-only integration gate; это не меняет
   `productionCertified=false` и не является physical folded-sample certification.
-- Technical Render не реализован: Stage 7B
-  `TechnicalRenderSceneSource` остаётся следующим архитектурным срезом.
+- Инфраструктура Stage 7B/7C реализована, но готовность всего Stage 7 ещё не
+  подтверждена: общий Render UI не подключён к production Technical factory,
+  Technical Step 4 неактивен, `technicalRender=false`.
 - Production-assist/prepress profiles, converter/material evidence, physical
   folded-sample certification и полноценные finish gates не завершены.
 - Producer repository нельзя push до настройки remote.
@@ -258,7 +287,7 @@ host был приостановлен, trace содержит скачок ча
 ## 10. Безопасная последовательность продолжения
 
 1. Прочитать этот файл, `docs/17. dual-workflow-plugin-integration-plan.md` и
-   разделы Stage 6B/7A в `docs/18. integration-manifest.md`.
+   текущие разделы Stage 6B/7A/7B/7C в `docs/18. integration-manifest.md`.
 2. Проверить оба worktree:
 
    ```powershell
@@ -288,10 +317,10 @@ host был приостановлен, trace содержит скачок ча
 6. В Builder сначала запускать affected unit/spec tests. Полный unit/build/browser
    gate повторять только перед следующим release acceptance по отдельному
    согласованию.
-7. Начать bounded Stage 7B через существующий `RenderSceneSource`: сначала
-   `TechnicalRenderSceneSource` contract/source adapter и focused unit tests.
-   Не включать `technicalRender`, Render UI routing, exports или certification
-   flags до отдельного acceptance.
+7. Следующий bounded кодовый срез — Stage 7D.1: подключить production
+   Technical factory через общий scene-controller boundary. Не использовать
+   Quick geometry для Technical, не менять Render UI routing, не активировать
+   export и не менять capability flags.
 8. Перед совместной работой с producer настроить его remote. Публикацию Builder
    выполнять только по явной команде: enable Actions → push/deploy → проверить
    Pages и public manifest → disable Actions.
