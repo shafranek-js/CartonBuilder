@@ -157,7 +157,21 @@ export function createRenderApp({
   updateArtworkFinish = () => false,
   operationProgress = null,
   onBackToPreview = () => {},
+  rendererLifecycle = null,
+  getRenderWorkflowOptions = () => ({ workflowMode: 'quick' }),
 }) {
+  if (rendererLifecycle !== null && (
+    typeof rendererLifecycle.activate !== 'function'
+    || typeof rendererLifecycle.replaceArtwork !== 'function'
+    || typeof rendererLifecycle.getRenderer !== 'function'
+    || typeof rendererLifecycle.release !== 'function'
+    || typeof rendererLifecycle.dispose !== 'function'
+  )) {
+    throw new TypeError('RenderApp rendererLifecycle does not implement the required lifecycle contract.');
+  }
+  if (typeof getRenderWorkflowOptions !== 'function') {
+    throw new TypeError('RenderApp getRenderWorkflowOptions must be a function.');
+  }
   const elements = {
     panel: documentRef.getElementById('renderPanel'),
     canvas: documentRef.getElementById('renderCanvas'),
@@ -380,6 +394,17 @@ export function createRenderApp({
   let lastPreflight = null;
   let renderContextState = 'initializing';
   let renderContextRecoveryCount = 0;
+
+  function releaseRenderer({ final = false } = {}) {
+    const current = renderer;
+    renderer = null;
+    if (!rendererLifecycle) return current?.dispose?.();
+    const result = final ? rendererLifecycle.dispose() : rendererLifecycle.release();
+    if (result?.catch) {
+      result.catch((error) => console.error('Could not dispose Render workflow renderer', error));
+    }
+    return result;
+  }
 
   function restoreRenderAssets(assets = []) {
     const entries = Array.isArray(assets) ? assets.map(normalizeRenderAsset).filter(Boolean) : [];
@@ -618,8 +643,7 @@ export function createRenderApp({
     pathTracingService?.cancel?.();
     pathTracingService?.dispose?.();
     pathTracingService = null;
-    renderer?.dispose?.();
-    renderer = null;
+    releaseRenderer();
     structureSignature = '';
     artworkSignature = '';
     renderContextState = 'initializing';
@@ -1452,10 +1476,7 @@ export function createRenderApp({
       if (generation !== syncGeneration || syncController.signal.aborted) return false;
 
       if (structureChanged) {
-        const { WebGLCartonRenderer } = await loadRendererModule();
-        if (generation !== syncGeneration || syncController.signal.aborted) return false;
-        renderer?.dispose();
-        renderer = new WebGLCartonRenderer({
+        const rendererOptions = {
           canvas: elements.canvas,
           container: elements.panel,
           boxModel,
@@ -1491,13 +1512,41 @@ export function createRenderApp({
             updateControls();
             notifyStateChange();
           },
-        });
+        };
+        if (rendererLifecycle) {
+          let candidate;
+          try {
+            candidate = await rendererLifecycle.activate({
+              ...getRenderWorkflowOptions(),
+              signal: syncController.signal,
+              artworkAtlas: composed.canvas,
+              materialMaps: composed.materialMaps,
+              rendererOptions,
+            });
+          } finally {
+            renderer = rendererLifecycle.getRenderer();
+          }
+          if (!candidate) return false;
+        } else {
+          const { WebGLCartonRenderer } = await loadRendererModule();
+          if (generation !== syncGeneration || syncController.signal.aborted) return false;
+          renderer?.dispose();
+          renderer = new WebGLCartonRenderer(rendererOptions);
+        }
+        if (generation !== syncGeneration || syncController.signal.aborted) {
+          return false;
+        }
         // A replacement renderer owns a fresh 1x1 post-processing composer.
         // Size it immediately; activate()'s resize frame may have run long ago
         // when artwork quality is changed from an already-open Render step.
         renderer.resize();
       } else {
-        renderer.replaceArtwork(composed.canvas, composed.materialMaps, signatures.sceneModel);
+        if (rendererLifecycle) {
+          await rendererLifecycle.replaceArtwork(composed.canvas, composed.materialMaps, signatures.sceneModel);
+          renderer = rendererLifecycle.getRenderer();
+        } else {
+          renderer.replaceArtwork(composed.canvas, composed.materialMaps, signatures.sceneModel);
+        }
         renderer.setBoardAppearance?.(boardAppearance);
         renderer.setBackgroundAsset?.(backgroundAsset);
       }
@@ -1792,8 +1841,7 @@ export function createRenderApp({
     artworkSignature = '';
     syncGeneration += 1;
     syncController?.abort();
-    renderer?.dispose();
-    renderer = null;
+    releaseRenderer();
     renderContextState = 'initializing';
     renderContextRecoveryCount = 0;
   }
@@ -2490,8 +2538,7 @@ export function createRenderApp({
       syncController?.abort();
       exportController?.abort();
       pathTracingService?.dispose();
-      renderer?.dispose();
-      renderer = null;
+      releaseRenderer({ final: true });
       windowRef.removeEventListener('resize', handleWindowResize);
       documentRef.removeEventListener('carton-locale-changed', handleLocaleChanged);
     },

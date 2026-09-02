@@ -26,6 +26,12 @@ import { initSectionStatePersistence } from './ui/SectionStateManager.js';
 import { initSliderSteppers } from './ui/SliderStepper.js';
 import { createRenderApp } from './render/RenderApp.js';
 import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
+import {
+  RenderWorkflowLifecycle,
+  RenderWorkflowRouter,
+  canRestoreRenderStep,
+  canUseRenderWorkflow,
+} from './render/RenderWorkflowRouter.js';
 import { readRenderSettings, writeRenderSettings } from './render/renderSettingsStorage.js';
 import { restoreStartupProject } from './project/firstRunExample.js';
 import { TechnicalCartonDocument } from './carton/TechnicalCartonDocument.js';
@@ -49,6 +55,9 @@ initSliderSteppers();
 
 const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
 const storedRenderSettings = readRenderSettings();
+const RENDER_APPLICATION_CAPABILITIES = Object.freeze({
+  technicalRender: false,
+});
 const boxStep = document.getElementById('boxStep');
 const artworkStep = document.getElementById('artworkStep');
 const previewStep = document.getElementById('previewStep');
@@ -343,6 +352,19 @@ let technicalValidation = {
   geometry: 'NOT_GENERATED',
   contract: 'NOT_GENERATED',
 };
+
+function getRenderWorkflowCapabilities() {
+  if (workflowMode !== 'technical') return null;
+  return technicalDocument?.serialize?.().capabilities || null;
+}
+
+function isRenderWorkflowEnabled() {
+  return canUseRenderWorkflow({
+    workflowMode,
+    capabilities: getRenderWorkflowCapabilities(),
+    applicationCapabilities: RENDER_APPLICATION_CAPABILITIES,
+  });
+}
 
 const cartonModelBridge = {
   get mode() { return activeCartonModel.mode || 'quick'; },
@@ -650,7 +672,7 @@ function updateTechnicalPreviewUi() {
   if (technicalPreviewPanel) technicalPreviewPanel.hidden = !technical;
   if (quickPreviewContent) quickPreviewContent.hidden = technical;
   if (quickPreviewActions) quickPreviewActions.hidden = workflowMode === 'technical';
-  if (openRenderButton) openRenderButton.disabled = workflowMode === 'technical';
+  if (openRenderButton) openRenderButton.disabled = !isRenderWorkflowEnabled();
 }
 
 function technicalValidationIsReady() {
@@ -800,7 +822,7 @@ async function acceptTechnicalCarton() {
 async function transitionToStep(step) {
   if (startupRestoring) return false;
   if (step !== 'workflow' && !workflowChosen) return false;
-  if (workflowMode === 'technical' && step === 'render') return false;
+  if (step === 'render' && !isRenderWorkflowEnabled()) return false;
   if (step === 'artwork' && workflowMode === 'technical' && !(await acceptTechnicalCarton())) return false;
   showStep(step);
   return true;
@@ -822,7 +844,7 @@ function updateStepNavigationStates() {
   if (boxBtn) boxBtn.disabled = !workflowChosen;
   if (artworkBtn) artworkBtn.disabled = !workflowChosen || !isBoxComplete;
   const previewReady = workflowChosen && isBoxComplete && hasArtwork;
-  const renderReady = previewReady && workflowMode !== 'technical';
+  const renderReady = previewReady && isRenderWorkflowEnabled();
   if (previewBtn) previewBtn.disabled = !previewReady;
   if (renderBtn) renderBtn.disabled = !renderReady;
 
@@ -835,7 +857,7 @@ function updateStepNavigationStates() {
 function showStep(step) {
   if (startupRestoring && step === 'workflow') return false;
   if (step !== 'workflow' && !workflowChosen) return false;
-  if (workflowMode === 'technical' && step === 'render') return false;
+  if (step === 'render' && !isRenderWorkflowEnabled()) return false;
   if (!(workflowMode === 'technical' && step === 'preview')) disposeTechnicalPreview();
   currentStep = step;
   const workflowStep = document.getElementById('workflowStep');
@@ -965,7 +987,14 @@ artworkApp = createArtworkApp({
     const hasArtwork = Boolean(snapshot.artworks?.length);
     let targetStep = 'box';
     const cartonComplete = workflowMode === 'technical' ? Boolean(technicalDocument?.isComplete) : model.isComplete;
-    if (snapshot.workflowStep === 'render' && hasArtwork && cartonComplete && workflowMode !== 'technical') {
+    if (canRestoreRenderStep({
+      workflowMode,
+      capabilities: getRenderWorkflowCapabilities(),
+      applicationCapabilities: RENDER_APPLICATION_CAPABILITIES,
+      workflowStep: snapshot.workflowStep,
+      hasArtwork,
+      documentComplete: cartonComplete,
+    })) {
       targetStep = 'render';
     } else if (snapshot.workflowStep === 'preview' && hasArtwork && cartonComplete) {
       targetStep = 'preview';
@@ -1029,6 +1058,40 @@ preview3dFacade = createLazyPreview3DFacade({
   }),
 });
 
+const renderWorkflowRouter = new RenderWorkflowRouter({
+  quickFactory: async ({ rendererOptions }) => {
+    const { WebGLCartonRenderer } = await import('./render/WebGLCartonRenderer.js');
+    return new WebGLCartonRenderer(rendererOptions);
+  },
+  technicalFactory: async ({
+    technicalDocument: routedTechnicalDocument,
+    artworkAtlas,
+    materialMaps,
+    rendererOptions,
+  }) => {
+    const { createTechnicalRenderStudioRenderer } = await import(
+      './render/createTechnicalRenderStudioRenderer.js'
+    );
+    return createTechnicalRenderStudioRenderer({
+      technicalDocument: routedTechnicalDocument,
+      artworkAtlas,
+      materialMaps,
+      canvas: rendererOptions.canvas,
+      container: rendererOptions.container,
+      renderSettings: rendererOptions.renderSettings,
+      boardAppearance: rendererOptions.boardAppearance,
+      backgroundAsset: rendererOptions.backgroundAsset,
+      environmentAsset: rendererOptions.environmentAsset,
+      windowRef: rendererOptions.windowRef,
+      onContextLost: rendererOptions.onContextLost,
+      onContextRestored: rendererOptions.onContextRestored,
+      onCameraChange: rendererOptions.onCameraChange,
+      rendererOptions,
+    });
+  },
+});
+const renderWorkflowLifecycle = new RenderWorkflowLifecycle({ router: renderWorkflowRouter });
+
 renderApp = createRenderApp({
   boxModel: cartonModelBridge,
   getArtworks: () => artworkApp.getArtworks(),
@@ -1047,6 +1110,13 @@ renderApp = createRenderApp({
   updateArtworkFinish: (...args) => artworkApp?.updateArtworkFinish?.(...args),
   operationProgress,
   onBackToPreview: () => void transitionToStep('preview'),
+  rendererLifecycle: renderWorkflowLifecycle,
+  getRenderWorkflowOptions: () => ({
+    workflowMode,
+    capabilities: getRenderWorkflowCapabilities(),
+    applicationCapabilities: RENDER_APPLICATION_CAPABILITIES,
+    technicalDocument,
+  }),
 });
 
 window.BoxNet = {
