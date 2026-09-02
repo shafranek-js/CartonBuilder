@@ -336,7 +336,7 @@ export class TechnicalCartonDocument extends CartonDocument {
         artwork2d: true,
         flatExport: true,
         foldPreview: true,
-        technicalRender: false,
+        technicalRender: true,
       }),
       modelJson: {
         mediaType: this._bundle.modelJson?.mediaType || 'application/json',

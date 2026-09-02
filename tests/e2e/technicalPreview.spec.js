@@ -106,7 +106,7 @@ test('loads RTE, STE and TT_SL123 in the separate Technical Preview viewer', asy
     await expect(page.locator('#technicalViewerNotice')).toHaveCount(0);
     await expect(page.locator('#quickPreviewContent')).toBeHidden();
     await expect(page.locator('#quickPreviewActions')).toBeHidden();
-    await expect(page.locator('#openRenderButton')).toBeDisabled();
+    await expect(page.locator('#openRenderButton')).toBeEnabled();
     await expect(page.locator('#technicalViewerFrame')).toHaveAttribute(
       'sandbox',
       'allow-scripts',
@@ -122,7 +122,7 @@ test('loads RTE, STE and TT_SL123 in the separate Technical Preview viewer', asy
     await expect(viewer.locator('#clipInfo')).toContainText('s');
     await expect(page.locator('#technicalViewerModelInfo')).toContainText(`${cartonType} ·`);
     await expect(page.locator('#technicalViewerStatus')).toContainText(/verified|loaded/i);
-    await expect(page.locator('[data-step-target="render"]')).toBeDisabled();
+    await expect(page.locator('[data-step-target="render"]')).toBeEnabled();
     await expect(viewer.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveCount(1);
     await expect.poll(() => page.evaluate(() => window.cartonBuilderApp.technicalPreview.getState()))
       .toEqual(expect.objectContaining({ started: true, initialized: true, pendingLoad: false }));

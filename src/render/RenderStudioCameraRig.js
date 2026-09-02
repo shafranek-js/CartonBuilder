@@ -6,6 +6,7 @@ import {
   fovToFocalLength,
 } from './cameraState.js';
 import { Vector3 } from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const CAMERA_PRESETS = Object.freeze({
   front: Object.freeze({ direction: Object.freeze([0, 0, 1]), up: Object.freeze([0, 1, 0]) }),
@@ -240,6 +241,34 @@ export class RenderStudioCameraRig {
       target: initialTarget.toArray(),
     }, { preferredUp: CAMERA_PRESETS[this._preset]?.up });
     this._lastSnapshot = cloneState(this._readCameraState());
+
+    this.controls = null;
+    const canvas = surface.renderSurface?.renderer?.domElement
+      || surface.canvas
+      || surface._canvas;
+    if (canvas && typeof canvas.getBoundingClientRect === 'function' && typeof canvas.addEventListener === 'function') {
+      try {
+        this.controls = new OrbitControls(camera, canvas);
+        this.controls.enableDamping = false;
+        this.controls.screenSpacePanning = true;
+        this.controls.zoomToCursor = true;
+        this.controls.target.copy(this._target);
+        if (typeof this.controls.listenToKeyEvents === 'function') {
+          this.controls.listenToKeyEvents(canvas);
+        }
+        this.controls.addEventListener('change', () => {
+          if (this.disposed) return;
+          this._target.copy(this.controls.target);
+          this._preset = 'custom';
+          this.surface.render();
+          const snapshot = this._readCameraState();
+          this._lastSnapshot = cloneState(snapshot);
+          this.onCameraChange(cloneState(snapshot));
+        });
+      } catch {
+        // Safe for non-DOM or unit-test environments
+      }
+    }
   }
 
   _positionFromInitialState(state, fallbackPosition, target) {
@@ -307,6 +336,10 @@ export class RenderStudioCameraRig {
     if (up) copyUpToCamera(camera, up);
     camera.lookAt(target);
     camera.updateMatrixWorld(true);
+    if (this.controls) {
+      this.controls.target.copy(target);
+      this.controls.update();
+    }
   }
 
   _setOrthographicFrameForAspect(height, aspect, camera) {
@@ -345,6 +378,10 @@ export class RenderStudioCameraRig {
       this._orthographicHeight = height;
       const position = desiredPosition || target.clone().addScaledVector(direction, previousDistance);
       this._applyCameraTransform(position, target, preferredUp || previousCamera.up);
+      if (this.controls) {
+        this.controls.object = this.surface.renderSurface.camera;
+        this.controls.update();
+      }
       return;
     }
 
@@ -360,6 +397,10 @@ export class RenderStudioCameraRig {
       : distanceForPerspective(desiredFov, height);
     const position = desiredPosition || target.clone().addScaledVector(direction, Math.max(0.001, distance));
     this._applyCameraTransform(position, target, preferredUp || previousCamera.up);
+    if (this.controls) {
+      this.controls.object = this.surface.renderSurface.camera;
+      this.controls.update();
+    }
   }
 
   _applyState(state = {}, { preferredUp = null } = {}) {
@@ -496,6 +537,10 @@ export class RenderStudioCameraRig {
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld(true);
       this._target.copy(target);
+      if (this.controls) {
+        this.controls.target.copy(target);
+        this.controls.update();
+      }
       return;
     }
 
@@ -510,6 +555,10 @@ export class RenderStudioCameraRig {
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
     this._target.copy(target);
+    if (this.controls) {
+      this.controls.target.copy(target);
+      this.controls.update();
+    }
   }
 
   fitCameraToFrame({ margin = DEFAULT_MARGIN, aspect = null, render = true } = {}) {
@@ -534,6 +583,13 @@ export class RenderStudioCameraRig {
   dispose() {
     if (this.disposed) return false;
     this._lastSnapshot = cloneState(this._readCameraState());
+    if (this.controls) {
+      try {
+        this.controls.stopListenToKeyEvents?.();
+        this.controls.dispose();
+      } catch {}
+      this.controls = null;
+    }
     this.disposed = true;
     return true;
   }

@@ -41,7 +41,9 @@ function createFactoryOptions(route, options) {
     technicalOptions.rendererOptions = { ...technicalOptions.rendererOptions };
     for (const key of TECHNICAL_FORBIDDEN_INPUTS) delete technicalOptions.rendererOptions[key];
     delete technicalOptions.rendererOptions.sceneModel;
-    delete technicalOptions.rendererOptions.source;
+    if (technicalOptions.rendererOptions.source !== 'technical-only') {
+      delete technicalOptions.rendererOptions.source;
+    }
     delete technicalOptions.rendererOptions.sceneSourceFactory;
     delete technicalOptions.rendererOptions.sceneController;
   }
@@ -85,14 +87,19 @@ export function canRestoreRenderStep({
 }
 
 export class RenderWorkflowRouter {
-  constructor({ quickFactory = null, technicalFactory = null } = {}) {
+  constructor({ quickFactory = null, technicalFactory = null, applicationCapabilities = null } = {}) {
     if (quickFactory !== null) assertFactory(quickFactory, 'quickFactory');
     if (technicalFactory !== null) assertFactory(technicalFactory, 'technicalFactory');
     this.quickFactory = quickFactory;
     this.technicalFactory = technicalFactory;
+    this.applicationCapabilities = applicationCapabilities;
   }
 
-  resolve({ workflowMode, capabilities = null, applicationCapabilities = null } = {}) {
+  resolve({
+    workflowMode,
+    capabilities = null,
+    applicationCapabilities = this.applicationCapabilities,
+  } = {}) {
     const enabled = canUseRenderWorkflow({ workflowMode, capabilities, applicationCapabilities });
     if (workflowMode === 'quick') {
       return { workflowMode, source: 'quick', enabled, factory: this.quickFactory };

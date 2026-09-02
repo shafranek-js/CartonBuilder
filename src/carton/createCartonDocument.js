@@ -52,11 +52,14 @@ export async function createCartonDocument(cartonSource, technicalAssets = null,
         contractVersion: 'carton-workflow.v1',
         workflowMode: 'technical',
         source: cartonSource.source || {},
-        capabilities: cartonSource.capabilities || {
+        capabilities: {
           artwork2d: true,
           flatExport: true,
           foldPreview: true,
-          technicalRender: false,
+          technicalRender: true,
+          ...(cartonSource.capabilities || {}),
+          technicalRender: cartonSource.source?.producer === 'packaging-box-designer'
+            || cartonSource.capabilities?.technicalRender !== false,
         },
         modelJson: {
           mediaType: cartonSource.modelJson?.mediaType || 'application/json',

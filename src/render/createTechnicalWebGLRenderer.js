@@ -70,10 +70,22 @@ export function createTechnicalWebGLRenderer({
     if (!sourceFactoryCalled) {
       throw new Error('Technical WebGL renderer factory must create exactly one Technical source.');
     }
+    try {
+      const cameraState = sceneController.getCameraState?.();
+      if (Array.isArray(cameraState?.target)
+        && cameraState.target[0] === 0
+        && cameraState.target[1] === 0
+        && cameraState.target[2] === 0) {
+        sceneController.fitCameraToFrame?.({ render: false });
+      }
+    } catch {
+      // Safe fallback if controller does not support getCameraState or fitCameraToFrame
+    }
     return renderer;
   } catch (error) {
     disposeBestEffort(createdSource);
-    if (createdSource !== sceneController) {
+    const rawSceneController = sceneController?.__rawSceneController__ || sceneController;
+    if (createdSource !== sceneController && createdSource !== rawSceneController) {
       disposeBestEffort(sceneController);
     }
     throw error;

@@ -300,7 +300,9 @@ describe('createTechnicalRenderStudioRenderer', () => {
       onContextLost: context.options.onContextLost,
       onContextRestored: context.options.onContextRestored,
       onCameraChange: context.options.onCameraChange,
-      sceneController: context.sceneController,
+      sceneController: expect.objectContaining({
+        renderSurface: context.renderSurface,
+      }),
     });
     expect(context.calls.renderer.sceneSourceFactory).toBeTypeOf('function');
     expect(context.calls.renderer.sceneSourceFactory).not.toBe(context.options.rendererOptions.sceneSourceFactory);

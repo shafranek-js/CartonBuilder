@@ -37,7 +37,7 @@ export async function buildCartonWorkflowBundleAsync({ cartonType, modelExport, 
     artwork2d: options.capabilities?.artwork2d ?? true,
     flatExport: options.capabilities?.flatExport ?? true,
     foldPreview: options.capabilities?.foldPreview ?? true,
-    technicalRender: options.capabilities?.technicalRender ?? false,
+    technicalRender: options.capabilities?.technicalRender ?? true,
   };
 
   return {

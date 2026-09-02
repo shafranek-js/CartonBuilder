@@ -4,7 +4,7 @@ import {
   completeWorkflowBootstrap,
   createWorkflowBootstrapState,
   resolveWorkflowSelection,
-} from '../../src/workflow/workflowSelectionState.js';
+} from '../../src/project/workflowSelectionState.js';
 
 describe('workflow selection state machine', () => {
   it('keeps Step 0 unavailable during bootstrap and exposes it only for an empty restore', () => {

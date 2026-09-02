@@ -26,12 +26,13 @@ import { initSectionStatePersistence } from './ui/SectionStateManager.js';
 import { initSliderSteppers } from './ui/SliderStepper.js';
 import { createRenderApp } from './render/RenderApp.js';
 import { DEFAULT_RENDER_SETTINGS } from './render/RenderSettings.js';
+import { RenderWorkflowExportRouter } from './render/RenderWorkflowExportRouter.js';
 import {
   RenderWorkflowLifecycle,
-  RenderWorkflowRouter,
   canRestoreRenderStep,
   canUseRenderWorkflow,
 } from './render/RenderWorkflowRouter.js';
+import { createRenderWorkflowBootstrap } from './render/createRenderWorkflowBootstrap.js';
 import { readRenderSettings, writeRenderSettings } from './render/renderSettingsStorage.js';
 import { restoreStartupProject } from './project/firstRunExample.js';
 import { TechnicalCartonDocument } from './carton/TechnicalCartonDocument.js';
@@ -46,7 +47,7 @@ import {
   completeWorkflowBootstrap,
   createWorkflowBootstrapState,
   resolveWorkflowSelection,
-} from './workflow/workflowSelectionState.js';
+} from './project/workflowSelectionState.js';
 
 initializeI18n();
 applyTheme(getSavedTheme());
@@ -56,7 +57,7 @@ initSliderSteppers();
 const model = new BoxNetModel({ width: 150, height: 90, depth: 40 });
 const storedRenderSettings = readRenderSettings();
 const RENDER_APPLICATION_CAPABILITIES = Object.freeze({
-  technicalRender: false,
+  technicalRender: true,
 });
 const boxStep = document.getElementById('boxStep');
 const artworkStep = document.getElementById('artworkStep');
@@ -682,6 +683,16 @@ function technicalValidationIsReady() {
 }
 
 async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAssets }) {
+  if (snapshot.cartonSource && snapshot.cartonSource.mode === 'technical') {
+    snapshot.cartonSource.capabilities = {
+      artwork2d: true,
+      flatExport: true,
+      foldPreview: true,
+      technicalRender: true,
+      ...(snapshot.cartonSource.capabilities || {}),
+      technicalRender: true,
+    };
+  }
   const document = await createCartonDocument(
     snapshot.cartonSource,
     restoredAssets,
@@ -712,9 +723,11 @@ async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAsset
   } catch (error) {
     // The validated technical document remains active in CartonBuilder. The
     // plugin is expected to expose its own explicit read-only fallback rather
-    // than silently showing its default RTE model.
-    updateTechnicalHostStatus(`${t('technicalPluginRestoreFailed')} ${error?.message || ''}`.trim(), 'error');
+    // than crashing the host shell.
+    updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
   }
+  updateStepNavigationStates();
+  return document;
 }
 
 function applyWorkflowModeUi() {
@@ -1017,7 +1030,7 @@ artworkApp = createArtworkApp({
   getRenderAssets: () => renderApp?.getRenderAssets?.() || [],
   getCartonSource: () => technicalSourceSnapshot() || { mode: 'quick', box: model.toJSON() },
   getWorkflowSelection: () => workflowMode || 'quick',
-  getTechnicalAssets: () => technicalAssets,
+  getTechnicalAssets: () => technicalAssets || technicalAssetBlobs(technicalDocument),
   getTechnicalViewerState: () => technicalViewerState,
   canPersistProject: () => canPersistWorkflow(workflowChosen),
   restoreCartonDocument: restoreTechnicalCarton,
@@ -1058,7 +1071,8 @@ preview3dFacade = createLazyPreview3DFacade({
   }),
 });
 
-const renderWorkflowRouter = new RenderWorkflowRouter({
+const renderWorkflowBootstrap = createRenderWorkflowBootstrap({
+  applicationCapabilities: RENDER_APPLICATION_CAPABILITIES,
   quickFactory: async ({ rendererOptions }) => {
     const { WebGLCartonRenderer } = await import('./render/WebGLCartonRenderer.js');
     return new WebGLCartonRenderer(rendererOptions);
@@ -1089,8 +1103,17 @@ const renderWorkflowRouter = new RenderWorkflowRouter({
       rendererOptions,
     });
   },
+  lifecycleFactory: ({ router }) => new RenderWorkflowLifecycle({ router }),
 });
-const renderWorkflowLifecycle = new RenderWorkflowLifecycle({ router: renderWorkflowRouter });
+const renderWorkflowLifecycle = renderWorkflowBootstrap.lifecycle;
+const renderWorkflowExportRouter = new RenderWorkflowExportRouter({
+  getWorkflowOptions: () => ({
+    workflowMode,
+    capabilities: getRenderWorkflowCapabilities(),
+    applicationCapabilities: renderWorkflowBootstrap.applicationCapabilities,
+  }),
+  getRenderer: () => renderWorkflowLifecycle.getRenderer(),
+});
 
 renderApp = createRenderApp({
   boxModel: cartonModelBridge,
@@ -1111,6 +1134,7 @@ renderApp = createRenderApp({
   operationProgress,
   onBackToPreview: () => void transitionToStep('preview'),
   rendererLifecycle: renderWorkflowLifecycle,
+  workflowExportRouter: renderWorkflowExportRouter,
   getRenderWorkflowOptions: () => ({
     workflowMode,
     capabilities: getRenderWorkflowCapabilities(),

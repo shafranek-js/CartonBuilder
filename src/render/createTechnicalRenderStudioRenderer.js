@@ -146,8 +146,8 @@ function createOwnedSceneController(sceneController, materialController) {
   return new Proxy(sceneController, {
     get(target, property, receiver) {
       if (property === 'dispose') return dispose;
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === 'function' ? value.bind(target) : value;
+      if (property === '__rawSceneController__') return target;
+      return Reflect.get(target, property, receiver);
     },
   });
 }
@@ -263,7 +263,9 @@ export function createTechnicalRenderStudioRenderer({
   if (reflectionAdapter !== undefined && reflectionAdapter !== null) {
     assertAdapter('reflectionAdapter', reflectionAdapter, ['setFloorReflection', 'dispose']);
   }
-  assertMaterialProfileSetter(materialProfileSetter);
+  if (materialProfileSetter !== undefined && materialProfileSetter !== null) {
+    assertMaterialProfileSetter(materialProfileSetter);
+  }
   assertRendererOptions(rendererOptions);
   assertObject('technicalSourceOptions', technicalSourceOptions);
   assertObject('threeFactories', threeFactories);

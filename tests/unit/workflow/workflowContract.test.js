@@ -129,8 +129,8 @@ describe("carton-workflow.v1 schema and golden fixtures", () => {
     expect(await sha256Async(bundle.semanticSvg.markup)).toBe(bundle.semanticSvg.sha256);
     expect(utf8ByteLength(bundle.semanticSvg.markup)).toBe(bundle.semanticSvg.byteLength);
 
-    // Capabilities semantics: technicalRender is false until Stage 3
-    expect(bundle.capabilities.technicalRender).toBe(false);
+    // Capabilities semantics: technicalRender is true in Stage 3 / Release 3
+    expect(bundle.capabilities.technicalRender).toBe(true);
   });
 });
 

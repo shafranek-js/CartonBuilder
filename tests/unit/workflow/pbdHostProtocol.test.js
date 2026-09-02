@@ -46,7 +46,7 @@ describe('PBD host protocol', () => {
     expect(onReady).toHaveBeenCalledTimes(1);
     const init = harness.outbound.find((message) => message.type === 'host:init');
     expect(init?.payload.allowedOrigin).toBe('http://127.0.0.1:5173');
-    expect(init?.payload.capabilities).toEqual(expect.objectContaining({ technicalRender: false }));
+    expect(init?.payload.capabilities).toEqual(expect.objectContaining({ technicalRender: true }));
 
     harness.dispatch({ protocolVersion: 'carton-host.v1', type: 'plugin:ready', sessionId: init.sessionId, payload: { pluginId: 'packaging-box-designer', pluginVersion: '1.2.0' } });
     expect(host.getState().initialized).toBe(true);

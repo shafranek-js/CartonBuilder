@@ -5,10 +5,10 @@
   "name": "Packaging Box Designer",
   "description": "Parametric packaging box designer engine and canonical 2D/3D dieline generator",
   "entrypoint": "index.html",
-  "sourceCommit": "1208f9188e662895cb66a3e3138fa2ac2fadc511",
+  "sourceCommit": "d782035aeb49b1cdf96cbef72c7ce47b62288fba",
   "artifact": {
-    "byteLength": 598887,
-    "sha256": "1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904"
+    "byteLength": 598886,
+    "sha256": "af6540f98f4635c2072759a2d6d7eea683d35b25eb1c46763839ee8aef7cd96c"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -19,7 +19,7 @@
     "artwork2d": true,
     "flatExport": true,
     "foldPreview": true,
-    "technicalRender": false
+    "technicalRender": true
   },
   "referenceOnly": true,
   "productionCertified": false,
@@ -63,18 +63,18 @@
     },
     {
       "path": "contract/fixtures/rte-workflow.v1.json",
-      "byteLength": 523902,
-      "sha256": "99da848e8300485ac9788188b374d4de85feda7a2ad1d84a059d67915690be8a"
+      "byteLength": 523901,
+      "sha256": "b738395ef7461b135802ccd487d68e74fbf1076382bab1d205228ba0591d29fa"
     },
     {
       "path": "contract/fixtures/ste-workflow.v1.json",
-      "byteLength": 448112,
-      "sha256": "5f9fa9ae4cade01e6594c1990d5e0db53ee26d1c6a22e5f5cd59a0efd9bff98e"
+      "byteLength": 448111,
+      "sha256": "4fe87382d67e0369a951d203895f64ae8cf081714f9c8339c13018e6732edb0f"
     },
     {
       "path": "contract/fixtures/tt_sl123-workflow.v1.json",
-      "byteLength": 665619,
-      "sha256": "0ce91137382a79ebc547aca0547971d4831d571c908f0631a24bc3ceefb03ace"
+      "byteLength": 665618,
+      "sha256": "434af4d8f1d3ac92c7cf74983231dc98f18858782b285e70cc94a387196c686c"
     },
     {
       "path": "contract/index.js",
@@ -89,7 +89,7 @@
     {
       "path": "contract/package-manifest.json",
       "byteLength": 3275,
-      "sha256": "af65cd1262acc7722302bf2c3dac82953d00bd09f1a6841077655bcbc670cfa0"
+      "sha256": "9acc2d9a2b4f5acf862e15757f75077c38d4538ef30f0640ec79851ac3dc5029"
     },
     {
       "path": "contract/package.json",
@@ -103,8 +103,8 @@
     },
     {
       "path": "contract/workflow/builder.js",
-      "byteLength": 2713,
-      "sha256": "ec3b9108568c3fdd75b194329ca9e1f3066f83107ffaffe0251fa81ecac2fcc8"
+      "byteLength": 2712,
+      "sha256": "f4bf1fb77d412bde716106777a866fedc2cc28fd92be1f565f3c1dc2d6bc372a"
     },
     {
       "path": "contract/workflow/compiledSchema.js",
@@ -133,8 +133,8 @@
     },
     {
       "path": "index.html",
-      "byteLength": 598887,
-      "sha256": "1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904"
+      "byteLength": 598886,
+      "sha256": "af6540f98f4635c2072759a2d6d7eea683d35b25eb1c46763839ee8aef7cd96c"
     }
   ]
 }

@@ -8,8 +8,13 @@ function readImportedRenderSettings(raw, presetId) {
   try {
     const parsed = JSON.parse(raw);
     const settings = parsed?.renderSettings || parsed;
+    const camera = settings?.camera ? { ...settings.camera } : {};
+    delete camera.position;
+    delete camera.target;
+    delete camera.cameraDistance;
     return Object.freeze({
       ...settings,
+      camera: Object.freeze(camera),
       presetId,
       activeViewPresetId: '',
       viewPresetBaseId: '',
@@ -158,6 +163,14 @@ export function applyRenderPreset(current, id, { preserveProjectSpecific = true 
     merged.longEdge = current.longEdge;
     merged.camera = sanitizeRenderSettings({ ...merged, camera: current.camera }).camera;
     merged.output = sanitizeRenderSettings({ ...merged, output: current.output }).output;
+  } else if (current?.camera) {
+    if (Array.isArray(current.camera.target) && !(current.camera.target[0] === 0 && current.camera.target[1] === 0 && current.camera.target[2] === 0)) {
+      merged.camera.target = [...current.camera.target];
+    }
+    if (Number(current.camera.cameraDistance) > 0 && Number(current.camera.cameraDistance) < 50) {
+      merged.camera.cameraDistance = current.camera.cameraDistance;
+    }
+    delete merged.camera.position;
   }
   return merged;
 }

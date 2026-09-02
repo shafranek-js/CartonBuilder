@@ -1,6 +1,25 @@
 import { RenderSceneSource } from './RenderSceneSource.js';
 
 const TECHNICAL_UNIT_SCALE = 0.001;
+const SUPPORTED_BOUNDS_UNITS = new Set(['mm', 'cm', 'm', 'in', 'pt']);
+const SUPPORTED_RUNTIME_MAP_KEYS = Object.freeze([
+  'alpha',
+  'normal',
+  'roughness',
+  'metalness',
+]);
+
+function filterRuntimeMaps(maps) {
+  if (!maps || typeof maps !== 'object') return {};
+  const filtered = {};
+  for (const key of SUPPORTED_RUNTIME_MAP_KEYS) {
+    if (maps[key] !== undefined && maps[key] !== null) {
+      filtered[key] = maps[key];
+    }
+  }
+  return filtered;
+}
+
 const BOUND_COORDINATE_KEYS = new Set([
   'minX', 'minY', 'minZ', 'maxX', 'maxY', 'maxZ',
   'width', 'height', 'depth', 'x', 'y', 'z',
@@ -298,7 +317,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
       candidateModel.updateMatrixWorld?.(true);
       this._renderSurface.scene.add(candidateModel);
       this.runtime.setFoldProgress(1);
-      this.runtime.setArtworkAtlas(request.artworkAtlas, request.maps);
+      this.runtime.setArtworkAtlas(request.artworkAtlas, filterRuntimeMaps(request.maps));
       const bounds = this._resolveBounds(runtimeResult, candidateModel, request.semanticSvg);
       const foldGraph = runtimeResult?.foldGraph
         || runtimeResult?.parsed?.foldGraph
@@ -332,7 +351,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
   replaceArtwork(artworkAtlas, maps = {}) {
     this._assertActive();
     if (!this._model) throw new Error('Technical render scene is not built.');
-    return this.runtime.setArtworkAtlas(artworkAtlas, maps ?? {});
+    return this.runtime.setArtworkAtlas(artworkAtlas, filterRuntimeMaps(maps));
   }
 
   setBoardAppearance(boardAppearance) {

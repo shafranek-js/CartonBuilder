@@ -196,12 +196,20 @@ export class WebGLCartonRenderer {
     if (!previous || previous.lighting.exposure !== settings.lighting.exposure) this.sceneController.setExposure(settings.lighting.exposure);
     const cameraChanged = !previous || JSON.stringify(previous.camera) !== JSON.stringify(settings.camera);
     if (cameraChanged) {
-      const presetChanged = settings.camera.preset !== 'custom' && settings.camera.preset !== previous?.camera?.preset;
+      const isPreset = settings.camera.preset && settings.camera.preset !== 'custom';
+      const presetChanged = isPreset && (settings.camera.preset !== previous?.camera?.preset || previous?.camera?.preset === 'custom');
       if (presetChanged) {
         this.sceneController.setCameraPreset(settings.camera.preset);
       }
-      this.sceneController.setCameraState(presetChanged
-        ? { ...settings.camera, position: undefined, target: undefined }
+      this.sceneController.setCameraState(isPreset
+        ? {
+          ...settings.camera,
+          position: undefined,
+          target: undefined,
+          cameraDistance: undefined,
+          heading: undefined,
+          elevation: undefined,
+        }
         : settings.camera);
       if (this.sceneController.renderSurface.camera !== previousCameraObject) {
         // BoxScene swaps between its perspective and orthographic camera
@@ -383,12 +391,18 @@ export class WebGLCartonRenderer {
   }
 
   getDiagnostics() {
+    const memory = this.sceneController?.renderSurface?.renderer?.info?.memory;
+    const renderInfo = this.sceneController?.renderSurface?.renderer?.info?.render;
+    const sourceDiagnostics = this.source.getDiagnostics() || {};
     const diagnostics = {
       backend: 'WebGL2',
       contextState: this.contextState,
       contextRecoveryCount: this.contextRecoveryCount,
       lastExport: this.lastExport ? { ...this.lastExport } : null,
-      ...this.source.getDiagnostics(),
+      ...sourceDiagnostics,
+      geometries: sourceDiagnostics.geometries ?? memory?.geometries ?? 0,
+      textures: sourceDiagnostics.textures ?? memory?.textures ?? 0,
+      calls: sourceDiagnostics.calls ?? renderInfo?.calls ?? 0,
       qualityState: this.qualityState,
       geometryMode: this.source.geometryMode || null,
       boardAppearance: cloneBoardAppearance(this.boardAppearance),

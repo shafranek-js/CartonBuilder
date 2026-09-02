@@ -159,6 +159,7 @@ export function createRenderApp({
   onBackToPreview = () => {},
   rendererLifecycle = null,
   getRenderWorkflowOptions = () => ({ workflowMode: 'quick' }),
+  workflowExportRouter = null,
 }) {
   if (rendererLifecycle !== null && (
     typeof rendererLifecycle.activate !== 'function'
@@ -171,6 +172,16 @@ export function createRenderApp({
   }
   if (typeof getRenderWorkflowOptions !== 'function') {
     throw new TypeError('RenderApp getRenderWorkflowOptions must be a function.');
+  }
+  if (workflowExportRouter !== null && (
+    typeof workflowExportRouter.renderStill !== 'function'
+    || typeof workflowExportRouter.exportTurntable !== 'function'
+    || typeof workflowExportRouter.exportGlb !== 'function'
+    || typeof workflowExportRouter.abort !== 'function'
+    || typeof workflowExportRouter.releaseRenderer !== 'function'
+    || typeof workflowExportRouter.dispose !== 'function'
+  )) {
+    throw new TypeError('RenderApp workflowExportRouter does not implement the required export contract.');
   }
   const elements = {
     panel: documentRef.getElementById('renderPanel'),
@@ -398,6 +409,7 @@ export function createRenderApp({
   function releaseRenderer({ final = false } = {}) {
     const current = renderer;
     renderer = null;
+    workflowExportRouter?.releaseRenderer?.(current);
     if (!rendererLifecycle) return current?.dispose?.();
     const result = final ? rendererLifecycle.dispose() : rendererLifecycle.release();
     if (result?.catch) {
@@ -640,6 +652,7 @@ export function createRenderApp({
     syncController?.abort();
     syncController = null;
     exportController?.abort();
+    workflowExportRouter?.abort?.();
     pathTracingService?.cancel?.();
     pathTracingService?.dispose?.();
     pathTracingService = null;
@@ -699,20 +712,27 @@ export function createRenderApp({
     }
   }
 
+  let loadingPresetThumbnails = false;
   async function loadPresetThumbnails() {
-    for (const button of elements.presetButtons) {
-      const presetId = button.dataset.renderPreset;
-      const thumbnail = button.querySelector('[data-preset-thumbnail]') || button.querySelector('.render-preset-thumbnail');
-      if (!thumbnail) continue;
-      try {
-        const dataUrl = await generateNeutralRenderThumbnail({ presetId, documentRef, windowRef });
-        if (dataUrl) {
-          thumbnail.style.backgroundImage = `url(${dataUrl})`;
-          thumbnail.classList.add('has-real-thumbnail');
+    if (loadingPresetThumbnails) return;
+    loadingPresetThumbnails = true;
+    try {
+      for (const button of elements.presetButtons) {
+        const presetId = button.dataset.renderPreset;
+        const thumbnail = button.querySelector('[data-preset-thumbnail]') || button.querySelector('.render-preset-thumbnail');
+        if (!thumbnail || thumbnail.classList.contains('has-real-thumbnail')) continue;
+        try {
+          const dataUrl = await generateNeutralRenderThumbnail({ presetId, documentRef, windowRef });
+          if (dataUrl) {
+            thumbnail.style.backgroundImage = `url(${dataUrl})`;
+            thumbnail.classList.add('has-real-thumbnail');
+          }
+        } catch (error) {
+          console.warn('Could not generate preset thumbnail', presetId, error);
         }
-      } catch (error) {
-        console.warn('Could not generate preset thumbnail', presetId, error);
       }
+    } finally {
+      loadingPresetThumbnails = false;
     }
   }
 
@@ -912,7 +932,14 @@ export function createRenderApp({
   }
 
   function getBoxCenterRadius() {
-    const dimensions = boxModel.dimensions || {};
+    const bounds = renderer?.getBounds?.();
+    if (bounds && Number.isFinite(bounds.radius) && bounds.radius > 0) {
+      return {
+        center: [bounds.centerX ?? 0, bounds.centerY ?? 0, bounds.centerZ ?? 0],
+        radius: bounds.radius,
+      };
+    }
+    const dimensions = boxModel?.dimensions || {};
     const width = Number(dimensions.width || 1);
     const height = Number(dimensions.height || 1);
     const depth = Number(dimensions.depth || 1);
@@ -1372,6 +1399,7 @@ export function createRenderApp({
 
   function updateState(next, { notify = true, render = true } = {}) {
     exportController?.abort();
+    workflowExportRouter?.abort?.();
     const previousState = state;
     state = sanitizeRenderSettings(next);
     if (activeNamedPresetId && JSON.stringify(previousState) !== JSON.stringify(state)) {
@@ -1443,6 +1471,9 @@ export function createRenderApp({
       return true;
     }
 
+    // Geometry or artwork replacement invalidates any export tied to the
+    // current renderer before lifecycle activation/replacement can dispose it.
+    workflowExportRouter?.abort?.();
     syncGeneration += 1;
     const generation = syncGeneration;
     syncController?.abort();
@@ -1604,6 +1635,8 @@ export function createRenderApp({
     syncGeneration += 1;
     syncController?.abort();
     syncController = null;
+    exportController?.abort();
+    workflowExportRouter?.abort?.();
   }
 
   function nextFrame() {
@@ -1653,6 +1686,7 @@ export function createRenderApp({
 
   function restoreState(next, nextBoardAppearance = undefined) {
     exportController?.abort();
+    workflowExportRouter?.abort?.();
     state = sanitizeRenderSettings(next);
     restoreRenderAssets(availableRenderAssets);
     if (nextBoardAppearance !== undefined) {
@@ -1837,6 +1871,7 @@ export function createRenderApp({
 
   function resetForProject() {
     exportController?.abort();
+    workflowExportRouter?.abort?.();
     structureSignature = '';
     artworkSignature = '';
     syncGeneration += 1;
@@ -1868,6 +1903,7 @@ export function createRenderApp({
       work: async ({ signal, report, cancel }) => {
         if (!renderer && !(await activate())) return false;
         exportController?.abort();
+        workflowExportRouter?.abort?.();
         const controller = signal ? { signal, abort: cancel } : new AbortController();
         exportController = controller;
         setBusy(true);
@@ -1881,7 +1917,8 @@ export function createRenderApp({
           });
           if (!synced || !renderer) throw new Error('Render texture could not be prepared.');
           report({ stageKey: 'operationProcessing', fraction: 0.25 });
-          const blob = await renderStill({
+          const renderStillOutput = workflowExportRouter?.renderStill?.bind(workflowExportRouter) || renderStill;
+          const blob = await renderStillOutput({
             renderer,
             settings: exportState,
             format,
@@ -1977,12 +2014,12 @@ export function createRenderApp({
       work: async ({ signal, report, cancel }) => {
         if (!renderer && !(await activate())) return false;
         exportController?.abort();
+        workflowExportRouter?.abort?.();
         const controller = signal ? { signal, abort: cancel } : new AbortController();
         exportController = controller;
         setBusy(true);
         elements.status.textContent = t('renderGlbExporting');
         try {
-          const { exportGlb } = await import('./GlbExportService.js');
           const textureSize = exportState.output.glb.textureSize === 'auto'
             ? 2048
             : Number(exportState.output.glb.textureSize);
@@ -1992,7 +2029,11 @@ export function createRenderApp({
             targetDpi: getRenderTextureDpi(boxModel, { width: textureSize, height: textureSize }),
           });
           if (!synced || !renderer) throw new Error('Render scene could not be prepared for GLB export.');
-          const blob = await exportGlb({
+          const exportGlbOutput = workflowExportRouter?.exportGlb?.bind(workflowExportRouter) || (async (options) => {
+            const { exportGlb } = await import('./GlbExportService.js');
+            return exportGlb(options);
+          });
+          const blob = await exportGlbOutput({
             renderer,
             options: exportState.output.glb,
             signal: controller.signal,
@@ -2061,7 +2102,6 @@ export function createRenderApp({
         setBusy(true);
         elements.status.textContent = t('renderTurntableExporting');
         try {
-          const { exportTurntable } = await import('./TurntableExportService.js');
           const dimensions = getTurntableDimensions(exportState, sequenceOptions.longEdge);
           if (!isTurntableWithinPixelBudget({ ...sequenceOptions, ...dimensions })) {
             throw new Error(t('renderTurntableTooLarge'));
@@ -2072,7 +2112,11 @@ export function createRenderApp({
             targetDpi: getRenderTextureDpi(boxModel, dimensions),
           });
           if (!synced || !renderer) throw new Error('Render scene could not be prepared for turntable export.');
-          const blob = await exportTurntable({
+          const exportTurntableOutput = workflowExportRouter?.exportTurntable?.bind(workflowExportRouter) || (async (options) => {
+            const { exportTurntable } = await import('./TurntableExportService.js');
+            return exportTurntable(options);
+          });
+          const blob = await exportTurntableOutput({
             renderer,
             settings: exportState,
             options: sequenceOptions,
@@ -2529,6 +2573,7 @@ export function createRenderApp({
         ...diagnostics,
         contextState: renderContextState === 'initializing' ? diagnostics.contextState : renderContextState,
         contextRecoveryCount: Math.max(diagnostics.contextRecoveryCount || 0, renderContextRecoveryCount),
+        workflowExport: workflowExportRouter?.getDiagnostics?.() || null,
       };
       return normalized.health ? normalized : { ...normalized, health: getRenderHealth(normalized) };
     },
@@ -2537,6 +2582,7 @@ export function createRenderApp({
       disposed = true;
       syncController?.abort();
       exportController?.abort();
+      workflowExportRouter?.dispose?.();
       pathTracingService?.dispose();
       releaseRenderer({ final: true });
       windowRef.removeEventListener('resize', handleWindowResize);

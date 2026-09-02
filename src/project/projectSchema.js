@@ -580,11 +580,14 @@ async function validateTechnicalAssets(snapshot, technicalAssets) {
       units: svgMeta.units || 'mm',
       markup: svgMarkup,
     },
-    capabilities: snapshot.cartonSource.capabilities || {
+    capabilities: {
       artwork2d: true,
       flatExport: true,
       foldPreview: true,
-      technicalRender: false,
+      technicalRender: true,
+      ...(snapshot.cartonSource.capabilities || {}),
+      technicalRender: snapshot.cartonSource.source?.producer === 'packaging-box-designer'
+        || snapshot.cartonSource.capabilities?.technicalRender !== false,
     },
   };
   const validation = await validateCartonWorkflowBundle(bundle);

@@ -41,7 +41,7 @@ export function createPbdHost({
     artwork2d: true,
     flatExport: true,
     foldPreview: true,
-    technicalRender: false,
+    technicalRender: true,
   },
   onReady = () => {},
   onValidation = () => {},

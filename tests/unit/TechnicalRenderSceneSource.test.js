@@ -344,4 +344,34 @@ describe('TechnicalRenderSceneSource', () => {
     expect(originalDispose).toHaveBeenCalledTimes(1);
     expect(runtime.dispose).toHaveBeenCalledTimes(1);
   });
+
+  it('regression: filters studio-only material maps before forwarding to fold runtime', () => {
+    const { source, runtime } = createSource();
+    source.buildScene({
+      semanticSvg: CANONICAL_SVG,
+      artworkAtlas: ARTWORK_ATLAS,
+      maps: {
+        alpha: { id: 'alpha-map' },
+        normal: { id: 'normal-map' },
+        clearcoat: { id: 'clearcoat-map' },
+        clearcoatRoughness: { id: 'clearcoat-roughness-map' },
+      },
+    });
+
+    expect(runtime.setArtworkAtlas).toHaveBeenCalledWith(ARTWORK_ATLAS, {
+      alpha: { id: 'alpha-map' },
+      normal: { id: 'normal-map' },
+    });
+
+    runtime.setArtworkAtlas.mockClear();
+    source.replaceArtwork(ARTWORK_ATLAS, {
+      roughness: { id: 'roughness-map' },
+      metalness: { id: 'metalness-map' },
+      clearcoat: { id: 'cc' },
+    });
+    expect(runtime.setArtworkAtlas).toHaveBeenCalledWith(ARTWORK_ATLAS, {
+      roughness: { id: 'roughness-map' },
+      metalness: { id: 'metalness-map' },
+    });
+  });
 });

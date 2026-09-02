@@ -79,6 +79,12 @@ export async function generateNeutralRenderThumbnail({ presetId, documentRef = d
     return dataUrl;
   } finally {
     renderer.dispose();
+    try {
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch {
+      // Best-effort context release for offscreen thumbnail canvas.
+    }
     container.remove();
   }
 }

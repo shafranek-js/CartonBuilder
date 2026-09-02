@@ -213,13 +213,17 @@ export function createTechnicalPortableScene({
   const scene = new Scene();
   scene.name = 'CartonBuilder Technical GLB';
   const detachedMetadata = metadata === null ? {} : cloneUserData(metadata);
+  if ('referenceOnly' in detachedMetadata) {
+    detachedMetadata.referenceOnly = true;
+  }
+  if ('productionCertified' in detachedMetadata) {
+    detachedMetadata.productionCertified = false;
+  }
   scene.userData.cartonBuilder = {
     ...detachedMetadata,
     source: 'technical',
     sourceUnit: 'mm',
     exportUnit: 'm',
-    referenceOnly: true,
-    productionCertified: false,
     foldProgress: 1,
     static: true,
     materialMode: normalized.materialMode,

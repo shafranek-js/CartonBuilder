@@ -229,6 +229,10 @@ export class RenderStudioSurface {
     return this._renderSurface;
   }
 
+  get canvas() {
+    return this._canvas;
+  }
+
   get camera() {
     return this._activeCamera;
   }
