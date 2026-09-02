@@ -371,6 +371,9 @@ export class RenderStudioAppearanceController {
       shadowBlur: this._shadowBlur,
       shadowIntensity: this._shadowIntensity,
       floorReflection: { ...this._floorReflectionSettings },
+      environmentAdapter: this.environmentAdapter.getDiagnostics?.() || null,
+      backgroundAdapter: this.backgroundAdapter.getDiagnostics?.() || null,
+      reflectionAdapter: this.reflectionAdapter.getDiagnostics?.() || null,
     };
   }
 
@@ -511,6 +514,13 @@ export class RenderStudioAppearanceController {
     if (this.disposed) return false;
     const generation = ++this._environmentGeneration;
     this._environmentMap = cloneEnvironmentMap(environmentMap);
+    const map = this._environmentMap;
+    const scene = this.surface.renderSurface.scene;
+    scene.environmentIntensity = map.intensity;
+    scene.backgroundIntensity = map.backgroundIntensity;
+    scene.backgroundBlurriness = map.backgroundBlur;
+    if (scene.environmentRotation?.set) scene.environmentRotation.set(0, map.rotation * Math.PI / 180, 0);
+    if (scene.backgroundRotation?.set) scene.backgroundRotation.set(0, map.rotation * Math.PI / 180, 0);
     return applyAsyncResult(
       this.environmentAdapter.setEnvironmentMap(environmentMap, ...args),
       (value) => this._applyEnvironmentTexture(resolveTexture(value) || (value === null ? null : undefined)),
@@ -580,6 +590,7 @@ export class RenderStudioAppearanceController {
     else renderer.setClearColor(0x000000, 1);
     this._backgroundMode = mode;
     this._backgroundColor = nextColor;
+    this.reflectionAdapter.setBackgroundMode?.(mode);
     return true;
   }
 

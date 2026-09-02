@@ -3,6 +3,9 @@ import { RenderStudioCameraRig } from './RenderStudioCameraRig.js';
 import { RenderStudioRenderTargetService } from './RenderStudioRenderTargetService.js';
 import { RenderStudioSceneController } from './RenderStudioSceneController.js';
 import { RenderStudioSurface } from './RenderStudioSurface.js';
+import { RenderStudioBackgroundAdapter } from './RenderStudioBackgroundAdapter.js';
+import { RenderStudioEnvironmentAdapter } from './RenderStudioEnvironmentAdapter.js';
+import { RenderStudioReflectionAdapter } from './RenderStudioReflectionAdapter.js';
 import { TechnicalRenderMaterialController } from './TechnicalRenderMaterialController.js';
 import { WebGLCartonRenderer } from './WebGLCartonRenderer.js';
 import { createTechnicalRenderSceneSource } from './createTechnicalRenderSceneSource.js';
@@ -173,6 +176,18 @@ function defaultMaterialControllerFactory(options) {
   return new TechnicalRenderMaterialController(options);
 }
 
+function defaultEnvironmentAdapterFactory(options) {
+  return new RenderStudioEnvironmentAdapter(options);
+}
+
+function defaultBackgroundAdapterFactory(options) {
+  return new RenderStudioBackgroundAdapter(options);
+}
+
+function defaultReflectionAdapterFactory(options) {
+  return new RenderStudioReflectionAdapter(options);
+}
+
 function defaultRendererFactory(options) {
   return new WebGLCartonRenderer(options);
 }
@@ -205,6 +220,9 @@ export function createTechnicalRenderStudioRenderer({
   surfaceFactory = defaultSurfaceFactory,
   cameraRigFactory = defaultCameraRigFactory,
   materialControllerFactory = defaultMaterialControllerFactory,
+  environmentAdapterFactory = defaultEnvironmentAdapterFactory,
+  backgroundAdapterFactory = defaultBackgroundAdapterFactory,
+  reflectionAdapterFactory = defaultReflectionAdapterFactory,
   appearanceControllerFactory = defaultAppearanceControllerFactory,
   renderTargetServiceFactory = defaultRenderTargetServiceFactory,
   sceneControllerFactory = defaultSceneControllerFactory,
@@ -212,6 +230,9 @@ export function createTechnicalRenderStudioRenderer({
   rendererFactory = defaultRendererFactory,
   renderTargetFactory,
   threeFactories = {},
+  environmentAdapterOptions = {},
+  backgroundAdapterOptions = {},
+  reflectionAdapterOptions = {},
   rendererOptions = {},
   technicalSourceOptions = {},
 } = {}) {
@@ -224,18 +245,24 @@ export function createTechnicalRenderStudioRenderer({
   assertObject('windowRef', windowRef);
   assertRenderSettings(renderSettings);
   assertOptionalFunction('boardAppearanceSetter', boardAppearanceSetter);
-  assertAdapter('environmentAdapter', environmentAdapter, [
-    'setEnvironment',
-    'setEnvironmentMap',
-    'setEnvironmentAsset',
-    'dispose',
-  ]);
-  assertAdapter('backgroundAdapter', backgroundAdapter, [
-    'setBackgroundImage',
-    'setBackgroundAsset',
-    'dispose',
-  ]);
-  assertAdapter('reflectionAdapter', reflectionAdapter, ['setFloorReflection', 'dispose']);
+  if (environmentAdapter !== undefined && environmentAdapter !== null) {
+    assertAdapter('environmentAdapter', environmentAdapter, [
+      'setEnvironment',
+      'setEnvironmentMap',
+      'setEnvironmentAsset',
+      'dispose',
+    ]);
+  }
+  if (backgroundAdapter !== undefined && backgroundAdapter !== null) {
+    assertAdapter('backgroundAdapter', backgroundAdapter, [
+      'setBackgroundImage',
+      'setBackgroundAsset',
+      'dispose',
+    ]);
+  }
+  if (reflectionAdapter !== undefined && reflectionAdapter !== null) {
+    assertAdapter('reflectionAdapter', reflectionAdapter, ['setFloorReflection', 'dispose']);
+  }
   assertMaterialProfileSetter(materialProfileSetter);
   assertRendererOptions(rendererOptions);
   assertObject('technicalSourceOptions', technicalSourceOptions);
@@ -244,6 +271,9 @@ export function createTechnicalRenderStudioRenderer({
     surfaceFactory,
     cameraRigFactory,
     materialControllerFactory,
+    environmentAdapterFactory,
+    backgroundAdapterFactory,
+    reflectionAdapterFactory,
     appearanceControllerFactory,
     renderTargetServiceFactory,
     sceneControllerFactory,
@@ -253,6 +283,9 @@ export function createTechnicalRenderStudioRenderer({
     assertFunction(name, factory);
   }
   if (renderTargetFactory !== undefined) assertFunction('renderTargetFactory', renderTargetFactory);
+  assertObject('environmentAdapterOptions', environmentAdapterOptions);
+  assertObject('backgroundAdapterOptions', backgroundAdapterOptions);
+  assertObject('reflectionAdapterOptions', reflectionAdapterOptions);
   assertOptionalFunction('onContextLost', onContextLost);
   assertOptionalFunction('onContextRestored', onContextRestored);
   assertOptionalFunction('onCameraChange', onCameraChange);
@@ -264,10 +297,40 @@ export function createTechnicalRenderStudioRenderer({
   let renderTargetService = null;
   let sceneController = null;
   let rawSceneController = null;
+  let activeEnvironmentAdapter = environmentAdapter || null;
+  let activeBackgroundAdapter = backgroundAdapter || null;
+  let activeReflectionAdapter = reflectionAdapter || null;
   let sceneControllerOwnsDependencies = false;
   let rendererOwnershipTransferred = false;
   let technicalSource = null;
   let technicalSourceCalls = 0;
+
+  const dispatchContextEvent = (event, callbackName, adapterMethod) => {
+    let firstError = null;
+    try {
+      if (callbackName === 'lost') onContextLost?.(event);
+      else onContextRestored?.(event);
+    } catch (error) {
+      firstError = error;
+    }
+    for (const adapter of [
+      activeEnvironmentAdapter,
+      activeBackgroundAdapter,
+      activeReflectionAdapter,
+    ]) {
+      if (typeof adapter?.[adapterMethod] !== 'function') continue;
+      try {
+        adapter[adapterMethod](event);
+      } catch (error) {
+        firstError ||= error;
+      }
+    }
+    if (firstError) throw firstError;
+  };
+  const handleContextLost = (event) => dispatchContextEvent(event, 'lost', 'handleContextLost');
+  const handleContextRestored = (event) => (
+    dispatchContextEvent(event, 'restored', 'handleContextRestored')
+  );
 
   const boundsProvider = () => {
     if (!technicalSource) {
@@ -351,8 +414,8 @@ export function createTechnicalRenderStudioRenderer({
       windowRef,
       projection: renderSettings.camera.projection,
       alpha: true,
-      onContextLost,
-      onContextRestored,
+      onContextLost: handleContextLost,
+      onContextRestored: handleContextRestored,
     });
     assertSurface(surface);
 
@@ -375,13 +438,64 @@ export function createTechnicalRenderStudioRenderer({
       );
     }
 
+    if (!activeEnvironmentAdapter) {
+      activeEnvironmentAdapter = environmentAdapterFactory({
+        ...environmentAdapterOptions,
+        surface,
+        renderSurface: surface.renderSurface,
+        boundsProvider,
+        windowRef,
+        environmentAsset,
+        environmentMap: renderSettings.lighting.environmentMap,
+        onContextLost: handleContextLost,
+        onContextRestored: handleContextRestored,
+      });
+    }
+    if (!activeBackgroundAdapter) {
+      activeBackgroundAdapter = backgroundAdapterFactory({
+        ...backgroundAdapterOptions,
+        surface,
+        renderSurface: surface.renderSurface,
+        boundsProvider,
+        windowRef,
+        backgroundAsset,
+        backgroundImage: renderSettings.background.image,
+        onContextLost: handleContextLost,
+        onContextRestored: handleContextRestored,
+      });
+    }
+    if (!activeReflectionAdapter) {
+      activeReflectionAdapter = reflectionAdapterFactory({
+        ...reflectionAdapterOptions,
+        surface,
+        renderSurface: surface.renderSurface,
+        boundsProvider,
+        windowRef,
+        onContextLost: handleContextLost,
+        onContextRestored: handleContextRestored,
+        transparent: renderSettings.background.mode === 'transparent',
+      });
+    }
+    assertAdapter('environmentAdapter', activeEnvironmentAdapter, [
+      'setEnvironment',
+      'setEnvironmentMap',
+      'setEnvironmentAsset',
+      'dispose',
+    ]);
+    assertAdapter('backgroundAdapter', activeBackgroundAdapter, [
+      'setBackgroundImage',
+      'setBackgroundAsset',
+      'dispose',
+    ]);
+    assertAdapter('reflectionAdapter', activeReflectionAdapter, ['setFloorReflection', 'dispose']);
+
     appearanceController = appearanceControllerFactory({
       surface,
       boundsProvider,
       materialProfileSetter: materialController,
-      environmentAdapter,
-      backgroundAdapter,
-      reflectionAdapter,
+      environmentAdapter: activeEnvironmentAdapter,
+      backgroundAdapter: activeBackgroundAdapter,
+      reflectionAdapter: activeReflectionAdapter,
       threeFactories,
     });
 
@@ -429,6 +543,9 @@ export function createTechnicalRenderStudioRenderer({
           surface,
           cameraRig,
           materialController,
+          ...(appearanceController
+            ? []
+            : [activeEnvironmentAdapter, activeBackgroundAdapter, activeReflectionAdapter]),
           appearanceController,
           renderTargetService,
           rawSceneController,
