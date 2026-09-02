@@ -3,6 +3,7 @@ import { RenderStudioCameraRig } from './RenderStudioCameraRig.js';
 import { RenderStudioRenderTargetService } from './RenderStudioRenderTargetService.js';
 import { RenderStudioSceneController } from './RenderStudioSceneController.js';
 import { RenderStudioSurface } from './RenderStudioSurface.js';
+import { TechnicalRenderMaterialController } from './TechnicalRenderMaterialController.js';
 import { WebGLCartonRenderer } from './WebGLCartonRenderer.js';
 import { createTechnicalRenderSceneSource } from './createTechnicalRenderSceneSource.js';
 import { createTechnicalWebGLRenderer } from './createTechnicalWebGLRenderer.js';
@@ -117,6 +118,37 @@ function cleanupInReverse(resources) {
   if (firstError) throw firstError;
 }
 
+function createOwnedSceneController(sceneController, materialController) {
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return false;
+    disposed = true;
+    let firstError = null;
+    try {
+      sceneController.dispose();
+    } catch (error) {
+      firstError = error;
+    }
+    if (materialController !== sceneController) {
+      try {
+        materialController.dispose();
+      } catch (error) {
+        firstError ||= error;
+      }
+    }
+    if (firstError) throw firstError;
+    return true;
+  };
+
+  return new Proxy(sceneController, {
+    get(target, property, receiver) {
+      if (property === 'dispose') return dispose;
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 function defaultSurfaceFactory(options) {
   return new RenderStudioSurface(options);
 }
@@ -135,6 +167,10 @@ function defaultRenderTargetServiceFactory(options) {
 
 function defaultSceneControllerFactory(options) {
   return new RenderStudioSceneController(options);
+}
+
+function defaultMaterialControllerFactory(options) {
+  return new TechnicalRenderMaterialController(options);
 }
 
 function defaultRendererFactory(options) {
@@ -168,6 +204,7 @@ export function createTechnicalRenderStudioRenderer({
   onCameraChange,
   surfaceFactory = defaultSurfaceFactory,
   cameraRigFactory = defaultCameraRigFactory,
+  materialControllerFactory = defaultMaterialControllerFactory,
   appearanceControllerFactory = defaultAppearanceControllerFactory,
   renderTargetServiceFactory = defaultRenderTargetServiceFactory,
   sceneControllerFactory = defaultSceneControllerFactory,
@@ -206,6 +243,7 @@ export function createTechnicalRenderStudioRenderer({
   for (const [name, factory] of Object.entries({
     surfaceFactory,
     cameraRigFactory,
+    materialControllerFactory,
     appearanceControllerFactory,
     renderTargetServiceFactory,
     sceneControllerFactory,
@@ -221,9 +259,11 @@ export function createTechnicalRenderStudioRenderer({
 
   let surface = null;
   let cameraRig = null;
+  let materialController = null;
   let appearanceController = null;
   let renderTargetService = null;
   let sceneController = null;
+  let rawSceneController = null;
   let sceneControllerOwnsDependencies = false;
   let rendererOwnershipTransferred = false;
   let technicalSource = null;
@@ -252,7 +292,11 @@ export function createTechnicalRenderStudioRenderer({
       renderSurface: sceneController.renderSurface,
       artworkAtlas,
       materialMaps,
-      boardAppearanceSetter,
+      boardAppearanceSetter: (...args) => {
+        const result = materialController.setBoardAppearance(...args);
+        if (typeof boardAppearanceSetter === 'function') boardAppearanceSetter(...args);
+        return result;
+      },
     };
     const source = technicalSourceFactory(sourceOptions);
     technicalSource = source;
@@ -319,10 +363,22 @@ export function createTechnicalRenderStudioRenderer({
       onCameraChange,
     });
 
+    materialController = materialControllerFactory({
+      sourceProvider: () => technicalSource,
+    });
+    if (!isObjectLike(materialController)
+      || typeof materialController.setMaterialProfile !== 'function'
+      || typeof materialController.setBoardAppearance !== 'function'
+      || typeof materialController.dispose !== 'function') {
+      throw new TypeError(
+        'Technical Render Studio materialControllerFactory must return a material controller.',
+      );
+    }
+
     appearanceController = appearanceControllerFactory({
       surface,
       boundsProvider,
-      materialProfileSetter,
+      materialProfileSetter: materialController,
       environmentAdapter,
       backgroundAdapter,
       reflectionAdapter,
@@ -335,14 +391,15 @@ export function createTechnicalRenderStudioRenderer({
       ...(renderTargetFactory ? { renderTargetFactory } : {}),
     });
 
-    sceneController = sceneControllerFactory({
+    rawSceneController = sceneControllerFactory({
       surface,
       cameraRig,
       appearanceController,
       renderTargetService,
     });
-    assertRenderSceneController(sceneController);
-    assertSameRenderSurface(surface, sceneController);
+    assertRenderSceneController(rawSceneController);
+    assertSameRenderSurface(surface, rawSceneController);
+    sceneController = createOwnedSceneController(rawSceneController, materialController);
     sceneControllerOwnsDependencies = true;
 
     // From this call onward createTechnicalWebGLRenderer owns the controller
@@ -368,7 +425,14 @@ export function createTechnicalRenderStudioRenderer({
     try {
       cleanupInReverse(sceneControllerOwnsDependencies
         ? [sceneController]
-        : [surface, cameraRig, appearanceController, renderTargetService, sceneController]);
+        : [
+          surface,
+          cameraRig,
+          materialController,
+          appearanceController,
+          renderTargetService,
+          rawSceneController,
+        ]);
     } catch {
       // Preserve the original composition error.
     }

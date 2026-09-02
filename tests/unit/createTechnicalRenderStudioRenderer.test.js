@@ -107,6 +107,12 @@ function makeOptions(overrides = {}) {
   const renderSurface = makeRenderSurface();
   const surface = makeSurface(renderSurface);
   const cameraRig = makeCameraRig();
+  const materialController = {
+    setMaterialProfile: vi.fn(),
+    setBoardAppearance: vi.fn(),
+    getDiagnostics: vi.fn(() => ({ source: 'technical' })),
+    dispose: vi.fn(),
+  };
   const appearanceController = makeAppearanceController();
   const renderTargetService = makeRenderTargetService();
   const sceneController = makeSceneController(renderSurface);
@@ -169,6 +175,10 @@ function makeOptions(overrides = {}) {
       calls.cameraRig = input;
       return cameraRig;
     }),
+    materialControllerFactory: vi.fn((input) => {
+      calls.materialController = input;
+      return materialController;
+    }),
     appearanceControllerFactory: vi.fn((input) => {
       calls.appearance = input;
       return appearanceController;
@@ -197,6 +207,7 @@ function makeOptions(overrides = {}) {
     renderSurface,
     surface,
     cameraRig,
+    materialController,
     appearanceController,
     renderTargetService,
     sceneController,
@@ -263,14 +274,14 @@ describe('createTechnicalRenderStudioRenderer', () => {
       renderSurface: context.sceneController.renderSurface,
       artworkAtlas: context.artworkAtlas,
       materialMaps: context.materialMaps,
-      boardAppearanceSetter: context.boardAppearanceSetter,
     });
+    expect(context.calls.technicalSource.boardAppearanceSetter).toBeTypeOf('function');
     expect(context.calls.technicalSource.renderSurface).toBe(context.sceneController.renderSurface);
     expect(context.technicalDocument.getBundle).not.toHaveBeenCalled();
 
     expect(context.calls.cameraRig.initialState).toBe(context.options.renderSettings.camera);
     expect(context.calls.cameraRig.onCameraChange).toBe(context.options.onCameraChange);
-    expect(context.calls.appearance.materialProfileSetter).toBe(context.materialProfileSetter);
+    expect(context.calls.appearance.materialProfileSetter).toBe(context.materialController);
     expect(context.calls.appearance.environmentAdapter).toBe(context.environmentAdapter);
     expect(context.calls.appearance.backgroundAdapter).toBe(context.backgroundAdapter);
     expect(context.calls.appearance.reflectionAdapter).toBe(context.reflectionAdapter);
@@ -296,6 +307,43 @@ describe('createTechnicalRenderStudioRenderer', () => {
     expect(context.calls.renderer).not.toHaveProperty('boxModel');
     expect(context.calls.renderer).not.toHaveProperty('textureCanvas');
     expect(context.calls.renderer).not.toHaveProperty('sceneModel');
+  });
+
+  it('wires the Technical material controller without allowing caller overrides', () => {
+    const context = makeOptions();
+    createTechnicalRenderStudioRenderer(context.options);
+
+    expect(context.options.materialControllerFactory).toHaveBeenCalledTimes(1);
+    expect(context.calls.materialController.sourceProvider).toBeTypeOf('function');
+    expect(context.calls.materialController.sourceProvider()).toBe(context.source);
+    expect(context.calls.appearance.materialProfileSetter).toBe(context.materialController);
+
+    const nextAppearance = { interiorColor: '#112233', edgeColor: '#445566' };
+    context.calls.technicalSource.boardAppearanceSetter(nextAppearance);
+    expect(context.materialController.setBoardAppearance).toHaveBeenCalledWith(nextAppearance);
+    expect(context.boardAppearanceSetter).toHaveBeenCalledWith(nextAppearance);
+    expect(context.calls.renderer.sceneController).not.toBe(context.options.rendererOptions.sceneController);
+    expect(context.calls.renderer.sceneSourceFactory).not.toBe(context.options.rendererOptions.sceneSourceFactory);
+  });
+
+  it('includes the material controller in renderer-owned disposal exactly once', () => {
+    const context = makeOptions();
+    let rendererOptions;
+    const renderer = {
+      dispose: vi.fn(() => rendererOptions.sceneController.dispose()),
+    };
+    context.options.rendererFactory = vi.fn((input) => {
+      rendererOptions = input;
+      input.sceneSourceFactory();
+      return renderer;
+    });
+
+    expect(createTechnicalRenderStudioRenderer(context.options)).toBe(renderer);
+    renderer.dispose();
+    renderer.dispose();
+
+    expect(context.sceneController.dispose).toHaveBeenCalledTimes(1);
+    expect(context.materialController.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('does not consult Quick bounds before the source exists and then resolves only Technical bounds', () => {
