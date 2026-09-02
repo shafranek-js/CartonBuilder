@@ -15,6 +15,20 @@ function getFinishSummary(sceneModel) {
     }));
 }
 
+function assertSharedRenderSurface(source, sceneController) {
+  const sourceSurface = source?.renderSurface;
+  const controllerSurface = sceneController?.renderSurface;
+  if (!sourceSurface || !controllerSurface) {
+    throw new TypeError('Render source and scene controller must provide a renderSurface.');
+  }
+
+  for (const key of ['scene', 'camera', 'renderer']) {
+    if (sourceSurface[key] !== controllerSurface[key]) {
+      throw new Error(`Render source and scene controller must share renderSurface.${key}.`);
+    }
+  }
+}
+
 export class WebGLCartonRenderer {
   constructor({
     canvas,
@@ -32,6 +46,7 @@ export class WebGLCartonRenderer {
     onContextRestored = () => {},
     onCameraChange = () => {},
     sceneSourceFactory = null,
+    sceneController = null,
   }) {
     this.sceneModel = sceneModel;
     this.finishSummary = getFinishSummary(sceneModel);
@@ -105,20 +120,26 @@ export class WebGLCartonRenderer {
     this.source = sceneSourceFactory
       ? sceneSourceFactory(sourceOptions)
       : new LegacyRenderSceneSource(sourceOptions);
+    this.sceneController = sceneController || this.source;
+    if (this.sceneController !== this.source) {
+      assertSharedRenderSurface(this.source, this.sceneController);
+    } else if (!this.sceneController?.renderSurface) {
+      throw new TypeError('Render source must provide a renderSurface.');
+    }
     // Keep the established internal scene handle while routing scene
     // operations through the source boundary. The public renderer API is
     // unchanged; future sources can replace this adapter without changing
     // RenderApp or its controls.
-    this.scene = this.source;
-    this.source.setToneMapping('neutral');
+    this.scene = this.sceneController;
+    this.sceneController.setToneMapping('neutral');
     this.postProcessing = new RenderPostProcessing({
-      renderer: this.source.renderSurface.renderer,
-      scene: this.source.renderSurface.scene,
-      camera: this.source.renderSurface.camera,
+      renderer: this.sceneController.renderSurface.renderer,
+      scene: this.sceneController.renderSurface.scene,
+      camera: this.sceneController.renderSurface.camera,
       effects: this.effects,
       transparent: renderSettings.background.mode === 'transparent',
     });
-    this.source.setRenderCallback(() => {
+    this.sceneController.setRenderCallback(() => {
       const startedAt = this.windowRef.performance?.now?.() ?? Date.now();
       this.postProcessing.render();
       const endedAt = this.windowRef.performance?.now?.() ?? Date.now();
@@ -130,7 +151,7 @@ export class WebGLCartonRenderer {
       onStateChange: (state) => {
         this.qualityState = state;
         this.postProcessing.setQualityState(state);
-        this.scene.render();
+        this.sceneController.render();
       },
       onScaleChange: (scale) => this.postProcessing.setRenderScale(scale),
     });
@@ -142,62 +163,65 @@ export class WebGLCartonRenderer {
   async initialize(sceneModel = this.sceneModel) {
     this.sceneModel = sceneModel;
     this.finishSummary = getFinishSummary(sceneModel);
-    this.scene.setFinishSummary?.(this.finishSummary);
-    this.scene.render();
+    this.source.setFinishSummary?.(this.finishSummary);
+    this.sceneController.render();
     return this;
   }
 
   updateSettings(settings, { render = true } = {}) {
     const previous = this.currentSettings;
-    const previousCameraObject = this.scene.camera;
+    const previousCameraObject = this.sceneController.camera;
     if (!previous || previous.material.profile !== settings.material.profile) {
-      this.scene.setMaterialProfile(settings.material.profile);
+      this.sceneController.setMaterialProfile(settings.material.profile);
     }
     if (!previous || previous.lighting.azimuth !== settings.lighting.azimuth || previous.lighting.elevation !== settings.lighting.elevation) {
-      this.scene.setLightDirection(settings.lighting.azimuth, settings.lighting.elevation);
+      this.sceneController.setLightDirection(settings.lighting.azimuth, settings.lighting.elevation);
     }
     if (!previous || previous.lighting.intensity !== settings.lighting.intensity) {
-      this.scene.setLightIntensity(settings.lighting.intensity);
+      this.sceneController.setLightIntensity(settings.lighting.intensity);
     }
     if (!previous || previous.lighting.environmentIntensity !== settings.lighting.environmentIntensity) {
-      this.scene.setHemisphereIntensity(settings.lighting.environmentIntensity);
-      this.scene.setEnvironmentIntensity(settings.lighting.environmentIntensity);
+      this.sceneController.setHemisphereIntensity(settings.lighting.environmentIntensity);
+      this.sceneController.setEnvironmentIntensity(settings.lighting.environmentIntensity);
     }
     if (!previous || previous.lighting.environment !== settings.lighting.environment) {
-      this.scene.setEnvironment(settings.lighting.environment);
+      this.sceneController.setEnvironment(settings.lighting.environment);
     }
     if (!previous || JSON.stringify(previous.lighting.environmentMap) !== JSON.stringify(settings.lighting.environmentMap)) {
-      this.scene.setEnvironmentMap?.(settings.lighting.environmentMap, { render: false });
+      this.sceneController.setEnvironmentMap?.(settings.lighting.environmentMap, { render: false });
     }
-    if (!previous || previous.shadows.enabled !== settings.shadows.enabled) this.scene.setShadowsEnabled(settings.shadows.enabled);
-    if (!previous || previous.shadows.mapSize !== settings.shadows.mapSize) this.scene.setShadowMapSize(settings.shadows.mapSize);
-    if (!previous || previous.shadows.blur !== settings.shadows.blur) this.scene.setShadowBlur(settings.shadows.blur);
-    if (!previous || previous.shadows.intensity !== settings.shadows.intensity) this.scene.setShadowIntensity(settings.shadows.intensity);
+    if (!previous || previous.shadows.enabled !== settings.shadows.enabled) this.sceneController.setShadowsEnabled(settings.shadows.enabled);
+    if (!previous || previous.shadows.mapSize !== settings.shadows.mapSize) this.sceneController.setShadowMapSize(settings.shadows.mapSize);
+    if (!previous || previous.shadows.blur !== settings.shadows.blur) this.sceneController.setShadowBlur(settings.shadows.blur);
+    if (!previous || previous.shadows.intensity !== settings.shadows.intensity) this.sceneController.setShadowIntensity(settings.shadows.intensity);
     if (!previous || previous.background.mode !== settings.background.mode || previous.background.color !== settings.background.color) {
-      this.scene.setBackgroundMode(settings.background.mode, settings.background.color, { render: false });
+      this.sceneController.setBackgroundMode(settings.background.mode, settings.background.color, { render: false });
       this.postProcessing.setTransparent(settings.background.mode === 'transparent');
     }
     if (!previous || JSON.stringify(previous.background.image) !== JSON.stringify(settings.background.image)) {
-      this.scene.setBackgroundImage(settings.background.image);
+      this.sceneController.setBackgroundImage(settings.background.image);
     }
     if (!previous || JSON.stringify(previous.floor.reflection) !== JSON.stringify(settings.floor.reflection)) {
-      this.scene.setFloorReflection(settings.floor.reflection, { render: false });
+      this.sceneController.setFloorReflection(settings.floor.reflection, { render: false });
     }
-    if (!previous || previous.lighting.exposure !== settings.lighting.exposure) this.scene.setExposure(settings.lighting.exposure);
+    if (!previous || previous.lighting.exposure !== settings.lighting.exposure) this.sceneController.setExposure(settings.lighting.exposure);
     const cameraChanged = !previous || JSON.stringify(previous.camera) !== JSON.stringify(settings.camera);
     if (cameraChanged) {
       const presetChanged = settings.camera.preset !== 'custom' && settings.camera.preset !== previous?.camera?.preset;
       if (presetChanged) {
-        this.scene.setCameraPreset(settings.camera.preset);
+        this.sceneController.setCameraPreset(settings.camera.preset);
       }
-      this.scene.setCameraState(presetChanged
+      this.sceneController.setCameraState(presetChanged
         ? { ...settings.camera, position: undefined, target: undefined }
         : settings.camera);
-      if (this.scene.camera !== previousCameraObject) {
+      if (this.sceneController.camera !== previousCameraObject) {
         // BoxScene swaps between its perspective and orthographic camera
         // objects. Every post-processing pass keeps its own camera reference,
         // so rebuild the composer when that identity changes.
-        this.postProcessing.setScene(this.source.renderSurface.scene, this.source.renderSurface.camera);
+        this.postProcessing.setScene(
+          this.sceneController.renderSurface.scene,
+          this.sceneController.renderSurface.camera,
+        );
       }
     }
     this.currentSettings = structuredClone(settings);
@@ -209,7 +233,7 @@ export class WebGLCartonRenderer {
       this.qualityManager.setProfile(settings.quality.interactive);
     }
     if (render) this.markInteraction();
-    if (render) this.scene.render();
+    if (render) this.sceneController.render();
   }
 
   markInteraction() {
@@ -217,10 +241,13 @@ export class WebGLCartonRenderer {
   }
 
   updateCamera(camera) {
-    const previousCameraObject = this.scene.camera;
-    this.scene.setCameraState(camera);
-    if (this.scene.camera !== previousCameraObject) {
-      this.postProcessing.setScene(this.source.renderSurface.scene, this.source.renderSurface.camera);
+    const previousCameraObject = this.sceneController.camera;
+    this.sceneController.setCameraState(camera);
+    if (this.sceneController.camera !== previousCameraObject) {
+      this.postProcessing.setScene(
+        this.sceneController.renderSurface.scene,
+        this.sceneController.renderSurface.camera,
+      );
     }
   }
 
@@ -229,33 +256,37 @@ export class WebGLCartonRenderer {
   }
 
   getCameraState() {
-    return this.scene.getCameraState();
+    return this.sceneController.getCameraState();
   }
 
   createPortableScene(options = {}) {
-    return this.scene.createPortableScene(options);
+    return this.source.createPortableScene(options);
   }
 
   fitCameraToFrame(options = {}) {
-    return this.scene.fitCameraToFrame(options);
+    return this.sceneController.fitCameraToFrame(options);
   }
 
   resetView(options = {}) {
-    return this.scene.resetView(options);
+    return this.sceneController.resetView(options);
   }
 
   replaceArtwork(textureCanvas, materialMaps = null, sceneModel = null) {
     if (sceneModel) {
       this.sceneModel = sceneModel;
       this.finishSummary = getFinishSummary(sceneModel);
-      this.scene.setFinishSummary?.(this.finishSummary);
+      this.source.setFinishSummary?.(this.finishSummary);
     }
     this.source.replaceArtwork(textureCanvas, materialMaps);
   }
 
   setBoardAppearance(boardAppearance) {
     this.boardAppearance = cloneBoardAppearance(boardAppearance);
-    this.scene.setBoardAppearance(this.boardAppearance);
+    this.source.setBoardAppearance(this.boardAppearance);
+  }
+
+  getBounds() {
+    return this.source.getBounds();
   }
 
   setBackgroundAsset(asset) {
@@ -264,31 +295,31 @@ export class WebGLCartonRenderer {
     const nextId = nextAsset?.assetId || '';
     if (previousId === nextId) return Promise.resolve(Boolean(nextAsset));
     this.backgroundAsset = nextAsset;
-    return this.scene.setBackgroundAsset(nextAsset, { render: true });
+    return this.sceneController.setBackgroundAsset(nextAsset, { render: true });
   }
 
   setEnvironmentAsset(asset) {
     this.environmentAsset = asset || null;
-    const previous = this.scene.environmentAsset || null;
+    const previous = this.sceneController.environmentAsset || null;
     const previousKey = previous
       ? `${previous.source || 'custom'}:${previous.assetId || previous.presetId || ''}`
       : '';
     const nextKey = asset
       ? `${asset.source || 'custom'}:${asset.assetId || asset.presetId || ''}`
       : '';
-    const nextResolution = this.scene.environmentMap?.resolutionCap || 2048;
+    const nextResolution = this.sceneController.environmentMap?.resolutionCap || 2048;
     if (previousKey === nextKey && this.environmentAssetResolution === nextResolution) {
       return Promise.resolve(Boolean(asset));
     }
     this.environmentAssetResolution = nextResolution;
-    return this.scene.setEnvironmentAsset?.(asset, { render: true });
+    return this.sceneController.setEnvironmentAsset?.(asset, { render: true });
   }
 
   setEffects(effects) {
     this.effects = structuredClone(effects || this.effects);
     this.postProcessing.setEffects(this.effects);
     this.markInteraction();
-    this.scene.render();
+    this.sceneController.render();
   }
 
   setQualityState(state) {
@@ -299,7 +330,7 @@ export class WebGLCartonRenderer {
   renderSettled() {
     this.qualityState = 'settled';
     this.postProcessing.setQualityState('settled');
-    this.scene.render();
+    this.sceneController.render();
   }
 
   renderExport(options = {}) {
@@ -310,13 +341,13 @@ export class WebGLCartonRenderer {
     const nextWidth = Number(width) > 0 ? Number(width) : Number(this.container.clientWidth);
     const nextHeight = Number(height) > 0 ? Number(height) : Number(this.container.clientHeight);
     if (!(nextWidth > 0) || !(nextHeight > 0)) return false;
-    if (this.scene.resize({ width: nextWidth, height: nextHeight, pixelRatio }) === false) return false;
+    if (this.sceneController.resize({ width: nextWidth, height: nextHeight, pixelRatio }) === false) return false;
     this.postProcessing.resize(nextWidth, nextHeight);
     return true;
   }
 
   render() {
-    this.scene.render();
+    this.sceneController.render();
   }
 
   renderToPixels(options) {
@@ -327,7 +358,7 @@ export class WebGLCartonRenderer {
       ...options,
       renderOverride: ({ target }) => this.postProcessing.renderToTarget(target),
     };
-    return this.scene.renderToPixels(exportOptions)
+    return this.sceneController.renderToPixels(exportOptions)
       .then(async (result) => {
         // Some WebGL implementations leave EffectComposer's offscreen buffer
         // transparent black even though the on-screen composer is rendered.
@@ -335,7 +366,7 @@ export class WebGLCartonRenderer {
         // without post-processing so PNG/JPG export remains usable.
         const output = result.pixels.some((value) => value !== 0)
           ? result
-          : await this.scene.renderToPixels({ ...options, renderOverride: null });
+          : await this.sceneController.renderToPixels({ ...options, renderOverride: null });
         const endedAt = this.windowRef.performance?.now?.() ?? Date.now();
         this.lastExport = {
           width: output.width,
@@ -370,7 +401,7 @@ export class WebGLCartonRenderer {
       lastExport: this.lastExport ? { ...this.lastExport } : null,
       ...this.source.getDiagnostics(),
       qualityState: this.qualityState,
-      geometryMode: this.scene.geometryMode,
+      geometryMode: this.source.geometryMode || null,
       boardAppearance: cloneBoardAppearance(this.boardAppearance),
       effects: structuredClone(this.effects),
       ...this.postProcessing.getDiagnostics(),
@@ -384,7 +415,20 @@ export class WebGLCartonRenderer {
     this.windowRef.clearTimeout(this.settleTimer);
     this.qualityManager.dispose();
     this.postProcessing.dispose();
-    this.source.setRenderCallback(null);
-    this.source.dispose();
+    this.sceneController.setRenderCallback(null);
+    let disposalError = null;
+    try {
+      this.source.dispose();
+    } catch (error) {
+      disposalError = error;
+    }
+    if (this.sceneController !== this.source) {
+      try {
+        this.sceneController.dispose();
+      } catch (error) {
+        disposalError ||= error;
+      }
+    }
+    if (disposalError) throw disposalError;
   }
 }
