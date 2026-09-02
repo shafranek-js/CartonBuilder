@@ -425,3 +425,114 @@ describe('RenderStudioAppearanceController runtime regressions', () => {
     expect(activeMap.dispose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('RenderStudioAppearanceController render state transaction', () => {
+  it('applies temporary output state and restores it once without rendering', () => {
+    const { controller, reflectionAdapter, surface } = makeDependencies();
+    const initialReflection = {
+      enabled: true,
+      strength: 0.3,
+      blur: 0.4,
+      fadeDistance: 0.8,
+      includeInTransparentExport: true,
+    };
+    controller.setBackgroundMode('solid', '#123456');
+    controller.setShadowsEnabled(true);
+    controller.setShadowIntensity(0.6);
+    controller.setFloorReflection(initialReflection, { render: false });
+    const initialDiagnostics = controller.getDiagnostics();
+    surface.render.mockClear();
+    reflectionAdapter.setFloorReflection.mockClear();
+
+    const restore = controller.beginRenderStateTransaction({
+      backgroundMode: 'transparent',
+      backgroundColor: '#000000',
+      includeShadow: false,
+      includeReflection: false,
+    });
+
+    expect(controller.getDiagnostics()).toMatchObject({
+      backgroundMode: 'transparent',
+      backgroundColor: '#000000',
+      shadowEnabled: false,
+      shadowIntensity: 0,
+      floorReflection: { ...initialReflection, enabled: false },
+    });
+    expect(surface.renderSurface.scene.background).toBeNull();
+    expect(surface.render).not.toHaveBeenCalled();
+
+    expect(restore()).toBe(true);
+    expect(controller.getDiagnostics()).toMatchObject(initialDiagnostics);
+    expect(restore()).toBe(false);
+    expect(reflectionAdapter.setFloorReflection).toHaveBeenCalledTimes(2);
+    expect(surface.render).not.toHaveBeenCalled();
+
+    controller.dispose();
+  });
+
+  it('continues restore after failures, preserves the first error, and remains idempotent', () => {
+    const { controller, reflectionAdapter, surface } = makeDependencies();
+    const initialReflection = {
+      enabled: true,
+      strength: 0.25,
+      blur: 0.5,
+      fadeDistance: 0.9,
+      includeInTransparentExport: false,
+    };
+    controller.setBackgroundMode('solid', '#234567');
+    controller.setShadowsEnabled(true);
+    controller.setShadowIntensity(0.5);
+    controller.setFloorReflection(initialReflection, { render: false });
+    const restore = controller.beginRenderStateTransaction({
+      backgroundMode: 'transparent',
+      includeShadow: false,
+      includeReflection: false,
+    });
+    const firstError = new Error('background restore failed');
+    const secondError = new Error('reflection restore failed');
+    surface.renderSurface.renderer.setClearColor.mockImplementationOnce(() => { throw firstError; });
+    reflectionAdapter.setFloorReflection.mockImplementationOnce(() => { throw secondError; });
+
+    expect(() => restore()).toThrow(firstError);
+    expect(controller.getDiagnostics()).toMatchObject({
+      shadowEnabled: true,
+      shadowIntensity: 0.5,
+      floorReflection: initialReflection,
+    });
+    expect(restore()).toBe(false);
+    expect(surface.render).not.toHaveBeenCalled();
+
+    controller.dispose();
+  });
+
+  it('rolls back partial application while preserving the original transaction error', () => {
+    const { controller, reflectionAdapter, surface } = makeDependencies();
+    const initialReflection = {
+      enabled: true,
+      strength: 0.2,
+      blur: 0.55,
+      fadeDistance: 0.75,
+      includeInTransparentExport: false,
+    };
+    controller.setBackgroundMode('solid', '#345678');
+    controller.setShadowsEnabled(true);
+    controller.setShadowIntensity(0.45);
+    controller.setFloorReflection(initialReflection, { render: false });
+    const initialDiagnostics = controller.getDiagnostics();
+    const transactionError = new Error('reflection override failed');
+    const rollbackError = new Error('reflection rollback failed');
+    reflectionAdapter.setFloorReflection
+      .mockImplementationOnce(() => { throw transactionError; })
+      .mockImplementationOnce(() => { throw rollbackError; });
+
+    expect(() => controller.beginRenderStateTransaction({
+      backgroundMode: 'transparent',
+      includeShadow: false,
+      includeReflection: false,
+    })).toThrow(transactionError);
+    expect(controller.getDiagnostics()).toMatchObject(initialDiagnostics);
+    expect(surface.render).not.toHaveBeenCalled();
+
+    controller.dispose();
+  });
+});

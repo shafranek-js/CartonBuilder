@@ -20,6 +20,13 @@ const DEFAULT_ENVIRONMENT_INTENSITY = 0.4;
 const DEFAULT_SHADOW_INTENSITY = 0.25;
 const DEFAULT_SHADOW_MAP_SIZE = 1024;
 const DEFAULT_SHADOW_BLUR = 0;
+const DEFAULT_FLOOR_REFLECTION = Object.freeze({
+  enabled: false,
+  strength: 0.08,
+  blur: 0.65,
+  fadeDistance: 0.65,
+  includeInTransparentExport: false,
+});
 const VALID_TONE_MAPPINGS = new Set(['none', 'neutral']);
 const VALID_BACKGROUND_MODES = new Set(['solid', 'transparent', 'image', 'environment']);
 const VALID_SHADOW_MAP_SIZES = new Set([512, 1024, 2048]);
@@ -278,6 +285,7 @@ export class RenderStudioAppearanceController {
     this._shadowMapSize = DEFAULT_SHADOW_MAP_SIZE;
     this._shadowBlur = DEFAULT_SHADOW_BLUR;
     this._shadowIntensity = DEFAULT_SHADOW_INTENSITY;
+    this._floorReflectionSettings = { ...DEFAULT_FLOOR_REFLECTION };
     this._createColor = factories.createColor;
 
     try {
@@ -362,6 +370,7 @@ export class RenderStudioAppearanceController {
       shadowMapSize: this._shadowMapSize,
       shadowBlur: this._shadowBlur,
       shadowIntensity: this._shadowIntensity,
+      floorReflection: { ...this._floorReflectionSettings },
     };
   }
 
@@ -609,7 +618,74 @@ export class RenderStudioAppearanceController {
 
   setFloorReflection(...args) {
     if (this.disposed) return false;
+    const settings = args[0];
+    if (settings && typeof settings === 'object') {
+      this._floorReflectionSettings = {
+        ...this._floorReflectionSettings,
+        ...(Object.hasOwn(settings, 'enabled') ? { enabled: settings.enabled === true } : {}),
+        ...(Object.hasOwn(settings, 'strength') ? { strength: settings.strength } : {}),
+        ...(Object.hasOwn(settings, 'blur') ? { blur: settings.blur } : {}),
+        ...(Object.hasOwn(settings, 'fadeDistance') ? { fadeDistance: settings.fadeDistance } : {}),
+        ...(Object.hasOwn(settings, 'includeInTransparentExport')
+          ? { includeInTransparentExport: settings.includeInTransparentExport === true }
+          : {}),
+      };
+    }
     return this.reflectionAdapter.setFloorReflection(...args);
+  }
+
+  /**
+   * Apply temporary output-only appearance state and return an idempotent
+   * restore function. RenderTargetService uses this public seam instead of
+   * reaching into appearance state owned by this controller.
+   */
+  beginRenderStateTransaction({
+    backgroundMode = this._backgroundMode,
+    backgroundColor = this._backgroundColor,
+    includeShadow = true,
+    includeReflection = true,
+  } = {}) {
+    if (this.disposed) return false;
+    const snapshot = {
+      backgroundMode: this._backgroundMode,
+      backgroundColor: this._backgroundColor,
+      shadowEnabled: this._shadowEnabled,
+      shadowIntensity: this._shadowIntensity,
+      floorReflection: { ...this._floorReflectionSettings },
+    };
+    let restored = false;
+    const restore = () => {
+      if (restored) return false;
+      restored = true;
+      let restoreError = null;
+      restoreError = firstError(restoreError, () => (
+        this.setBackgroundMode(snapshot.backgroundMode, snapshot.backgroundColor)
+      ));
+      restoreError = firstError(restoreError, () => this.setShadowsEnabled(snapshot.shadowEnabled));
+      restoreError = firstError(restoreError, () => this.setShadowIntensity(snapshot.shadowIntensity));
+      restoreError = firstError(restoreError, () => this.setFloorReflection(snapshot.floorReflection));
+      if (restoreError) throw restoreError;
+      return true;
+    };
+
+    try {
+      this.setBackgroundMode(backgroundMode, backgroundColor);
+      if (!includeShadow) {
+        this.setShadowsEnabled(false);
+        this.setShadowIntensity(0);
+      }
+      if (!includeReflection) {
+        this.setFloorReflection({ enabled: false });
+      }
+    } catch (error) {
+      try {
+        restore();
+      } catch {
+        // Keep the original transaction error observable.
+      }
+      throw error;
+    }
+    return restore;
   }
 
   setExposure(exposure) {
