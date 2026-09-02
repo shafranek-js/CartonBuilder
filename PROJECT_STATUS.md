@@ -1,186 +1,297 @@
-# CartonBuilder — dual-workflow integration handoff
+# CartonBuilder — handoff текущего этапа
 
-## Текущее состояние
+Дата сверки: **2026-09-02**
 
-Дата сверки: 2026-08-23
-Рабочий каталог: `C:\Projects\CartonBuilder_1-stage1`
-Ветка: `codex/dual-workflow-stage1`
-HEAD: `61604bf fix(security): reject cross-platform traversal separators`
+## 1. Подтверждённое состояние репозиториев
 
-Этапы 0–4 и Release 1 reference-only boundary завершены. Quick workflow
-сохранён отдельно от Technical workflow. Stage 6A Technical Preview, Stage 6B
-viewer state/artwork integration и Stage 7A `RenderSceneSource` foundation
-реализованы в исходниках. Technical Render и Release 2 broader visual/resource
-acceptance остаются открытыми.
+### CartonBuilder
 
-Рабочее дерево после этого обновления намеренно не будет чистым:
+- Рабочий каталог: `C:\Projects\CartonBuilder_1`
+- Ветка: `master`
+- Локальная acceptance-база перед итоговым handoff commit: `74bf12f`
+  (`fix(build): publish showcase assets`).
+- `origin/master`: `8cfbf9b8444edb8b1fd3f06df1cce67f9e2ef646`; локальная ветка содержит
+  проверенные, но ещё не опубликованные Release 2 commits.
+- После итогового acceptance commit рабочее дерево должно быть чистым.
+- GitHub Pages: `https://shafranek-js.github.io/CartonBuilder/`
+- Успешная публикация HEAD: GitHub Actions run `33501418758`.
+- Repository-level GitHub Actions после публикации снова отключены.
 
-- существующие UI-изменения удаления reference-only warning:
-  `index.html`, `src/i18n.js`, `src/styles/main.css`,
-  `tests/e2e/technicalPreview.spec.js`;
-- generated vendor/catalog changes from the approved viewer sync;
-- этот handoff-файл.
+### CartonFoldViewer producer
 
-`vendor/plugins/` обновлён только штатным `plugins:sync:viewer`, вручную не
-редактировался.
+- Рабочий каталог: `C:\Projects\CartonFoldViewer-stage1`
+- Ветка: `codex/dual-workflow-stage1`
+- HEAD: `a9ec05e93f5bd28f0822ed8f5c110897a36a135a`
+  (`fix(viewer): preserve canonical folds while stabilizing crease rendering`)
+- Рабочее дерево чистое.
+- Git remote не настроен. Producer commit существует только локально, пока remote
+  не будет добавлен отдельно.
 
-## 1. Текущие цели и границы
+## 2. Текущая цель и обязательные границы
 
-- Сохранить Quick workflow на существующем Custom Net/Preview3D/Render пути.
-- Поддерживать Technical workflow через canonical PBD model, canonical
-  `pbd.svg.v4` bytes и sandboxed CartonFoldViewer iframe.
-- Передавать artwork atlas, state и GLB по versioned host contracts без
-  дублирования geometry/model pipeline.
-- Подготовить общий Render source boundary, но не включать Technical Render до
-  отдельного visual/export/resource acceptance.
-- Все Technical profiles остаются `referenceOnly=true` и
-  `productionCertified=false`; `technicalRender=false`.
+**Release 2 visual/resource gate закрыт локально.** Следующий рабочий рубеж —
+bounded **Stage 7B — `TechnicalRenderSceneSource`**.
 
-## 2. Завершённые задачи
+Для Stage 7B сохраняются следующие границы:
 
-- Workflow selection, guarded Technical transition, Quick compatibility,
-  persistence/archive round-trip и Technical Place Artwork.
-- Canonical Technical SVG export and provenance, semantic LINE/ARC snapping,
-  printable/DPI preflight и Stage 4E technical flat PDF/artwork export.
-- Stage 6A: Technical Preview iframe with sandbox `allow-scripts`, CSP/offline
-  policy, Quick/Technical routing, lifecycle cancel/dispose and host protocol.
-- Stage 6B: persisted animation/progress/normalized-camera `technicalViewer`
-  state, state acknowledgements, generation guards and texture-only artwork
-  updates.
-- Stage 7A: `src/render/RenderSceneSource.js` boundary with
-  `LegacyRenderSceneSource`; `WebGLCartonRenderer` delegates render surface,
-  artwork replacement, camera operations, export, diagnostics and disposal.
-- Viewer artifact `carton-fold-viewer@2.4.0` rebuilt from producer commit
-  `685e039` and transactionally synchronized.
-- Latest viewer correction: artwork atlas is applied to panel outside caps only;
-  inner caps are white paper without atlas/finish maps, and crease backfaces are
-  hidden. Canonical geometry, UVs and fold graph are unchanged.
+- Quick workflow использует существующие Quick geometry, Preview и Render пути.
+- Technical workflow использует canonical `pbd.model.v1`, canonical
+  `pbd.svg.v4` и один CartonFoldViewer runtime.
+- Для Technical остаются `referenceOnly=true`, `productionCertified=false` и
+  `technicalRender=false`.
+- Technical Render нельзя подменять Quick `BoxNetModel`, `Preview3D`,
+  `BoxScene` или второй SVG/3D parser.
+- Canonical PBD model/SVG являются источником diecut, panel IDs, fold lines,
+  artwork coordinates и плоской 3D-геометрии.
+- Производные 3D-эффекты не должны записываться обратно в canonical JSON/SVG.
 
-## 3. Pinned plugin artifacts
+## 3. Что завершено
+
+### Viewer runtime и Technical Preview
+
+- Stage 5 runtime реализован: semantic SVG parse/build, global flat-net UV,
+  `setArtworkAtlas`, texture-only replacement, fold selection/progress,
+  headless GLB export, embedded host protocol и idempotent disposal.
+- Stage 6 Technical Preview подключён в Step 3 через sandboxed/offline iframe.
+  Сохраняются animation, fold progress и normalized camera state.
+- Artwork наносится только на внешние caps. Внутренние caps остаются белой
+  бумагой; atlas и finish maps внутрь не проецируются.
+- 2D artwork atlas и Viewer UV используют один canonical SVG `viewBox`.
+  `cartonModelBridge` делегирует `getCanonicalViewBoxBounds()` и
+  `getPresentationTransform()`, поэтому artwork больше не рассчитывается от
+  плотного geometry bounds.
+- Ориентация atlas согласована с 2D редактором; asymmetric artwork не должен
+  зеркалиться или переворачиваться.
+- Интерактивный Preview отправляет `exportGlb:false`. Host завершает load после
+  `MODEL_LOADED`; тяжёлый GLB собирается только по явному export-сценарию.
+- Finish maps создаются условно, только когда в artwork действительно есть
+  отделка.
+- Preview и Quick Render используют доступную высоту viewport; повторный вход в
+  шаг не должен менять размер canvas или оставлять большую пустую область снизу.
+
+### Каноническая геометрия и сгибы
+
+- Удалены изменения panel polygons/fold lines, которые ранее сдвигали 3D diecut
+  относительно canonical SVG.
+- Для reference-only/non-certified carton hinge профиль остаётся каноническим:
+  `creaseWidthMm=0`, `bendRadiusMm=0`. Панельные caps при Fold 0 совпадают с SVG
+  с допуском `1e-4 mm` и не подрезаются на `t/2`.
+- Скруглённый вид сгиба сохранён отдельными curved outer/inner hinge skins без
+  изменения canonical panel contour. Endpoint rim triangles отсутствуют.
+- Finite crease width/radius и связанный panel trimming допустимы только при
+  явно сертифицированном physical crease profile.
+- Последовательность сборки восстановлена: glue flap сначала выполняет свой
+  90-degree fold, затем участвует в складывании корпуса; tuck tongue остаётся
+  дочерним сгибом major flap.
+- Визуальные артефакты стыков подавляются без изменения diecut:
+  polygon offset применяется только к внешней поверхности crease,
+  `logarithmicDepthBuffer` включён, anisotropy берётся из renderer capability и
+  ограничивается максимумом 16.
+
+### Render foundation, sync и публикация
+
+- Stage 7A завершён: `RenderSceneSource` и `LegacyRenderSceneSource` отделяют
+  источник геометрии от общего Render UI/scene/camera/export/disposal.
+- Built-in HDRI заменены с 4K на 1K варианты; runtime manifest и тесты обновлены.
+- Viewer `a9ec05e` собран с provenance gate и синхронизирован штатной командой.
+- Windows sync теперь имеет recoverable fallback для `EPERM`/`EACCES`, когда
+  dev server/file watcher блокирует rename plugin directory. При ошибке более
+  поздней активации предыдущий artifact восстанавливается.
+- Builder `8cfbf9b` опубликован на GitHub Pages; публичный plugin catalog содержит
+  ожидаемый Viewer source commit и artifact hash.
+- Release 2 focused stabilization закрыта отдельными локальными срезами:
+  lazy Preview activation, texture-composition timeout, Basic GLB warning,
+  Render autosave, HDRI source-resolution baseline и Showcase publication.
+- Showcase снова входит в production `dist` при сохранённом `publicDir: 'vendor'`;
+  source и build содержат одинаковые `index.html`, `viewer.html` и assets.
+- Release 2 полный unit/build/browser gate выполнен на свежем `dist`; единственный
+  custom HDRI timeout из полного browser run был вызван приостановкой host и
+  прошёл при изолированном повторе без изменений кода.
+
+## 4. Ключевые технические решения
+
+1. **Один источник геометрии.** PBD создаёт JSON и semantic SVG из одного
+   `currentModel`; Viewer строит модель только из этого semantic SVG.
+2. **Flat state равен diecut.** При Fold 0 вершины panel caps и fold endpoints
+   должны совпадать с canonical SVG. Толщина материала не даёт права менять
+   контур reference-only развёртки.
+3. **Один coordinate frame для artwork.** Artwork хранится в canonical SVG mm;
+   texture composer и global UV используют canonical `viewBox`, включая его
+   `minX/minY` и технологические поля.
+4. **Стороны материала разделены.** Outside получает artwork/finish; inside —
+   белую бумагу; edge и crease имеют отдельные материалы.
+5. **Preview не ждёт GLB.** Интерактивная модель становится доступной после
+   Three.js build; GLB export остаётся отдельной операцией.
+6. **Producer-first packaging.** Viewer изменяется и коммитится в producer,
+   затем `npm run build:plugin`, затем штатный `plugins:sync:viewer` в Builder.
+   Ручные изменения `vendor/plugins/` запрещены.
+7. **Fail-closed security.** Plugin hashes, CSP/offline policy, origin/session
+   checks и payload limits не ослабляются ради обхода ошибки.
+8. **Focused browser verification.** После исправления одного browser test
+   сначала запускается только его spec/test title. Полный browser suite нужен
+   только для соответствующего release gate; build и Playwright не запускаются
+   одновременно против общего `dist`.
+
+## 5. Основные изменённые файлы
+
+### CartonBuilder
+
+- `src/main.js` — canonical bounds/presentation bridge, conditional finish maps,
+  non-blocking Technical Preview payload.
+- `src/host/viewerHostProtocol.js` — `exportGlb:false` load completion и
+  versioned viewer state/artwork contracts.
+- `src/carton/TechnicalCartonDocument.js` и
+  `src/carton/technicalBoxModelAdapter.js` — canonical `viewBox` boundary.
+- `src/preview3d/textureComposer.js` — canonical atlas bounds and orientation.
+- `src/preview3d/BoxScene.js`, `src/render/WebGLCartonRenderer.js` и
+  `src/styles/main.css` — stable Preview/Render viewport sizing.
+- `src/render/environmentAssets.js` и
+  `public/render-environments/polyhaven/` — 1K built-in HDRI set.
+- `vite.config.js` и `tests/e2e/showcase.spec.js` — byte-for-byte publication
+  Showcase при сохранённом vendored plugin public root.
+- `scripts/lib/atomicManifestSync.mjs` — Windows locked-directory activation and
+  rollback.
+- `tests/unit/plugins/pluginsVerification.test.js`,
+  `tests/unit/preview3dTexture.test.js`,
+  `tests/unit/carton/technicalBoxModelAdapter.test.js`,
+  `tests/e2e/technicalPreview.spec.js`, `tests/e2e/preview3d.spec.js` и
+  `tests/e2e/render.spec.js` — relevant regression coverage.
+- `vendor/plugins/carton-fold-viewer/2.4.0/` и
+  `vendor/plugins/plugins.manifest.json` — generated synchronized output.
+
+### CartonFoldViewer producer
+
+- `src/pbd/semantic-svg.js` — canonical parse without panel/fold mutation.
+- `src/geometry/crease-geometry.js` — certified finite crease versus canonical
+  zero-width hinge, curved hinge skins and endpoint handling.
+- `src/geometry/materials.js` — outside/inside/edge/crease material policy and
+  outer-crease-only depth bias.
+- `src/model/model-builder.js` — canonical panel/hinge hierarchy.
+- `src/animation/fold-animations.js` и
+  `src/animation/motion-models/tuck-standard.js` — glue flap/tuck sequence.
+- `src/runtime/FoldRuntime.js` — artwork maps, texture-only updates, renderer
+  anisotropy cap and disposal.
+- `src/viewer/ViewerApp.js` — logarithmic depth buffer and capability handoff.
+- `tests/test_canonical_flat_geometry.mjs`,
+  `tests/test_canonical_hinge_runtime.mjs`, `tests/test_global_uv.mjs`,
+  `tests/test_artwork_atlas.mjs`, `tests/test_asymmetric_atlas.mjs` и
+  `tests/test_host_protocol.mjs` — canonical/runtime acceptance.
+
+## 6. Pinned plugin artifacts
 
 Source of truth: `vendor/plugins/plugins.manifest.json`.
 
-| Plugin | Source commit | Entrypoint SHA-256 | Manifest SHA-256 |
-|---|---|---|---|
-| Packaging Box Designer 1.2.0 | `1208f9188e662895cb66a3e3138fa2ac2fadc511` | `1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904` | `16a19e1b3311c008052cf3ce6e459ccdceafbb7d5facc52b5f03c649466fad87` |
-| CartonFoldViewer 2.4.0 | `685e039328f8ae3ba34faaad93d4e6c299663557` | `054dd11c2dd7d6f0f145e75fc6111e7a127b5e0ad2fcd30e2670bded63c2d480` | `fe4ff2408abc06472a8341cec6df66e0cb9b6288fb48a1e2c9402f680241a2c5` |
+| Plugin | Source commit | Entrypoint bytes | Entrypoint SHA-256 | Manifest SHA-256 |
+|---|---|---:|---|---|
+| CartonFoldViewer 2.4.0 | `a9ec05e93f5bd28f0822ed8f5c110897a36a135a` | 1,096,653 | `32777906a7dcee477732b3248e3afce844b5e618c3a71b65bfcb816d12456e7b` | `477b56a2fb77defea89b2726db423785b358be97859fe04990ac0180ef3d4969` |
+| Packaging Box Designer 1.2.0 | `1208f9188e662895cb66a3e3138fa2ac2fadc511` | 598,887 | `1047e4083f1426e43bb413047ebdcddd49388415203ec7ab1469b09c3f208904` | `16a19e1b3311c008052cf3ce6e459ccdceafbb7d5facc52b5f03c649466fad87` |
 
-Viewer artifact entrypoint byte length: `1,096,292`. Contracts remain
-`carton-workflow.v1`, `pbd.model.v1` and `pbd.svg.v4`; capabilities remain
-`foldPreview=true`, `technicalRender=false`, `referenceOnly=true` and
-`productionCertified=false`.
+Оба manifest сохраняют `referenceOnly=true`, `productionCertified=false`,
+`technicalRender=false`, sandbox `allow-scripts`, CSP и no-external-network
+policy.
 
-## 4. Основные файлы integration
+## 7. Тестирование и проверки
 
-- `src/host/pbdHostProtocol.js` and `src/host/viewerHostProtocol.js` — source,
-  origin, session, integrity and viewer state/artwork contracts.
-- `src/carton/TechnicalCartonDocument.js`,
-  `src/carton/technicalBoxModelAdapter.js` and
-  `src/carton/technicalPresentation.js` — canonical Technical model boundary.
-- `src/project/projectSchema.js`, `src/project/projectArchive.js` and
-  `ProjectCheckpoint.js` — schema/archive/state persistence.
-- `src/render/RenderSceneSource.js` and `src/render/WebGLCartonRenderer.js` —
-  Stage 7A render source boundary.
-- `src/main.js`, `index.html`, `src/styles/main.css`, `src/i18n.js` — workflow,
-  preview and current UI boundary.
-- `vendor/plugins/carton-fold-viewer/2.4.0/` and
-  `vendor/plugins/plugins.manifest.json` — generated synchronized artifact;
-  update only via producer build plus `plugins:sync:viewer`.
-- `tests/unit/viewerHostProtocol.test.js`,
-  `tests/e2e/technicalPreview.spec.js`, `tests/e2e/preview3d.spec.js`,
-  `tests/e2e/app.spec.js` — relevant acceptance coverage.
-
-Plan and evidence sources:
-
-- `docs/17. dual-workflow-plugin-integration-plan.md`
-- `docs/18. integration-manifest.md`
-
-## 5. Подтверждённые проверки текущего среза
+Актуальные проверки от 2026-09-02:
 
 | Проверка | Результат |
 |---|---|
-| Producer `npm run build:plugin` | **PASS**, provenance gate and 13/13 regression suites |
-| Producer artwork/UV/headless/host focused tests | **PASS**: 4 focused suites |
-| `npm run plugins:sync:viewer -- --source C:\Projects\CartonFoldViewer-stage1\dist\plugins\carton-fold-viewer\2.4.0` | **PASS**, transactional sync |
-| `npm run plugins:verify` | **PASS**, 2 plugins, manifest/hash/CSP/offline checks |
-| `git diff --check` | **PASS**; only CRLF conversion warnings on existing UI files |
+| Producer `python tests/run_regression.py` | **PASS: 15/15**, 0 failed, 11.88 s |
+| Producer `npm run build:plugin` для commit `a9ec05e` | **PASS**, provenance gate; artifact values совпадают с таблицей выше |
+| Builder `npm run plugins:verify` | **PASS**, 2 plugins, hashes/manifests/CSP/offline static policy |
+| Builder local `npm run test:unit` | **PASS: 79 files, 586/586 tests**, 12.15 s |
+| Builder local `npm run build` | **PASS: 398 modules**, plugin integrity PASS, Vite build 9.61 s |
+| Builder full Chromium E2E | **ACCEPTED: 124/125 in full run + isolated custom HDRI retry PASS**, всего 125 сценариев подтверждены |
+| Showcase source/dist | **PASS: 6/6 files byte-for-byte**, published HTML/viewer/MP3 present |
+| GitHub Pages deploy run `33501418758` | **PASS**, HEAD `8cfbf9b`, completed 2026-09-01 |
+| Public `plugins/plugins.manifest.json` | **HTTP 200**, Viewer commit/hash/bytes совпадают с local catalog |
+| `git diff --check` до обновления handoff | **PASS** в обоих repositories |
 
-Previous acceptance evidence remains useful but was not rerun after this final
-vendor artifact sync: CartonBuilder unit baseline 573/573, build baseline 396
-Vite modules, Stage 6A focused Technical Preview 2/2, smoke 7/7 and the
-earlier Stage 4E export gates. Do not report those as a fresh post-sync browser
-run without rerunning the affected specs.
+Полный browser gate выполнялся последовательно после production build. Его
+показатель `9.7h` не является performance evidence: во время custom HDRI test
+host был приостановлен, trace содержит скачок часов на уже удовлетворённом
+`renderRecovery` assertion. Изолированный повтор этого единственного test прошёл
+за 1.0 min; остальные 124 проходящих browser tests повторно не запускались.
 
-## 6. Известные проблемы и открытые границы
+## 8. Известные проблемы и незакрытые gates
 
-- Release 2 broader visual/resource gate is open. It must cover 2D↔3D panel
-  mapping, outer-only artwork, GLB/resource round-trip, texture replacement and
-  repeated dispose/reload behavior.
-- Technical Render remains disabled. Do not route Technical through Quick
-  `BoxNetModel`, `Preview3D` or `BoxScene`.
-- Technical production-assist/prepress, material/converter profiles, Spot
-  Gloss/Foil/Emboss/Deboss and physical folded-sample certification are not
-  implemented or certified.
-- Host payload limits are fail-closed. `payload-too-large`/`maxGlbBytes` must be
-  handled as an explicit contract error, not bypassed by relaxing validation.
-- The integration tree is intentionally dirty. Do not reset or overwrite the
-  four existing UI files, generated vendor changes or this status update.
-- Do not run Playwright against shared `dist` concurrently with `npm run build`;
-  this previously caused transient empty DOM and false timeouts. Run browser
-  suites after build and sequentially, focusing on the affected spec.
-- GitHub Actions and deployment automation remain disabled unless explicitly
-  re-authorized.
+- Известных падающих Release 2 focused/browser tests после acceptance gate нет.
+- Release 2 закрыт как reference-only integration gate; это не меняет
+  `productionCertified=false` и не является physical folded-sample certification.
+- Technical Render не реализован: Stage 7B
+  `TechnicalRenderSceneSource` остаётся следующим архитектурным срезом.
+- Production-assist/prepress profiles, converter/material evidence, physical
+  folded-sample certification и полноценные finish gates не завершены.
+- Producer repository нельзя push до настройки remote.
+- GitHub Actions намеренно отключены после последней публикации. Для следующего
+  deploy их нужно временно включить по явному разрешению и снова отключить после
+  подтверждённой публикации.
+- Payload limits остаются fail-closed. `payload-too-large` нельзя исправлять
+  увеличением лимита без отдельного contract/risk review.
 
-## 7. Опробованные и отвергнутые подходы
+## 9. Опробованные и отвергнутые подходы
 
-- Manual edits in `vendor/plugins/`: rejected; producer commit → provenance
-  build → transactional sync is the only supported artifact flow.
-- A second parser, SVG-only/alternative 3D model or Quick geometry reuse for
-  Technical: rejected; canonical PBD model and one semantic runtime remain the
-  source of truth.
-- Generic Technical SVG export: rejected because it loses canonical metadata,
-  provenance and exact LINE/ARC semantics.
-- `DoubleSide` on the panel artwork material: rejected because the atlas then
-  appears on inner caps; the synchronized viewer now uses explicit outside,
-  inside-paper and edge material groups.
-- Splitting crease meshes into multiple material groups: rejected because it
-  changes GLB primitive identity and breaks fold/UV checks; the crease remains a
-  single `FrontSide` material.
-- Parallel Playwright and build against shared `dist`: rejected because it
-  produces transient empty DOM/timeouts.
-- Relaxing payload limits for oversized GLB: rejected; the host contract must
-  remain fail-closed.
+- **Ручное редактирование vendored Viewer.** Приводит к расхождению
+  sourceCommit/hash и producer source; заменено producer build + official sync.
+- **Fallback crease width = thickness и radius = thickness/2.** Подрезал panel
+  caps на `t/2`, поэтому 3D diecut расходился с technical dieline; отменён.
+- **In-place CAD compensation в semantic parser.** Сдвигала panel polygons и
+  folds относительно SVG; удалена.
+- **Polygon offset на panel inside и жёсткий anisotropy=16.** Маскировали
+  симптомы и зависели от GPU; заменены outer-crease-only bias и renderer cap.
+- **`DoubleSide` для artwork.** Печатал atlas на внутренней стороне; заменён
+  явными outside/inside material groups.
+- **Разбиение crease на дополнительные material primitives.** Меняло GLB
+  primitive identity и ломало fold/UV assumptions; не используется.
+- **Второй parser/model или Quick geometry для Technical.** Нарушает единый
+  canonical source; запрещено архитектурой.
+- **Обязательный GLB export при каждом входе в Preview.** Блокировал Step 3;
+  заменён `exportGlb:false` для интерактивного load.
+- **Ослабление payload/CSP/integrity checks.** Отклонено; ошибки должны
+  обрабатываться в рамках versioned contract.
+- **Directory rename без fallback на Windows.** Dev watcher вызывал
+  `EPERM`/`EACCES`; добавлена entry-by-entry activation с rollback.
+- **Полный Playwright rerun после каждого локального исправления.** Избыточен;
+  сначала запускается только падающий test/spec, а полный gate — один раз перед
+  release acceptance.
 
-## 8. Следующие шаги
+## 10. Безопасная последовательность продолжения
 
-1. Review the exact integration diff and decide whether the existing UI cleanup,
-   generated plugin sync and this handoff should be committed together or as
-   separate reviewed commits.
-2. Run sequential CartonBuilder verification on the synchronized artifact:
-   `npm run plugins:verify`, `npm run test:unit`, `npm run build`, then the
-   affected Technical Preview/Render browser specs with `--workers=1`.
-3. Close the Release 2 visual/resource gate; keep `technicalRender=false` and
-   both certification flags unchanged until evidence is complete.
-4. Continue Stage 7B — TechnicalRenderSceneSource — only through the existing
-   `RenderSceneSource` boundary and without duplicating Quick geometry.
-5. Only after local acceptance, handle publication/deployment as a separate
-   explicitly authorized operation.
-
-## 9. Безопасный порядок продолжения
-
-1. Read this file, `docs/17. dual-workflow-plugin-integration-plan.md` and the
-   relevant sections of `docs/18. integration-manifest.md`.
-2. Check `git status --short` and `git log -10 --oneline --decorate` in
-   `C:\Projects\CartonBuilder_1-stage1`.
-3. Preserve the dirty UI/vendor boundary; never use reset/checkout to discard it.
-4. Run focused checks first, then unit/build, then affected browser specs
-   sequentially. Finish with `plugins:verify`, `git diff --check` and exact Git
-   status.
-5. Use the producer repository for any future viewer change; after its commit,
-   run `npm run build:plugin` there and then sync with:
+1. Прочитать этот файл, `docs/17. dual-workflow-plugin-integration-plan.md` и
+   разделы Stage 6B/7A в `docs/18. integration-manifest.md`.
+2. Проверить оба worktree:
 
    ```powershell
-   Set-Location "C:\Projects\CartonBuilder_1-stage1"
+   Set-Location "C:\Projects\CartonBuilder_1"
+   git status --short
+   git log -5 --oneline --decorate
+
+   Set-Location "C:\Projects\CartonFoldViewer-stage1"
+   git status --short
+   git log -5 --oneline --decorate
+   ```
+
+3. Release 2 acceptance уже закрыт. Не перезапускать полный gate после каждого
+   изменения; сначала использовать только affected unit/spec tests. Build и
+   Playwright не запускать одновременно против общего `dist`.
+4. Если требуется Viewer fix, менять только producer. Запустить релевантный
+   focused test, затем `python tests/run_regression.py`, commit и
+   `npm run build:plugin`.
+5. Синхронизировать только штатно:
+
+   ```powershell
+   Set-Location "C:\Projects\CartonBuilder_1"
    npm run plugins:sync:viewer -- --source "C:\Projects\CartonFoldViewer-stage1\dist\plugins\carton-fold-viewer\2.4.0"
    npm run plugins:verify
    ```
+
+6. В Builder сначала запускать affected unit/spec tests. Полный unit/build/browser
+   gate повторять только перед следующим release acceptance по отдельному
+   согласованию.
+7. Начать bounded Stage 7B через существующий `RenderSceneSource`: сначала
+   `TechnicalRenderSceneSource` contract/source adapter и focused unit tests.
+   Не включать `technicalRender`, Render UI routing, exports или certification
+   flags до отдельного acceptance.
+8. Перед совместной работой с producer настроить его remote. Публикацию Builder
+   выполнять только по явной команде: enable Actions → push/deploy → проверить
+   Pages и public manifest → disable Actions.

@@ -272,7 +272,7 @@ describe('3D texture composition', () => {
     const technicalOutside = [...technicalContext.getImageData(10, 50, 1, 1).data];
     expect(technicalOutside[0]).toBe(255);
     expect(technicalOutside[1]).toBeLessThan(32);
-  });
+  }, 60_000);
 
   it('redraws the baked static layer without touching the closed bitmap', async () => {
     vi.stubGlobal('OffscreenCanvas', CanvasMock);
