@@ -301,7 +301,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
   replaceArtwork(artworkAtlas, maps = {}) {
     this._assertActive();
     if (!this._model) throw new Error('Technical render scene is not built.');
-    return this.runtime.setArtworkAtlas(artworkAtlas, maps);
+    return this.runtime.setArtworkAtlas(artworkAtlas, maps ?? {});
   }
 
   setBoardAppearance(boardAppearance) {
