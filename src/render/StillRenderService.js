@@ -91,9 +91,13 @@ export async function renderStill({
     outputContext.fillRect(0, 0, result.width, result.height);
   }
   outputContext.drawImage(pixelCanvas, 0, 0);
-  return canvasToBlob(
+  const blob = await canvasToBlob(
     outputCanvas,
     mimeType,
     normalizedFormat === 'jpeg' ? renderSettings.output.jpegQuality : undefined,
   );
+  // Encoding is asynchronous in browser and OffscreenCanvas implementations.
+  // A cancellation that arrives during encoding must not publish its Blob.
+  assertNotAborted(signal);
+  return blob;
 }

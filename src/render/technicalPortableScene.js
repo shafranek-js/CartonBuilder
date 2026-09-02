@@ -194,6 +194,7 @@ export function createTechnicalPortableScene({
   foldGraph,
   renderSurface,
   runtimeResult,
+  metadata = null,
   options = {},
 } = {}) {
   if (!isObject3D(model)) {
@@ -211,10 +212,14 @@ export function createTechnicalPortableScene({
   const resources = createResourceMaps();
   const scene = new Scene();
   scene.name = 'CartonBuilder Technical GLB';
+  const detachedMetadata = metadata === null ? {} : cloneUserData(metadata);
   scene.userData.cartonBuilder = {
+    ...detachedMetadata,
     source: 'technical',
     sourceUnit: 'mm',
     exportUnit: 'm',
+    referenceOnly: true,
+    productionCertified: false,
     foldProgress: 1,
     static: true,
     materialMode: normalized.materialMode,

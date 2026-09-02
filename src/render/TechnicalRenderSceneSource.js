@@ -21,6 +21,7 @@ function getSemanticSvgText(input) {
 function normalizeBuildRequest(input, positionalArtworkAtlas, positionalMaps, positionalName) {
   if (typeof input === 'string') {
     return {
+      bundle: null,
       semanticSvg: input,
       artworkAtlas: positionalArtworkAtlas,
       maps: positionalMaps || {},
@@ -37,11 +38,38 @@ function normalizeBuildRequest(input, positionalArtworkAtlas, positionalMaps, po
     || request;
   const semanticSvg = getSemanticSvgText(semanticSvgSource);
   return {
+    bundle,
     semanticSvg,
     artworkAtlas: request.artworkAtlas ?? request.atlas ?? positionalArtworkAtlas,
     maps: request.maps ?? request.materialMaps ?? positionalMaps ?? {},
     name: request.name || semanticSvgSource?.fileName || positionalName || 'technical-carton.svg',
   };
+}
+
+function exportMetadataFromBundle(bundle) {
+  if (!isObject(bundle)) return null;
+  const source = isObject(bundle.source) ? bundle.source : {};
+  return structuredClone({
+    source: 'technical',
+    contractVersion: bundle.contractVersion,
+    producer: source.producer,
+    producerVersion: source.producerVersion,
+    modelEngineVersion: source.modelEngineVersion,
+    contractPackageVersion: source.contractPackageVersion,
+    artifactVersion: source.artifactVersion,
+    artifactSha256: source.artifactSha256,
+    modelSchemaVersion: source.modelSchemaVersion,
+    svgSchemaVersion: source.svgSchemaVersion,
+    cartonType: source.cartonType,
+    profileIds: Array.isArray(source.profileIds) ? source.profileIds.slice() : [],
+    modelSha256: bundle.modelJson?.sha256,
+    svgSha256: bundle.semanticSvg?.sha256,
+    semanticSvgAssetId: bundle.semanticSvg?.assetId,
+    referenceOnly: true,
+    productionCertified: false,
+    sourceUnit: 'mm',
+    exportUnit: 'm',
+  });
 }
 
 function normalizeBounds(bounds) {
@@ -130,6 +158,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
     this.boundsResolver = boundsResolver;
     this.boardAppearanceSetter = boardAppearanceSetter || setBoardAppearance;
     this._runtimeResult = null;
+    this._exportMetadata = null;
     this._model = null;
     this._foldGraph = null;
     this._bounds = null;
@@ -175,6 +204,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
 
   _clearBuildState() {
     this._runtimeResult = null;
+    this._exportMetadata = null;
     this._model = null;
     this._foldGraph = null;
     this._bounds = null;
@@ -277,6 +307,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
         || null;
 
       this._runtimeResult = runtimeResult;
+      this._exportMetadata = exportMetadataFromBundle(request.bundle);
       this._model = candidateModel;
       this._foldGraph = foldGraph;
       this._bounds = bounds;
@@ -339,6 +370,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
       foldGraph: this._foldGraph,
       renderSurface: this._renderSurface,
       runtimeResult: this._runtimeResult,
+      metadata: this._exportMetadata,
       options: structuredClone(options),
     });
     if (!isObject(portable) || !portable.scene || typeof portable.dispose !== 'function') {

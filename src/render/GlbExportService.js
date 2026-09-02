@@ -34,6 +34,9 @@ export async function exportGlb({
   assertNotAborted(signal);
   onProgress(0);
   const portable = renderer.createPortableScene(normalized);
+  let resultBlob = null;
+  let operationError = null;
+  let cleanupError = null;
   try {
     assertNotAborted(signal);
     const exporter = new GLTFExporter();
@@ -46,8 +49,17 @@ export async function exportGlb({
     const buffer = toArrayBuffer(result);
     if (buffer.byteLength < 32) throw new Error('GLB export returned an empty asset.');
     onProgress(1);
-    return new Blob([buffer], { type: 'model/gltf-binary' });
+    resultBlob = new Blob([buffer], { type: 'model/gltf-binary' });
+  } catch (error) {
+    operationError = error;
   } finally {
-    portable.dispose?.();
+    try {
+      portable.dispose?.();
+    } catch (error) {
+      cleanupError ||= error;
+    }
   }
+  if (operationError) throw operationError;
+  if (cleanupError) throw cleanupError;
+  return resultBlob;
 }

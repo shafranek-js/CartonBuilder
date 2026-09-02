@@ -59,6 +59,9 @@ export async function exportTurntable({
   const originalCamera = currentCameraState(renderer);
   const zip = new ZipWriter(new BlobWriter('application/zip'));
   let closed = false;
+  let result = null;
+  let operationError = null;
+  let cleanupError = null;
   try {
     for (let index = 0; index < normalized.frames; index += 1) {
       assertNotAborted(signal);
@@ -88,17 +91,27 @@ export async function exportTurntable({
       await zip.add(frameFileName(index, normalized.format), new BlobReader(blob));
       onProgress((index + 1) / normalized.frames);
     }
-    const result = await zip.close();
+    result = await zip.close();
     closed = true;
-    return result;
+    assertNotAborted(signal);
+  } catch (error) {
+    operationError = error;
   } finally {
-    renderer.setCameraState?.(originalCamera);
+    try {
+      renderer.setCameraState?.(originalCamera);
+    } catch (error) {
+      cleanupError ||= error;
+    }
     if (!closed) {
       try {
         await zip.close();
-      } catch {
-        // Abort/error cleanup is best effort; no partial Blob is published.
+      } catch (error) {
+        cleanupError ||= error;
       }
     }
   }
+
+  if (operationError) throw operationError;
+  if (cleanupError) throw cleanupError;
+  return result;
 }
