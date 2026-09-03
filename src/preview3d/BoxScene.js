@@ -90,20 +90,23 @@ function clonePortableTexture(texture) {
 function clonePortableMaterial(material, materialMode) {
   if (!material) return material;
   if (materialMode === 'basic-compatibility' && material.isMeshPhysicalMaterial) {
-    return new MeshStandardMaterial({
+    const params = {
       color: material.color?.clone?.() || 0xffffff,
       map: clonePortableTexture(material.map),
       metalnessMap: clonePortableTexture(material.metalnessMap),
       roughnessMap: clonePortableTexture(material.roughnessMap),
       normalMap: clonePortableTexture(material.normalMap),
-      normalScale: material.normalScale?.clone?.(),
       roughness: Number.isFinite(material.roughness) ? material.roughness : 0.8,
       metalness: Number.isFinite(material.metalness) ? material.metalness : 0,
       side: material.side,
       transparent: material.transparent,
       opacity: material.opacity,
       alphaTest: material.alphaTest,
-    });
+    };
+    if (material.normalScale) {
+      params.normalScale = material.normalScale.clone?.();
+    }
+    return new MeshStandardMaterial(params);
   }
   const clone = material.clone();
   for (const key of Object.keys(clone)) {
@@ -358,7 +361,7 @@ function makeExteriorMaterial(preset, texture, materialMaps = null) {
   // profile itself is Matte: spot gloss and embossed relief need clearcoat or
   // normal-map inputs that MeshStandardMaterial cannot represent.
   if (preset === 'photorealistic' || preset === 'gloss' || materialMaps || presentation.clearcoat > 0) {
-    return new MeshPhysicalMaterial({
+    const params = {
       map: texture,
       metalnessMap: materialMaps?.metalness || null,
       roughnessMap: materialMaps?.roughness || null,
@@ -370,8 +373,11 @@ function makeExteriorMaterial(preset, texture, materialMaps = null) {
       metalness: presentation.metalness,
       clearcoat: materialMaps?.clearcoat ? 1 : presentation.clearcoat,
       clearcoatRoughness: materialMaps?.clearcoatRoughness ? 1 : presentation.clearcoatRoughness,
-      normalScale: materialMaps?.normal ? new Vector2(0.55, 0.55) : undefined,
-    });
+    };
+    if (materialMaps?.normal) {
+      params.normalScale = new Vector2(0.55, 0.55);
+    }
+    return new MeshPhysicalMaterial(params);
   }
   return new MeshStandardMaterial({
     map: texture,
