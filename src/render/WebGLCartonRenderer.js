@@ -237,9 +237,31 @@ export class WebGLCartonRenderer {
     this.qualityManager.markInteraction();
   }
 
+  _ensureCameraAspectMatchesViewport() {
+    const canvasAspect = this.sceneController?.surface?._getViewportAspect?.();
+    const camera = this.sceneController?.renderSurface?.camera;
+    if (camera && Number.isFinite(canvasAspect) && canvasAspect > 0) {
+      if (camera.isPerspectiveCamera) {
+        if (Math.abs(camera.aspect - canvasAspect) > 1e-4) {
+          camera.aspect = canvasAspect;
+          camera.updateProjectionMatrix();
+        }
+      } else {
+        const height = camera.top - camera.bottom;
+        const targetWidth = height * canvasAspect;
+        if (Math.abs((camera.right - camera.left) - targetWidth) > 1e-4) {
+          camera.left = -targetWidth / 2;
+          camera.right = targetWidth / 2;
+          camera.updateProjectionMatrix();
+        }
+      }
+    }
+  }
+
   updateCamera(camera) {
     const previousCameraObject = this.sceneController.renderSurface.camera;
     this.sceneController.setCameraState(camera);
+    this._ensureCameraAspectMatchesViewport();
     if (this.sceneController.renderSurface.camera !== previousCameraObject) {
       this.postProcessing.setScene(
         this.sceneController.renderSurface.scene,
@@ -261,11 +283,15 @@ export class WebGLCartonRenderer {
   }
 
   fitCameraToFrame(options = {}) {
-    return this.sceneController.fitCameraToFrame(options);
+    const result = this.sceneController.fitCameraToFrame(options);
+    this._ensureCameraAspectMatchesViewport();
+    return result;
   }
 
   resetView(options = {}) {
-    return this.sceneController.resetView(options);
+    const result = this.sceneController.resetView(options);
+    this._ensureCameraAspectMatchesViewport();
+    return result;
   }
 
   replaceArtwork(textureCanvas, materialMaps = null, sceneModel = null) {

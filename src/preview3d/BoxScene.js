@@ -1968,8 +1968,8 @@ export class BoxScene {
       this.camera.position.copy(target).addScaledVector(safeDirection, distance);
       this.perspectiveCamera.near = Math.max(0.01, radius / 1000);
       this.perspectiveCamera.far = Math.max(1000, distance + radius * 10);
-      this.perspectiveCamera.updateProjectionMatrix();
       this.perspectiveCamera.aspect = previousAspect;
+      this.perspectiveCamera.updateProjectionMatrix();
     } else {
       this.setOrthographicHeight(visibleHeight, frameAspect);
       const distance = Math.max(radius * 4, this.camera.position.distanceTo(this.controls.target));

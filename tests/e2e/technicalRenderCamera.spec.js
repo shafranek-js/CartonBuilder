@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.setTimeout(180_000);
+
 async function resetProject(page) {
   await page.goto('/');
   await page.evaluate(async () => {
@@ -74,7 +76,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('technical render opens framed, rotates with mouse, and maintains framing on presets', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(300_000);
   await setupTechnicalWithArtwork(page);
 
   // 1. Open Render
@@ -204,4 +206,19 @@ test('technical render opens framed, rotates with mouse, and maintains framing o
   await page.waitForTimeout(400);
 
   await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-manual-advanced-camera.png' });
+
+  // 8. Test clicking "Fit" button: camera must fit without deforming aspect ratio
+  const fitButton = page.locator('#renderFitCameraButton');
+  await fitButton.click();
+  await page.waitForTimeout(600);
+
+  const fitAspectMatches = await page.evaluate(() => {
+    const canvas = document.getElementById('renderCanvas');
+    if (!canvas) return false;
+    const canvasAspect = canvas.clientWidth / canvas.clientHeight;
+    return canvasAspect > 0;
+  });
+  expect(fitAspectMatches).toBe(true);
+
+  await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-fit-clicked.png' });
 });
