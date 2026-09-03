@@ -9,7 +9,16 @@ import {
   NoToneMapping,
   NeutralToneMapping,
 } from 'three';
-import { sanitizeEnvironmentMap } from './environmentAssets.js';
+import { getEnvironmentMapPreset, sanitizeEnvironmentMap } from './environmentAssets.js';
+
+const ENVIRONMENT_PALETTES = Object.freeze({
+  neutral: { key: 0xffffff, ground: 0x999999 },
+  warm: { key: 0xffd9a8, ground: 0xffc08a },
+  cool: { key: 0xbcd8ff, ground: 0x8fb8e8 },
+  bright: { key: 0xffffff, ground: 0xe0e5ea },
+  night: { key: 0x8fa8d8, ground: 0x10151f },
+  studio: { key: 0xffffff, ground: 0x73777a },
+});
 
 const DEFAULT_BACKGROUND_COLOR = '#e8eaeb';
 const DEFAULT_LIGHT_AZIMUTH = 63;
@@ -439,6 +448,7 @@ export class RenderStudioAppearanceController {
     if (this._backgroundMode === 'environment') {
       this.surface.renderSurface.scene.background = this._environmentTexture;
     }
+    this.surface.render?.();
   }
 
   _applyBackgroundTexture(texture) {
@@ -447,6 +457,20 @@ export class RenderStudioAppearanceController {
     if (this._backgroundMode === 'image') {
       this.surface.renderSurface.scene.background = this._backgroundTexture;
     }
+    this.surface.render?.();
+  }
+
+  _updateHemisphereForEnvironment(preset) {
+    if (!this.hemisphereLight) return;
+    if (preset === 'none') {
+      this.hemisphereLight.visible = false;
+    } else {
+      this.hemisphereLight.visible = true;
+      const palette = ENVIRONMENT_PALETTES[preset] || ENVIRONMENT_PALETTES.studio;
+      this.hemisphereLight.color?.set?.(palette.key);
+      this.hemisphereLight.groundColor?.set?.(palette.ground);
+    }
+    this.surface.render?.();
   }
 
   _applyToneMapping(mode) {
@@ -503,6 +527,7 @@ export class RenderStudioAppearanceController {
     if (this.disposed) return false;
     const generation = ++this._environmentGeneration;
     this._environmentPreset = args[0];
+    this._updateHemisphereForEnvironment(this._environmentPreset);
     return applyAsyncResult(
       this.environmentAdapter.setEnvironment(...args),
       (value) => this._applyEnvironmentTexture(resolveTexture(value) || (value === null ? null : undefined)),
@@ -515,6 +540,8 @@ export class RenderStudioAppearanceController {
     const generation = ++this._environmentGeneration;
     this._environmentMap = cloneEnvironmentMap(environmentMap);
     const map = this._environmentMap;
+    const legacyPreset = getEnvironmentMapPreset(map?.presetId)?.legacyPreset;
+    if (legacyPreset) this._updateHemisphereForEnvironment(legacyPreset);
     const scene = this.surface.renderSurface.scene;
     scene.environmentIntensity = map.intensity;
     scene.backgroundIntensity = map.backgroundIntensity;

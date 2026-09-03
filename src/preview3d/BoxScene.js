@@ -1175,8 +1175,23 @@ export class BoxScene {
     const usesLighting = map.source !== 'none' && (map.usage === 'lighting' || map.usage === 'both');
     const usesBackground = map.usage === 'background' || map.usage === 'both';
     this.scene.environment = usesLighting ? this.environmentTexture : null;
-    this.scene.environmentIntensity = Number(map.intensity ?? this.environmentIntensity) || 0;
+    this.scene.environmentIntensity = Number(this.environmentIntensity ?? map.intensity) || 0;
     this.scene.environmentRotation?.set?.(0, Number(map.rotation || 0) * Math.PI / 180, 0);
+    if (this.hemisphereLight) {
+      if (this.environmentPreset === 'none') {
+        this.hemisphereLight.visible = false;
+      } else {
+        this.hemisphereLight.visible = true;
+        const palette = ENVIRONMENT_PALETTES[this.environmentPreset];
+        if (palette) {
+          this.hemisphereLight.color.set(palette.key);
+          this.hemisphereLight.groundColor.set(palette.fill || palette.base);
+        } else {
+          this.hemisphereLight.color.set(0xffffff);
+          this.hemisphereLight.groundColor.set(0x73777a);
+        }
+      }
+    }
     if (this.backgroundMode === 'environment' && usesBackground) {
       this.scene.background = this.environmentEquirectangular || this.scene.background || new Color(this.backgroundColor);
       if (this.scene.background) {

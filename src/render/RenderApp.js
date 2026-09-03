@@ -2302,14 +2302,38 @@ export function createRenderApp({
   elements.azimuth.addEventListener('input', (event) => change((next) => { next.lighting.azimuth = Number(event.target.value); }));
   elements.elevation.addEventListener('input', (event) => change((next) => { next.lighting.elevation = Number(event.target.value); }));
   elements.intensity.addEventListener('input', (event) => change((next) => { next.lighting.intensity = Number(event.target.value); }));
-  elements.environment.addEventListener('change', (event) => change((next) => { next.lighting.environment = event.target.value; }));
+  const ENVIRONMENT_TO_MAP_PRESET = {
+    studio: 'neutral-softbox',
+    neutral: 'neutral-softbox',
+    warm: 'warm-studio',
+    cool: 'cool-studio',
+    bright: 'high-key',
+    night: 'dark-studio',
+    none: 'no-reflections',
+  };
+
+  elements.environment.addEventListener('change', (event) => change((next) => {
+    const value = event.target.value;
+    next.lighting.environment = value;
+    const mappedPresetId = ENVIRONMENT_TO_MAP_PRESET[value] || 'neutral-softbox';
+    next.lighting.environmentMap = {
+      ...next.lighting.environmentMap,
+      source: value === 'none' ? 'none' : 'builtin',
+      presetId: mappedPresetId,
+      assetId: '',
+    };
+  }));
   elements.environmentIntensity.addEventListener('input', (event) => change((next) => { next.lighting.environmentIntensity = Number(event.target.value); }));
   elements.environmentMapPreset?.addEventListener('change', async (event) => {
     const value = event.target.value;
     if (value === 'custom') return;
     environmentAssetLoadGeneration += 1;
     environmentAsset = null;
+    const preset = getEnvironmentMapPreset(value);
     const next = clone(state);
+    if (preset?.legacyPreset) {
+      next.lighting.environment = preset.legacyPreset;
+    }
     next.lighting.environmentMap = {
       ...next.lighting.environmentMap,
       source: value === 'none' ? 'none' : 'builtin',
@@ -2317,7 +2341,6 @@ export function createRenderApp({
       assetId: '',
     };
     updateState(next);
-    const preset = getEnvironmentMapPreset(next.lighting.environmentMap.presetId);
     if (!preset?.assetUrl || !active) return;
     elements.status.textContent = t('renderEnvironmentLoading');
     try {
