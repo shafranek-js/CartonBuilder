@@ -1431,6 +1431,13 @@ export function createRenderApp({
     // exceed hosted SwiftShader's readiness budget and race diagnostics.
     if (environmentAssetMatchesState && !builtinCapOnlyChange) {
       renderer?.setEnvironmentAsset?.(environmentAsset);
+    } else if (!environmentAssetMatchesState && environmentSelection.source === 'builtin' && environmentSelection.presetId) {
+      ensureEnvironmentAsset().then((loaded) => {
+        if (loaded && state.lighting?.environmentMap?.presetId === loaded.presetId) {
+          renderer?.setEnvironmentAsset?.(loaded);
+          renderer?.render?.();
+        }
+      }).catch(() => {});
     }
     if (notify) notifyStateChange();
   }
