@@ -297,6 +297,39 @@ describe('RenderStudioCameraRig', () => {
 
     disposeRig(context);
   });
+
+  it('applies directional heading and elevation even when explicit position is passed', () => {
+    const context = makeRig();
+    const { rig } = context;
+
+    rig.setCameraState({
+      preset: 'custom',
+      heading: 19.68,
+      elevation: 10.95,
+      cameraDistance: 2,
+      target: [0, 0, 0],
+      position: [1, 1, 1],
+    }, { render: false, notify: false });
+
+    const state = rig.getCameraState();
+    expect(state.heading).toBeCloseTo(19.68, 1);
+    expect(state.elevation).toBeCloseTo(10.95, 1);
+
+    rig.setCameraState({
+      preset: 'custom',
+      heading: 340.32,
+      elevation: 10.95,
+      cameraDistance: 2,
+      target: [0, 0, 0],
+      position: [1, 1, 1],
+    }, { render: false, notify: false });
+
+    const state2 = rig.getCameraState();
+    expect(state2.heading).toBeCloseTo(340.32, 1);
+    expect(state2.elevation).toBeCloseTo(10.95, 1);
+
+    disposeRig(context);
+  });
 });
 
 describe('RenderStudioCameraRig portrait framing', () => {

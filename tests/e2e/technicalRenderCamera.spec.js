@@ -90,8 +90,8 @@ test('technical render opens framed, rotates with mouse, and maintains framing o
 
   // Camera should be framed (target should not be [0,0,0], distance should be < 1m)
   const initialCamera = await page.evaluate(() => {
-    const heading = document.getElementById('cameraHeading')?.value;
-    const elevation = document.getElementById('cameraElevation')?.value;
+    const heading = document.getElementById('renderCameraHeading')?.value;
+    const elevation = document.getElementById('renderCameraElevation')?.value;
     return { heading: Number(heading), elevation: Number(elevation) };
   });
 
@@ -124,8 +124,8 @@ test('technical render opens framed, rotates with mouse, and maintains framing o
   await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-rotated.png' });
 
   const rotatedCamera = await page.evaluate(() => {
-    const heading = document.getElementById('cameraHeading')?.value;
-    const elevation = document.getElementById('cameraElevation')?.value;
+    const heading = document.getElementById('renderCameraHeading')?.value;
+    const elevation = document.getElementById('renderCameraElevation')?.value;
     return { heading: Number(heading), elevation: Number(elevation) };
   });
 
@@ -146,15 +146,62 @@ test('technical render opens framed, rotates with mouse, and maintains framing o
   await page.waitForTimeout(800);
   await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-preset-left-view.png' });
 
+  const leftCamera = await page.evaluate(() => {
+    const heading = Number(document.getElementById('renderCameraHeading')?.value);
+    const elevation = Number(document.getElementById('renderCameraElevation')?.value);
+    return { heading, elevation };
+  });
+  expect(Math.round(leftCamera.heading)).toBe(20);
+  expect(Math.round(leftCamera.elevation)).toBe(11);
+
   // 5. Click preset "Right view"
   const rightViewPreset = page.locator('button[data-render-preset="right-view"]');
   await rightViewPreset.click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-preset-right-view.png' });
 
+  const rightCamera = await page.evaluate(() => {
+    const heading = Number(document.getElementById('renderCameraHeading')?.value);
+    const elevation = Number(document.getElementById('renderCameraElevation')?.value);
+    return { heading, elevation };
+  });
+  expect(Math.round(rightCamera.heading)).toBe(340);
+  expect(Math.round(rightCamera.elevation)).toBe(11);
+
   // 6. Click preset "Clean Studio"
   const cleanStudioPreset = page.locator('button[data-render-preset="clean-studio"]');
   await cleanStudioPreset.click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-preset-clean-studio.png' });
+
+  // 7. Test manual Advanced Camera inputs
+  await page.locator('details.render-camera-advanced summary').click();
+  const headingInput = page.locator('#renderCameraHeading');
+  await headingInput.fill('75');
+  await headingInput.dispatchEvent('input');
+  await headingInput.dispatchEvent('change');
+  await page.waitForTimeout(400);
+
+  const updatedHeading = await page.evaluate(() => {
+    return Number(document.getElementById('renderCameraHeading')?.value);
+  });
+  expect(updatedHeading).toBe(75);
+
+  const elevationInput = page.locator('#renderCameraElevation');
+  await elevationInput.fill('40');
+  await elevationInput.dispatchEvent('input');
+  await elevationInput.dispatchEvent('change');
+  await page.waitForTimeout(400);
+
+  const updatedElevation = await page.evaluate(() => {
+    return Number(document.getElementById('renderCameraElevation')?.value);
+  });
+  expect(updatedElevation).toBe(40);
+
+  // Toggle Keep verticals parallel
+  const keepVerticals = page.locator('#renderKeepVerticalsParallel');
+  await keepVerticals.check();
+  await page.waitForTimeout(400);
+
+  await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-manual-advanced-camera.png' });
 });

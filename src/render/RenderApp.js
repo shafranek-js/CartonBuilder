@@ -10,7 +10,7 @@ import {
   getRenderOutputDimensions,
   sanitizeRenderSettings,
 } from './RenderSettings.js';
-import { applyRenderPreset } from './renderPresets.js';
+import { RENDER_PRESET_DEFINITIONS, applyRenderPreset } from './renderPresets.js';
 import { renderStill } from './StillRenderService.js';
 import { getRenderHealth, runRenderExportPreflight } from './renderPreflight.js';
 import {
@@ -1990,7 +1990,15 @@ export function createRenderApp({
   }
 
   for (const button of elements.presetButtons) {
-    button.addEventListener('click', () => updateState(applyRenderPreset(state, button.dataset.renderPreset, { preserveProjectSpecific: false })));
+    button.addEventListener('click', () => {
+      const presetId = button.dataset.renderPreset;
+      const definition = RENDER_PRESET_DEFINITIONS[presetId];
+      if (definition?.settings?.boardAppearance) {
+        boardAppearance = canonicalBoardAppearance(definition.settings.boardAppearance);
+        renderer?.setBoardAppearance?.(boardAppearance);
+      }
+      updateState(applyRenderPreset(state, presetId, { preserveProjectSpecific: false }));
+    });
   }
 
   async function exportGlbAsset() {
@@ -2165,27 +2173,41 @@ export function createRenderApp({
   elements.fov.addEventListener('input', (event) => change((next) => { next.camera.fov = Number(event.target.value); }));
   const updateAdvancedCamera = (field, value) => change((next) => {
     next.camera[field] = Number(value);
-    if (['heading', 'elevation', 'cameraDistance'].includes(field)) {
+    if (['heading', 'elevation', 'cameraDistance', 'horizontalPan', 'verticalPan'].includes(field)) {
       const { center, radius } = getBoxCenterRadius();
       const distance = field === 'cameraDistance'
         ? Math.max(0.01, Number(value))
         : Math.max(0.01, Number(next.camera.cameraDistance || radius * 3));
+      const hPan = field === 'horizontalPan' ? Number(value) : Number(next.camera.horizontalPan || 0);
+      const vPan = field === 'verticalPan' ? Number(value) : Number(next.camera.verticalPan || 0);
+      const headingVal = field === 'heading' ? Number(value) : Number(next.camera.heading || 0);
+      const elevationVal = field === 'elevation' ? Number(value) : Number(next.camera.elevation || 0);
+      const hRad = headingVal * Math.PI / 180;
+      const rightX = Math.cos(hRad);
+      const rightZ = -Math.sin(hRad);
+      const panTarget = [
+        center[0] + rightX * hPan,
+        center[1] + vPan,
+        center[2] + rightZ * hPan,
+      ];
       next.camera.position = cameraPositionFromHeading({
-        heading: field === 'heading' ? Number(value) : Number(next.camera.heading),
-        elevation: field === 'elevation' ? Number(value) : Number(next.camera.elevation),
+        heading: headingVal,
+        elevation: elevationVal,
         distance,
-        target: center,
+        target: panTarget,
       });
-      next.camera.target = center;
+      next.camera.target = panTarget;
       next.camera.preset = 'custom';
       next.activeViewPresetId = '';
     }
   });
-  elements.heading?.addEventListener('change', (event) => updateAdvancedCamera('heading', event.target.value));
-  elements.cameraElevation?.addEventListener('change', (event) => updateAdvancedCamera('elevation', event.target.value));
-  elements.panX?.addEventListener('change', (event) => updateAdvancedCamera('horizontalPan', event.target.value));
-  elements.panY?.addEventListener('change', (event) => updateAdvancedCamera('verticalPan', event.target.value));
-  elements.cameraDistance?.addEventListener('change', (event) => updateAdvancedCamera('cameraDistance', event.target.value));
+  for (const eventName of ['input', 'change']) {
+    elements.heading?.addEventListener(eventName, (event) => updateAdvancedCamera('heading', event.target.value));
+    elements.cameraElevation?.addEventListener(eventName, (event) => updateAdvancedCamera('elevation', event.target.value));
+    elements.panX?.addEventListener(eventName, (event) => updateAdvancedCamera('horizontalPan', event.target.value));
+    elements.panY?.addEventListener(eventName, (event) => updateAdvancedCamera('verticalPan', event.target.value));
+    elements.cameraDistance?.addEventListener(eventName, (event) => updateAdvancedCamera('cameraDistance', event.target.value));
+  }
   elements.frameHeight?.addEventListener('change', (event) => change((next) => {
     next.camera.frameHeight = Number(event.target.value);
     next.camera.orthographicHeight = Number(event.target.value);

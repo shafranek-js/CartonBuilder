@@ -5,7 +5,7 @@ import {
   focalLengthToFov,
   fovToFocalLength,
 } from './cameraState.js';
-import { Vector3 } from 'three';
+import { Vector2, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const CAMERA_PRESETS = Object.freeze({
@@ -424,12 +424,12 @@ export class RenderStudioCameraRig {
     const preferredPresetUp = preferredUp
       ? vectorFromArray(preferredUp)
       : (hasExplicitPreset && CAMERA_PRESETS[preset] ? presetUp(preset) : null);
-    let position = explicitPosition;
+    let position = null;
 
-    if (!position && hasExplicitPreset && preset !== 'custom') {
+    if (hasExplicitPreset && preset !== 'custom') {
       const distance = Math.max(0.001, current.cameraDistance || DEFAULT_DISTANCE);
       position = target.clone().addScaledVector(presetDirection(preset), distance);
-    } else if (!position && hasDirectionalInput) {
+    } else if (hasDirectionalInput) {
       const currentPosition = vectorFromCamera(camera, current.position);
       const derived = cameraHeadingElevation(currentPosition, current.target);
       position = vectorFromArray(cameraPositionFromHeading({
@@ -438,7 +438,9 @@ export class RenderStudioCameraRig {
         distance: finitePositive(source.cameraDistance) ?? Math.max(0.001, derived.distance),
         target: target.toArray(),
       }));
-    } else if (!position && !arraysEqual(current.target, target.toArray())) {
+    } else if (explicitPosition) {
+      position = explicitPosition;
+    } else if (!arraysEqual(current.target, target.toArray())) {
       const currentPosition = vectorFromArray(current.position);
       position = target.clone().add(currentPosition.sub(vectorFromArray(current.target)));
     }
@@ -471,6 +473,26 @@ export class RenderStudioCameraRig {
       const nextPosition = position || vectorFromArray(current.position);
       this._applyCameraTransform(nextPosition, target, preferredPresetUp || camera.up);
     }
+    const verticalCorrection = source.verticalCorrection === true || source.keepVerticalsParallel === true;
+    const finalPosition = position || vectorFromArray(current.position);
+    const orientation = cameraHeadingElevation(finalPosition, target.toArray());
+    this._applyVerticalCorrection(verticalCorrection, orientation.elevation);
+  }
+
+  _applyVerticalCorrection(verticalCorrection, elevation) {
+    const camera = this.surface.renderSurface.camera;
+    if (!camera?.isPerspectiveCamera) return;
+    const size = this.surface.renderSurface.renderer?.getSize?.(new Vector2()) || { x: 800, y: 600 };
+    const width = Math.max(1, size.x || this.surface.container?.clientWidth || 1);
+    const height = Math.max(1, size.y || this.surface.container?.clientHeight || 1);
+    if (!verticalCorrection || Math.abs(elevation || 0) < 0.01) {
+      camera.clearViewOffset?.();
+      camera.updateProjectionMatrix();
+      return;
+    }
+    const shift = Math.tan((elevation || 0) * Math.PI / 180) * height * 0.12;
+    camera.setViewOffset(width, height, 0, -shift, width, height);
+    camera.updateProjectionMatrix();
   }
 
   setCameraState(state, { render = true, notify = true } = {}) {

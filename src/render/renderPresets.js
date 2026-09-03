@@ -1,4 +1,5 @@
 import { DEFAULT_RENDER_SETTINGS, sanitizeRenderSettings } from './RenderSettings.js';
+import { cameraPositionFromHeading } from './cameraState.js';
 import leftViewPresetJson from '../../Preset left view.json?raw';
 import rightViewPresetJson from '../../Preset right vew.json?raw';
 
@@ -15,6 +16,7 @@ function readImportedRenderSettings(raw, presetId) {
     return Object.freeze({
       ...settings,
       camera: Object.freeze(camera),
+      boardAppearance: parsed?.boardAppearance || settings?.boardAppearance || null,
       presetId,
       activeViewPresetId: '',
       viewPresetBaseId: '',
@@ -168,9 +170,26 @@ export function applyRenderPreset(current, id, { preserveProjectSpecific = true 
       merged.camera.target = [...current.camera.target];
     }
     if (Number(current.camera.cameraDistance) > 0 && Number(current.camera.cameraDistance) < 50) {
-      merged.camera.cameraDistance = current.camera.cameraDistance;
+      if (current.camera.fov && merged.camera.fov && Math.abs(current.camera.fov - merged.camera.fov) > 0.1) {
+        const fovRatio = Math.tan((current.camera.fov * Math.PI) / 360) / Math.tan((merged.camera.fov * Math.PI) / 360);
+        merged.camera.cameraDistance = current.camera.cameraDistance * fovRatio;
+      } else {
+        merged.camera.cameraDistance = current.camera.cameraDistance;
+      }
     }
-    delete merged.camera.position;
+    const hasCustomHeading = Number.isFinite(Number(merged.camera.heading))
+      && Number.isFinite(Number(merged.camera.elevation))
+      && (id === 'left-view' || id === 'right-view' || merged.camera.preset === 'custom');
+    if (hasCustomHeading) {
+      merged.camera.position = cameraPositionFromHeading({
+        heading: merged.camera.heading,
+        elevation: merged.camera.elevation,
+        distance: merged.camera.cameraDistance || 4,
+        target: merged.camera.target,
+      });
+    } else {
+      delete merged.camera.position;
+    }
   }
   return merged;
 }
