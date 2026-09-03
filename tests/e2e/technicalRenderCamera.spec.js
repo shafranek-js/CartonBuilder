@@ -221,4 +221,22 @@ test('technical render opens framed, rotates with mouse, and maintains framing o
   expect(fitAspectMatches).toBe(true);
 
   await page.screenshot({ path: 'C:/Users/pavel/.gemini/antigravity/brain/6229f135-b37c-4346-9486-e47042c6a94e/scratch/step4-fit-clicked.png' });
+
+  const fitDistance = await page.evaluate(() => Number(document.getElementById('renderCameraDistance')?.value));
+  expect(fitDistance).toBeGreaterThan(100);
+
+  // 9. Test mouse pan in Technical Dieline (right click drag)
+  await page.mouse.move(startX, startY);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(startX + 60, startY - 40, { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  await page.waitForTimeout(500);
+
+  const pannedState = await page.evaluate(() => ({
+    panX: Number(document.getElementById('renderCameraPanX')?.value),
+    panY: Number(document.getElementById('renderCameraPanY')?.value),
+  }));
+  console.log('--- Technical Dieline after mouse pan:', pannedState);
+  expect(Math.abs(pannedState.panX)).toBeGreaterThan(1);
+  expect(Math.abs(pannedState.panY)).toBeGreaterThan(1);
 });

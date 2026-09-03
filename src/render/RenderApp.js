@@ -957,12 +957,64 @@ export function createRenderApp({
     elements.namedPreset?.setAttribute('data-modified', 'true');
   }
 
+  function isMetersRenderer() {
+    const workflow = getRenderWorkflowOptions?.();
+    if (workflow?.workflowMode === 'technical') return true;
+    const bounds = renderer?.getBounds?.();
+    return bounds?.units === 'm' || (bounds?.radius > 0 && bounds?.radius < 1);
+  }
+
+  function toUiCamera(camera) {
+    if (!camera || typeof camera !== 'object') return camera;
+    if (!isMetersRenderer()) return camera;
+    const scale = 1000;
+    const dist = Number(camera.cameraDistance);
+    const posHypot = Array.isArray(camera.position) ? Math.hypot(...camera.position) : 0;
+    const targetHypot = Array.isArray(camera.target) ? Math.hypot(...camera.target) : 0;
+    if (dist > 10 || posHypot > 10 || targetHypot > 10) return camera;
+    return {
+      ...camera,
+      cameraDistance: camera.cameraDistance != null ? camera.cameraDistance * scale : camera.cameraDistance,
+      horizontalPan: camera.horizontalPan != null ? camera.horizontalPan * scale : camera.horizontalPan,
+      verticalPan: camera.verticalPan != null ? camera.verticalPan * scale : camera.verticalPan,
+      position: Array.isArray(camera.position) ? camera.position.map((v) => v * scale) : camera.position,
+      target: Array.isArray(camera.target) ? camera.target.map((v) => v * scale) : camera.target,
+      orthographicHeight: camera.orthographicHeight != null ? camera.orthographicHeight * scale : camera.orthographicHeight,
+      frameHeight: camera.frameHeight != null ? camera.frameHeight * scale : camera.frameHeight,
+    };
+  }
+
+  function toRendererCamera(camera) {
+    if (!camera || typeof camera !== 'object') return camera;
+    if (!isMetersRenderer()) return camera;
+    const scale = 0.001;
+    const dist = Number(camera.cameraDistance);
+    const posHypot = Array.isArray(camera.position) ? Math.hypot(...camera.position) : 0;
+    const targetHypot = Array.isArray(camera.target) ? Math.hypot(...camera.target) : 0;
+    if ((dist > 0 && dist < 5) || (posHypot > 0 && posHypot < 5) || (targetHypot > 0 && targetHypot < 5)) return camera;
+    return {
+      ...camera,
+      cameraDistance: camera.cameraDistance != null ? camera.cameraDistance * scale : camera.cameraDistance,
+      horizontalPan: camera.horizontalPan != null ? camera.horizontalPan * scale : camera.horizontalPan,
+      verticalPan: camera.verticalPan != null ? camera.verticalPan * scale : camera.verticalPan,
+      position: Array.isArray(camera.position) ? camera.position.map((v) => v * scale) : camera.position,
+      target: Array.isArray(camera.target) ? camera.target.map((v) => v * scale) : camera.target,
+      orthographicHeight: camera.orthographicHeight != null ? camera.orthographicHeight * scale : camera.orthographicHeight,
+      frameHeight: camera.frameHeight != null ? camera.frameHeight * scale : camera.frameHeight,
+    };
+  }
+
   function getBoxCenterRadius() {
     const bounds = renderer?.getBounds?.();
     if (bounds && Number.isFinite(bounds.radius) && bounds.radius > 0) {
+      const scale = isMetersRenderer() ? 1000 : 1;
       return {
-        center: [bounds.centerX ?? 0, bounds.centerY ?? 0, bounds.centerZ ?? 0],
-        radius: bounds.radius,
+        center: [
+          (bounds.centerX ?? 0) * scale,
+          (bounds.centerY ?? 0) * scale,
+          (bounds.centerZ ?? 0) * scale,
+        ],
+        radius: bounds.radius * scale,
       };
     }
     const dimensions = boxModel?.dimensions || {};
@@ -974,7 +1026,7 @@ export function createRenderApp({
     return { center, radius };
   }
 
-  function getNormalizedViewCamera(camera = renderer?.getCameraState?.() || state.camera) {
+  function getNormalizedViewCamera(camera = toUiCamera(renderer?.getCameraState?.()) || state.camera) {
     const { radius } = getBoxCenterRadius();
     return normalizeCameraPresetState({
       ...camera,
@@ -1435,7 +1487,10 @@ export function createRenderApp({
     // Apply the serializable environment-map state before attaching a loaded
     // asset. This keeps a cap change from being overwritten by an in-flight
     // load that started with the previous map/cap pair.
-    renderer?.updateSettings(state, { render });
+    renderer?.updateSettings(
+      isMetersRenderer() ? { ...state, camera: toRendererCamera(state.camera) } : state,
+      { render },
+    );
     renderer?.setBackgroundAsset?.(backgroundAsset);
     const environmentSelection = state.lighting?.environmentMap || {};
     const previousEnvironmentSelection = previousState.lighting?.environmentMap || {};
@@ -1483,7 +1538,7 @@ export function createRenderApp({
       aspect,
       margin: 1.08,
     });
-    const camera = renderer?.getCameraState?.();
+    const camera = toUiCamera(renderer?.getCameraState?.());
     if (camera) change((next) => {
       const { center } = getBoxCenterRadius();
       const target = camera.target || next.camera.target || center;
@@ -1537,7 +1592,9 @@ export function createRenderApp({
     const structureChanged = force || !renderer || signatures.structure !== structureSignature;
     const artworkChanged = force || !renderer || signatures.artwork !== artworkSignature;
     if (!structureChanged && !artworkChanged) {
-      renderer.updateSettings(state);
+      renderer.updateSettings(
+        isMetersRenderer() ? { ...state, camera: toRendererCamera(state.camera) } : state,
+      );
       renderer.render();
       updateDiagnostics();
       return true;
@@ -1586,7 +1643,9 @@ export function createRenderApp({
           sceneModel: signatures.sceneModel,
           textureCanvas: composed.canvas,
           materialMaps: composed.materialMaps,
-          renderSettings: state,
+          renderSettings: isMetersRenderer()
+            ? { ...state, camera: toRendererCamera(state.camera) }
+            : state,
           boardAppearance,
           backgroundAsset,
           environmentAsset,
@@ -1600,9 +1659,10 @@ export function createRenderApp({
             renderContextRecoveryCount += 1;
             syncScene({ force: true });
           },
-          onCameraChange: (camera) => {
+          onCameraChange: (rawCamera) => {
             if (!active || disposed) return;
             renderer?.markInteraction?.();
+            const camera = toUiCamera(rawCamera);
             const previousViewId = state.activeViewPresetId || activeViewPresetId;
             const { center } = getBoxCenterRadius();
             const target = camera.target || state.camera.target || center;
@@ -1676,8 +1736,10 @@ export function createRenderApp({
       }
       structureSignature = signatures.structure;
       artworkSignature = signatures.artwork;
-      renderer.updateSettings(state);
-      const initialCamera = renderer.getCameraState?.();
+      renderer.updateSettings(
+        isMetersRenderer() ? { ...state, camera: toRendererCamera(state.camera) } : state,
+      );
+      const initialCamera = toUiCamera(renderer.getCameraState?.());
       if (initialCamera) {
         state = sanitizeRenderSettings({
           ...state,
