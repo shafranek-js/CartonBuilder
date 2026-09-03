@@ -20,8 +20,8 @@
     },
     {
       "path": "geometry/crease-geometry.js",
-      "byteLength": 14870,
-      "sha256": "4bdab083398348aed4125be83c49b5d599b63c10d9394b36234f177e698d35ef"
+      "byteLength": 15557,
+      "sha256": "cd1867c24d53d62f2add88edd81309427c3312e4b562c212982d5c129cc07afd"
     },
     {
       "path": "geometry/flat-net-uv.js",

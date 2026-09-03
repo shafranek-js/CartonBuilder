@@ -305,6 +305,26 @@ export class RenderWorkflowLifecycle {
     };
   }
 
+  release() {
+    if (this.disposed) return false;
+    this.generation += 1;
+    this.abort();
+    this.operation = null;
+    const renderer = this.renderer;
+    this.renderer = null;
+    this.route = null;
+    if (renderer) {
+      try {
+        const result = this.disposeRenderer(renderer);
+        if (result?.catch) result.catch(() => {});
+        return result || true;
+      } catch (error) {
+        throw error;
+      }
+    }
+    return true;
+  }
+
   dispose() {
     if (this.disposed) return false;
     this.disposed = true;

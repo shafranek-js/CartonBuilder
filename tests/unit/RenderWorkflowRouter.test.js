@@ -252,4 +252,23 @@ describe('RenderWorkflowLifecycle', () => {
     expect(renderers[19].dispose).toHaveBeenCalledTimes(1);
     expect(lifecycle.getDiagnostics().resourceCounters.rendererDisposals).toBe(20);
   });
+
+  it('releases the active renderer without permanently marking lifecycle as disposed', async () => {
+    const { router, quickRenderer } = makeRouter();
+    const lifecycle = new RenderWorkflowLifecycle({ router });
+
+    await expect(lifecycle.activate({ workflowMode: 'quick', capabilities: {} })).resolves.toBe(quickRenderer);
+    expect(lifecycle.getRenderer()).toBe(quickRenderer);
+
+    expect(lifecycle.release()).toBe(true);
+    expect(lifecycle.getRenderer()).toBeNull();
+    expect(quickRenderer.dispose).toHaveBeenCalledTimes(1);
+    expect(lifecycle.getDiagnostics().disposed).toBe(false);
+
+    // Subsequent activate succeeds because lifecycle was released, not disposed
+    const secondRenderer = makeRenderer('quick-second');
+    router.quickFactory.mockReturnValueOnce(secondRenderer);
+    await expect(lifecycle.activate({ workflowMode: 'quick', capabilities: {} })).resolves.toBe(secondRenderer);
+    expect(lifecycle.getRenderer()).toBe(secondRenderer);
+  });
 });

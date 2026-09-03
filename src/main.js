@@ -1028,12 +1028,14 @@ const boxApp = createBoxNetApp({
   },
   onDimensionReset: () => {
     preview3dFacade?.resetForProject();
+    renderApp?.resetForProject?.();
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     preview3dFacade?.setBoardCaliper?.(model.board.caliperMm);
     updateStepNavigationStates();
   },
   onLayoutReset: () => {
     preview3dFacade?.resetForProject();
+    renderApp?.resetForProject?.();
     renderApp?.setBoardCaliper?.(model.board.caliperMm, { notify: false });
     updateStepNavigationStates();
   },
@@ -1068,6 +1070,7 @@ artworkApp = createArtworkApp({
     }
     applyWorkflowModeUi();
     preview3dFacade?.resetForProject();
+    renderApp?.resetForProject?.();
     renderApp?.restoreRenderAssets?.(project?.renderAssets || []);
     renderApp?.restoreState(snapshot.render, snapshot.renderAppearance);
     const hasArtwork = Boolean(snapshot.artworks?.length);

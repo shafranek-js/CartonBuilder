@@ -227,17 +227,22 @@ function creaseShapeArraysAndNormals(
       norm.push(normalIn.x, normalIn.y, normalIn.z);
     }
 
-    // Dedicated s0 rim vertices (k=4 outer, k=5 inner) with outward normal -u
+    // Dedicated s0 rim vertices (k=4 outer, k=5 inner/center) with outward normal -u
+    const isFinite = creaseWidthMm > 1e-4 && bendRadiusMm > 1e-4;
     const baseS0 = start.clone().add(u.clone().multiplyScalar(s0)).add(c);
     const outerS0 = baseS0.clone().add(normalOut.clone().multiplyScalar(thick / 2));
-    const innerS0 = baseS0.clone().add(normalOut.clone().multiplyScalar(-thick / 2));
+    const innerS0 = isFinite
+      ? baseS0.clone().add(normalOut.clone().multiplyScalar(-thick / 2))
+      : baseS0.clone();
     pos.push(outerS0.x, outerS0.y, outerS0.z, innerS0.x, innerS0.y, innerS0.z);
     norm.push(uRimS0.x, uRimS0.y, uRimS0.z, uRimS0.x, uRimS0.y, uRimS0.z);
 
-    // Dedicated s1 rim vertices (k=6 outer, k=7 inner) with outward normal +u
+    // Dedicated s1 rim vertices (k=6 outer, k=7 inner/center) with outward normal +u
     const baseS1 = start.clone().add(u.clone().multiplyScalar(s1)).add(c);
     const outerS1 = baseS1.clone().add(normalOut.clone().multiplyScalar(thick / 2));
-    const innerS1 = baseS1.clone().add(normalOut.clone().multiplyScalar(-thick / 2));
+    const innerS1 = isFinite
+      ? baseS1.clone().add(normalOut.clone().multiplyScalar(-thick / 2))
+      : baseS1.clone();
     pos.push(outerS1.x, outerS1.y, outerS1.z, innerS1.x, innerS1.y, innerS1.z);
     norm.push(uRimS1.x, uRimS1.y, uRimS1.z, uRimS1.x, uRimS1.y, uRimS1.z);
   }
@@ -245,16 +250,16 @@ function creaseShapeArraysAndNormals(
   return { positions: pos, normals: norm };
 }
 
-function creaseIndices(segments, isFlipped = false, includeEndpointRims = true) {
+function creaseIndices(segments, isFlipped = false, includeEndpointRims = true, isFinite = false) {
   // Per q: 8 vertices per slice:
   //   k=0: outer s0 (cyl normal)
   //   k=1: inner s0 (cyl normal)
   //   k=2: outer s1 (cyl normal)
   //   k=3: inner s1 (cyl normal)
   //   k=4: outer s0 (rim -u normal)
-  //   k=5: inner s0 (rim -u normal)
+  //   k=5: inner/base s0 (rim -u normal)
   //   k=6: outer s1 (rim +u normal)
-  //   k=7: inner s1 (rim +u normal)
+  //   k=7: inner/base s1 (rim +u normal)
   const outer = [], inner = [], rims = [], v = (q, k) => q * 8 + k;
 
   for (let q = 0; q < segments; q++) {
@@ -267,13 +272,19 @@ function creaseIndices(segments, isFlipped = false, includeEndpointRims = true) 
       inner.push(v(q, 1), v(q + 1, 1), v(q + 1, 3));
       inner.push(v(q, 1), v(q + 1, 3), v(q, 3));
 
-      // s0 rim (dedicated vertices k=4, 5 with exact outward normal -u)
-      rims.push(v(q, 4), v(q + 1, 5), v(q, 5));
-      rims.push(v(q, 4), v(q + 1, 4), v(q + 1, 5));
+      if (isFinite) {
+        // s0 rim (dedicated vertices k=4, 5 with exact outward normal -u)
+        rims.push(v(q, 4), v(q + 1, 5), v(q, 5));
+        rims.push(v(q, 4), v(q + 1, 4), v(q + 1, 5));
 
-      // s1 rim (dedicated vertices k=6, 7 with exact outward normal +u)
-      rims.push(v(q, 6), v(q, 7), v(q + 1, 7));
-      rims.push(v(q, 6), v(q + 1, 7), v(q + 1, 6));
+        // s1 rim (dedicated vertices k=6, 7 with exact outward normal +u)
+        rims.push(v(q, 6), v(q, 7), v(q + 1, 7));
+        rims.push(v(q, 6), v(q + 1, 7), v(q + 1, 6));
+      } else {
+        // Canonical zero-width hinge: single non-self-intersecting pie fan from outer skin to fold axis (k=5, 7)
+        rims.push(v(q, 4), v(q + 1, 4), v(q, 5));
+        rims.push(v(q, 6), v(q, 7), v(q + 1, 6));
+      }
     } else {
       // Outside skin (CCW for outward +Z normal when cross(u, n) < 0)
       outer.push(v(q, 0), v(q + 1, 2), v(q, 2));
@@ -283,13 +294,19 @@ function creaseIndices(segments, isFlipped = false, includeEndpointRims = true) 
       inner.push(v(q, 1), v(q + 1, 3), v(q + 1, 1));
       inner.push(v(q, 1), v(q, 3), v(q + 1, 3));
 
-      // s0 rim (dedicated vertices k=4, 5 with exact outward normal -u)
-      rims.push(v(q, 4), v(q, 5), v(q + 1, 5));
-      rims.push(v(q, 4), v(q + 1, 5), v(q + 1, 4));
+      if (isFinite) {
+        // s0 rim (dedicated vertices k=4, 5 with exact outward normal -u)
+        rims.push(v(q, 4), v(q, 5), v(q + 1, 5));
+        rims.push(v(q, 4), v(q + 1, 5), v(q + 1, 4));
 
-      // s1 rim (dedicated vertices k=6, 7 with exact outward normal +u)
-      rims.push(v(q, 6), v(q + 1, 7), v(q, 7));
-      rims.push(v(q, 6), v(q + 1, 6), v(q + 1, 7));
+        // s1 rim (dedicated vertices k=6, 7 with exact outward normal +u)
+        rims.push(v(q, 6), v(q + 1, 7), v(q, 7));
+        rims.push(v(q, 6), v(q + 1, 6), v(q + 1, 7));
+      } else {
+        // Canonical zero-width hinge: single non-self-intersecting pie fan from outer skin to fold axis (k=5, 7)
+        rims.push(v(q, 4), v(q, 5), v(q + 1, 4));
+        rims.push(v(q, 6), v(q + 1, 6), v(q, 7));
+      }
     }
   }
 
@@ -311,12 +328,11 @@ export function makeFiniteCreaseGeometry(fold, parsed, parentOrigin, profile, fl
   const isFlipped = (u.x * n.y - u.y * n.x) < 0;
 
   const seg = 16;
-  // A canonical zero-width hinge still needs its curved outer/inner skins so
-  // the folded carton does not look razor-sharp. Its endpoint rims collapse
-  // into radial triangle fans, however, so only certified finite creases get
-  // physical end caps.
-  const includeEndpointRims = hasFiniteCreaseProfile(profile);
-  const { indices, outerCount, innerCount, rimsCount } = creaseIndices(seg, isFlipped, includeEndpointRims);
+  const isFinite = hasFiniteCreaseProfile(profile);
+  // Always include endpoint rims so that crease ends (торцы сгибов) are closed
+  // with solid geometry matching board thickness, preventing hollow single-sided gaps.
+  const includeEndpointRims = true;
+  const { indices, outerCount, innerCount, rimsCount } = creaseIndices(seg, isFlipped, includeEndpointRims, isFinite);
   const base = creaseShapeArraysAndNormals(
     fold,
     parsed,

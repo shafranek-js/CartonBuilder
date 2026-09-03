@@ -2036,6 +2036,7 @@ export function createRenderApp({
   }
 
   function resetForProject() {
+    active = false;
     exportController?.abort();
     workflowExportRouter?.abort?.();
     structureSignature = '';
@@ -2045,6 +2046,7 @@ export function createRenderApp({
     releaseRenderer();
     renderContextState = 'initializing';
     renderContextRecoveryCount = 0;
+    hideRecovery();
   }
 
   async function exportImage(format) {

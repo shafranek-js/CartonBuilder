@@ -7,8 +7,8 @@
   "entrypoint": "index.html",
   "sourceCommit": "a9ec05e93f5bd28f0822ed8f5c110897a36a135a",
   "artifact": {
-    "byteLength": 1096653,
-    "sha256": "32777906a7dcee477732b3248e3afce844b5e618c3a71b65bfcb816d12456e7b"
+    "byteLength": 1096726,
+    "sha256": "f30889c09f04d051c648bfa1cc4f1d2163ac9dce936fa6049ce7397ef5e7d218"
   },
   "contracts": {
     "workflow": "carton-workflow.v1",
@@ -38,8 +38,8 @@
     },
     {
       "path": "index.html",
-      "byteLength": 1096653,
-      "sha256": "32777906a7dcee477732b3248e3afce844b5e618c3a71b65bfcb816d12456e7b"
+      "byteLength": 1096726,
+      "sha256": "f30889c09f04d051c648bfa1cc4f1d2163ac9dce936fa6049ce7397ef5e7d218"
     },
     {
       "path": "runtime/animation/fold-animations.js",
@@ -58,8 +58,8 @@
     },
     {
       "path": "runtime/geometry/crease-geometry.js",
-      "byteLength": 14870,
-      "sha256": "4bdab083398348aed4125be83c49b5d599b63c10d9394b36234f177e698d35ef"
+      "byteLength": 15557,
+      "sha256": "cd1867c24d53d62f2add88edd81309427c3312e4b562c212982d5c129cc07afd"
     },
     {
       "path": "runtime/geometry/flat-net-uv.js",
@@ -89,7 +89,7 @@
     {
       "path": "runtime/package-manifest.json",
       "byteLength": 2252,
-      "sha256": "7ad1c8b08938da6689f472159c8916718ce47ac3b019856c4251b9fd869d415e"
+      "sha256": "7869054af86ae6437dc20fc89f19c2d33d50c2a52c336f4dcd56fb2a1d8975aa"
     },
     {
       "path": "runtime/package.json",
