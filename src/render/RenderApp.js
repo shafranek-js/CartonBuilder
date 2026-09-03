@@ -1474,6 +1474,45 @@ export function createRenderApp({
     updateState(next);
   }
 
+  function fitCamera({ preservePresetId = false } = {}) {
+    const dimensions = getRenderOutputDimensions(state);
+    const aspect = dimensions.width / dimensions.height;
+
+    renderer?.fitCameraToFrame?.({
+      tight: true,
+      aspect,
+      margin: 1.08,
+    });
+    const camera = renderer?.getCameraState?.();
+    if (camera) change((next) => {
+      const { center } = getBoxCenterRadius();
+      const target = camera.target || next.camera.target || center;
+      const deltaX = target[0] - center[0];
+      const deltaY = target[1] - center[1];
+      const deltaZ = target[2] - center[2];
+      const headingVal = Number(camera.heading ?? next.camera.heading ?? 0);
+      const hRad = headingVal * Math.PI / 180;
+      const rightX = Math.cos(hRad);
+      const rightZ = -Math.sin(hRad);
+      const horizontalPan = Number.isFinite(camera.horizontalPan)
+        ? camera.horizontalPan
+        : (deltaX * rightX + deltaZ * rightZ);
+      const verticalPan = Number.isFinite(camera.verticalPan)
+        ? camera.verticalPan
+        : deltaY;
+      next.camera = {
+        ...next.camera,
+        ...camera,
+        horizontalPan,
+        verticalPan,
+        preset: preservePresetId ? next.camera.preset : 'custom',
+      };
+      if (!preservePresetId) {
+        next.activeViewPresetId = '';
+      }
+    });
+  }
+
   function currentSignatures() {
     const sceneModel = buildRenderSceneModel({
       boxModel,
@@ -2065,6 +2104,7 @@ export function createRenderApp({
         renderer?.setBoardAppearance?.(boardAppearance);
       }
       updateState(applyRenderPreset(getState(), presetId, { preserveProjectSpecific: false }));
+      fitCamera({ preservePresetId: true });
     });
   }
 
@@ -2289,40 +2329,7 @@ export function createRenderApp({
     next.camera.keepVerticalsParallel = event.target.checked;
   }));
   elements.fitCamera?.addEventListener('click', () => {
-    const dimensions = getRenderOutputDimensions(state);
-    const aspect = dimensions.width / dimensions.height;
-
-    renderer?.fitCameraToFrame?.({
-      tight: true,
-      aspect,
-      margin: 1.08,
-    });
-    const camera = renderer?.getCameraState?.();
-    if (camera) change((next) => {
-      const { center } = getBoxCenterRadius();
-      const target = camera.target || next.camera.target || center;
-      const deltaX = target[0] - center[0];
-      const deltaY = target[1] - center[1];
-      const deltaZ = target[2] - center[2];
-      const headingVal = Number(camera.heading ?? next.camera.heading ?? 0);
-      const hRad = headingVal * Math.PI / 180;
-      const rightX = Math.cos(hRad);
-      const rightZ = -Math.sin(hRad);
-      const horizontalPan = Number.isFinite(camera.horizontalPan)
-        ? camera.horizontalPan
-        : (deltaX * rightX + deltaZ * rightZ);
-      const verticalPan = Number.isFinite(camera.verticalPan)
-        ? camera.verticalPan
-        : deltaY;
-      next.camera = {
-        ...next.camera,
-        ...camera,
-        horizontalPan,
-        verticalPan,
-        preset: 'custom',
-      };
-      next.activeViewPresetId = '';
-    });
+    fitCamera();
   });
   elements.resetCamera?.addEventListener('click', () => {
     if (activeViewPresetId && viewPresets.some((entry) => entry.id === activeViewPresetId)) {
