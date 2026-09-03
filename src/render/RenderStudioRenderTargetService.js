@@ -268,6 +268,7 @@ export class RenderStudioRenderTargetService {
       target = this.renderTargetFactory(outputWidth, outputHeight, {
         depthBuffer: true,
         stencilBuffer: false,
+        samples: 4,
       });
       assertTarget(target);
       target.texture.colorSpace = SRGBColorSpace;

@@ -1784,6 +1784,7 @@ export class BoxScene {
     const target = new WebGLRenderTarget(outputWidth, outputHeight, {
       depthBuffer: true,
       stencilBuffer: false,
+      samples: 4,
     });
     target.texture.colorSpace = SRGBColorSpace;
     const previousSize = this.renderer.getSize(new Vector2());

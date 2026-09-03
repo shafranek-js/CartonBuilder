@@ -110,7 +110,7 @@ export class RenderPostProcessing {
     if (renderPass instanceof TAARenderPass) {
       renderPass.sampleLevel = Math.max(0, Math.min(5, Math.round(Math.log2(
         Math.max(1, Number(this.effects?.antialiasing?.taaSamples) || 16),
-      )) - 1));
+      ))));
       renderPass.unbiased = true;
     }
     this.composer.addPass(renderPass);

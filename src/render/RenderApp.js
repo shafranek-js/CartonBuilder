@@ -1924,7 +1924,9 @@ export function createRenderApp({
     }
     const dimensions = boxModel.dimensions;
     const extension = format === 'png' ? 'png' : 'jpg';
-    const suggestedName = formatOutputName(dimensions, exportState.presetId, exportState.longEdge, extension);
+    const outputDimensions = getRenderOutputDimensions(exportState);
+    const effectiveLongEdge = Math.max(outputDimensions.width, outputDimensions.height);
+    const suggestedName = formatOutputName(dimensions, exportState.presetId, effectiveLongEdge, extension);
     const destinationPromise = requestSaveDestination({
       suggestedName,
       types: createSaveTypes(format),

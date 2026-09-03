@@ -177,7 +177,7 @@ describe('RenderStudioRenderTargetService', () => {
     expect(output.height).toBe(200);
     expect(output.pixels).toBeInstanceOf(Uint8Array);
     expect(output.pixels.length).toBe(321 * 200 * 4);
-    expect(target.options).toEqual({ depthBuffer: true, stencilBuffer: false });
+    expect(target.options).toEqual({ depthBuffer: true, stencilBuffer: false, samples: 4 });
     expect(target.texture.colorSpace).toBe(SRGBColorSpace);
     expect(appearanceController.beginRenderStateTransaction).toHaveBeenCalledWith({
       backgroundMode: 'transparent',
