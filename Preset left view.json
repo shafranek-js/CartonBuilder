@@ -57,7 +57,7 @@
       "elevation": 55,
       "intensity": 2,
       "environment": "studio",
-      "environmentIntensity": 0.5,
+      "environmentIntensity": 2,
       "environmentMap": {
         "source": "builtin",
         "presetId": "neutral-softbox",
