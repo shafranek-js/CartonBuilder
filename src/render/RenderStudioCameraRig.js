@@ -214,6 +214,7 @@ export class RenderStudioCameraRig {
     this.disposed = false;
     this._initialState = cloneState(initialState);
     this._target = new Vector3(0, 0, 0);
+    this._boundsCenter = null;
     this._preset = DEFAULT_PRESET;
 
     const optics = safeCameraOptics(surface);
@@ -300,6 +301,18 @@ export class RenderStudioCameraRig {
     const target = this._target.toArray();
     const orientation = cameraHeadingElevation(position, target);
     const fov = this._fov ?? optics.perspectiveFov;
+    let horizontalPan = 0;
+    let verticalPan = 0;
+    if (this._boundsCenter && this._target) {
+      const deltaX = this._target.x - this._boundsCenter[0];
+      const deltaY = this._target.y - this._boundsCenter[1];
+      const deltaZ = this._target.z - this._boundsCenter[2];
+      const hRad = (orientation.heading || 0) * Math.PI / 180;
+      const rightX = Math.cos(hRad);
+      const rightZ = -Math.sin(hRad);
+      horizontalPan = deltaX * rightX + deltaZ * rightZ;
+      verticalPan = deltaY;
+    }
     return {
       preset: this._preset,
       projection: optics.projection,
@@ -309,6 +322,8 @@ export class RenderStudioCameraRig {
       target,
       heading: orientation.heading,
       elevation: orientation.elevation,
+      horizontalPan,
+      verticalPan,
       cameraDistance: orientation.distance,
       orthographicHeight: this._orthographicHeight ?? optics.orthographicHeight,
     };
@@ -543,6 +558,7 @@ export class RenderStudioCameraRig {
     const current = this._readCameraState();
     const camera = this.surface.renderSurface.camera;
     const target = new Vector3(bounds.centerX, bounds.centerY, bounds.centerZ);
+    this._boundsCenter = [bounds.centerX, bounds.centerY, bounds.centerZ];
     const currentPosition = vectorFromArray(current.position);
     const currentTarget = vectorFromArray(current.target);
     const direction = normalizedDirection(currentPosition, currentTarget);

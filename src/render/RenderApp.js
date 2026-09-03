@@ -1469,7 +1469,7 @@ export function createRenderApp({
   }
 
   function change(mutator) {
-    const next = clone(state);
+    const next = clone(getState());
     mutator(next);
     updateState(next);
   }
@@ -1565,9 +1565,30 @@ export function createRenderApp({
             if (!active || disposed) return;
             renderer?.markInteraction?.();
             const previousViewId = state.activeViewPresetId || activeViewPresetId;
+            const { center } = getBoxCenterRadius();
+            const target = camera.target || state.camera.target || center;
+            const deltaX = target[0] - center[0];
+            const deltaY = target[1] - center[1];
+            const deltaZ = target[2] - center[2];
+            const headingVal = Number(camera.heading ?? state.camera.heading ?? 0);
+            const hRad = headingVal * Math.PI / 180;
+            const rightX = Math.cos(hRad);
+            const rightZ = -Math.sin(hRad);
+            const horizontalPan = Number.isFinite(camera.horizontalPan)
+              ? camera.horizontalPan
+              : (deltaX * rightX + deltaZ * rightZ);
+            const verticalPan = Number.isFinite(camera.verticalPan)
+              ? camera.verticalPan
+              : deltaY;
             state = sanitizeRenderSettings({
               ...state,
-              camera: { ...state.camera, ...camera, preset: 'custom' },
+              camera: {
+                ...state.camera,
+                ...camera,
+                horizontalPan,
+                verticalPan,
+                preset: 'custom',
+              },
               activeViewPresetId: '',
               viewPresetBaseId: previousViewId || state.viewPresetBaseId || '',
             });
@@ -1617,6 +1638,17 @@ export function createRenderApp({
       structureSignature = signatures.structure;
       artworkSignature = signatures.artwork;
       renderer.updateSettings(state);
+      const initialCamera = renderer.getCameraState?.();
+      if (initialCamera) {
+        state = sanitizeRenderSettings({
+          ...state,
+          camera: {
+            ...state.camera,
+            ...initialCamera,
+            preset: state.camera.preset,
+          },
+        });
+      }
       renderContextState = 'ready';
       setBusy(false);
       setExportAvailability(true);
@@ -2032,7 +2064,7 @@ export function createRenderApp({
         boardAppearance = canonicalBoardAppearance(definition.settings.boardAppearance);
         renderer?.setBoardAppearance?.(boardAppearance);
       }
-      updateState(applyRenderPreset(state, presetId, { preserveProjectSpecific: false }));
+      updateState(applyRenderPreset(getState(), presetId, { preserveProjectSpecific: false }));
     });
   }
 
@@ -2267,7 +2299,28 @@ export function createRenderApp({
     });
     const camera = renderer?.getCameraState?.();
     if (camera) change((next) => {
-      next.camera = { ...next.camera, ...camera, preset: 'custom' };
+      const { center } = getBoxCenterRadius();
+      const target = camera.target || next.camera.target || center;
+      const deltaX = target[0] - center[0];
+      const deltaY = target[1] - center[1];
+      const deltaZ = target[2] - center[2];
+      const headingVal = Number(camera.heading ?? next.camera.heading ?? 0);
+      const hRad = headingVal * Math.PI / 180;
+      const rightX = Math.cos(hRad);
+      const rightZ = -Math.sin(hRad);
+      const horizontalPan = Number.isFinite(camera.horizontalPan)
+        ? camera.horizontalPan
+        : (deltaX * rightX + deltaZ * rightZ);
+      const verticalPan = Number.isFinite(camera.verticalPan)
+        ? camera.verticalPan
+        : deltaY;
+      next.camera = {
+        ...next.camera,
+        ...camera,
+        horizontalPan,
+        verticalPan,
+        preset: 'custom',
+      };
       next.activeViewPresetId = '';
     });
   });

@@ -22,7 +22,7 @@ import {
 } from './environmentRuntime.js';
 
 const FALLBACK_PRESET = 'neutral-softbox';
-const PROCEDURAL_COLORS = Object.freeze({
+export const PROCEDURAL_COLORS = Object.freeze({
   studio: [0.82, 0.86, 0.92],
   bright: [1.15, 1.1, 1.02],
   warm: [1.05, 0.72, 0.46],
@@ -81,7 +81,7 @@ function disposeEnvironmentEntry(entry) {
   return true;
 }
 
-function proceduralTexture(legacyPreset = 'studio') {
+export function proceduralTexture(legacyPreset = 'studio') {
   const color = PROCEDURAL_COLORS[legacyPreset] || PROCEDURAL_COLORS.studio;
   // A small equirectangular texture is deliberately used for the safe
   // fallback. It is linear data and is never decoded through an image loader.

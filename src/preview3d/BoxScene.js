@@ -63,6 +63,7 @@ import {
   focalLengthToFov,
   fovToFocalLength,
 } from '../render/cameraState.js';
+import { proceduralTexture } from '../render/RenderStudioEnvironmentAdapter.js';
 import { ENVIRONMENT_MAP_PRESETS, sanitizeEnvironmentMap } from '../render/environmentAssets.js';
 import {
   EnvironmentRuntimeCache,
@@ -133,6 +134,7 @@ const ENVIRONMENT_PALETTES = Object.freeze({
   cool: { base: 0xdce8f5, key: 0xbcd8ff, keyIntensity: 70, fill: 0x8fb8e8 },
   bright: { base: 0xffffff, key: 0xffffff, keyIntensity: 120, fill: 0xffffff },
   night: { base: 0x10151f, key: 0x8fa8d8, keyIntensity: 25, fill: 0x3a4a66 },
+  studio: { base: 0x73777a, key: 0xffffff, keyIntensity: 50, fill: 0x73777a },
 });
 
 const BACKGROUND_VERTEX_SHADER = `
@@ -335,6 +337,14 @@ function createOutlineGeometry(panel, zOffset) {
   return geometry;
 }
 
+const PROFILE_PRESENTATION = Object.freeze({
+  uncoated: Object.freeze({ roughness: 0.92, metalness: 0, clearcoat: 0, clearcoatRoughness: 0.8 }),
+  matte: Object.freeze({ roughness: 0.72, metalness: 0, clearcoat: 0, clearcoatRoughness: 0.9 }),
+  gloss: Object.freeze({ roughness: 0.26, metalness: 0, clearcoat: 0.22, clearcoatRoughness: 0.18 }),
+  studio: Object.freeze({ roughness: 0.26, metalness: 0, clearcoat: 0.22, clearcoatRoughness: 0.18 }),
+  photorealistic: Object.freeze({ roughness: 0.26, metalness: 0, clearcoat: 0.22, clearcoatRoughness: 0.18 }),
+});
+
 function makeExteriorMaterial(preset, texture, materialMaps = null) {
   if (preset === 'technical') {
     return new MeshBasicMaterial({
@@ -343,10 +353,11 @@ function makeExteriorMaterial(preset, texture, materialMaps = null) {
       toneMapped: false,
     });
   }
+  const presentation = PROFILE_PRESENTATION[preset] || PROFILE_PRESENTATION.gloss;
   // Any finish map can require the physical material path even when the board
   // profile itself is Matte: spot gloss and embossed relief need clearcoat or
   // normal-map inputs that MeshStandardMaterial cannot represent.
-  if (preset === 'photorealistic' || preset === 'gloss' || materialMaps) {
+  if (preset === 'photorealistic' || preset === 'gloss' || materialMaps || presentation.clearcoat > 0) {
     return new MeshPhysicalMaterial({
       map: texture,
       metalnessMap: materialMaps?.metalness || null,
@@ -355,10 +366,10 @@ function makeExteriorMaterial(preset, texture, materialMaps = null) {
       clearcoatMap: materialMaps?.clearcoat || null,
       clearcoatRoughnessMap: materialMaps?.clearcoatRoughness || null,
       side: FrontSide,
-      roughness: preset === 'gloss' ? 0.46 : preset === 'uncoated' ? 0.94 : preset === 'matte' ? 0.82 : 0.68,
-      metalness: 0,
-      clearcoat: materialMaps?.clearcoat ? 1 : preset === 'gloss' ? 0.25 : 0.05,
-      clearcoatRoughness: materialMaps?.clearcoatRoughness ? 1 : preset === 'gloss' ? 0.35 : 0.85,
+      roughness: presentation.roughness,
+      metalness: presentation.metalness,
+      clearcoat: materialMaps?.clearcoat ? 1 : presentation.clearcoat,
+      clearcoatRoughness: materialMaps?.clearcoatRoughness ? 1 : presentation.clearcoatRoughness,
       normalScale: materialMaps?.normal ? new Vector2(0.55, 0.55) : undefined,
     });
   }
@@ -368,8 +379,8 @@ function makeExteriorMaterial(preset, texture, materialMaps = null) {
     roughnessMap: materialMaps?.roughness || null,
     normalMap: materialMaps?.normal || null,
     side: FrontSide,
-    roughness: preset === 'uncoated' ? 0.94 : preset === 'matte' ? 0.82 : 0.86,
-    metalness: 0,
+    roughness: presentation.roughness,
+    metalness: presentation.metalness,
   });
 }
 
@@ -417,13 +428,15 @@ export class BoxScene {
     selectedPanelId = null,
     lightAzimuth = LIGHT_DEFAULT_AZIMUTH,
     lightElevation = LIGHT_DEFAULT_ELEVATION,
+    lightIntensity = 1.7,
+    exposure = 0.85,
     shadowBlur = 0,
     shadowIntensity = 0.25,
     shadowEnabled = true,
     shadowMapSize = 1024,
-    hemisphereIntensity = 1.7,
+    hemisphereIntensity = 0.4,
     environmentPreset = 'studio',
-    environmentIntensity = 0.65,
+    environmentIntensity = 0.4,
     environmentMap = null,
     environmentAsset = null,
     cameraPreset = 'isometric',
@@ -522,6 +535,9 @@ export class BoxScene {
     this.renderer.setPixelRatio(Math.min(windowRef.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.shadowMap.type = PCFShadowMap;
+    this.renderer.toneMapping = NeutralToneMapping;
+    this.exposure = Math.max(0.1, Math.min(3, Number(exposure) || 0.85));
+    this.renderer.toneMappingExposure = this.exposure;
     this.materialMaps = this.createMaterialTextureSet(materialMaps);
 
     this.scene = new Scene();
@@ -568,9 +584,10 @@ export class BoxScene {
       this.backgroundPlanes.set(camera, plane);
     }
 
-    this.hemisphereLight = new HemisphereLight(0xffffff, 0x73777a, hemisphereIntensity);
     this.hemisphereIntensity = Math.max(0, Math.min(5, Number(hemisphereIntensity) || 0));
-    this.directionalLight = new DirectionalLight(0xffffff, 2.6);
+    this.hemisphereLight = new HemisphereLight(0xffffff, 0x73777a, this.hemisphereIntensity);
+    this.lightIntensity = Math.max(0, Math.min(10, Number(lightIntensity) || 1.7));
+    this.directionalLight = new DirectionalLight(0xffffff, this.lightIntensity);
     this.directionalLight.position.set(1, 2, 2);
     this.directionalLight.castShadow = shadowEnabled !== false;
     this.directionalLight.shadow.mapSize.set(
@@ -580,7 +597,7 @@ export class BoxScene {
     this.directionalLight.shadow.bias = -0.0002;
     this.directionalLight.shadow.normalBias = 0.2;
     this.directionalLight.shadow.radius = 0;
-    this.scene.add(this.hemisphereLight, this.directionalLight);
+    this.scene.add(this.hemisphereLight, this.directionalLight, this.directionalLight.target);
 
     this.shadowEnabled = shadowEnabled !== false;
     this.shadowMapSize = [512, 1024, 2048].includes(Number(shadowMapSize))
@@ -1043,6 +1060,7 @@ export class BoxScene {
     shadowCamera.near = 0.1;
     shadowCamera.far = extent * 4;
     shadowCamera.updateProjectionMatrix();
+    this.applyLightDirection();
   }
 
   setSelectedPanel(panelId, { notify = true, render = true } = {}) {
@@ -1127,24 +1145,18 @@ export class BoxScene {
 
   ensureEnvironment({ fallbackReason, preserveAssetDiagnostics = false } = {}) {
     if (this.pmremGenerator == null) this.pmremGenerator = new PMREMGenerator(this.renderer);
-    let environmentScene = null;
-    if (this.environmentPreset === 'studio') {
-      environmentScene = new RoomEnvironment();
-    } else if (this.environmentPreset !== 'none') {
-      environmentScene = createEnvironmentScene(this.environmentPreset);
-    }
     const previous = this.environmentRuntimeEntry ? null : this.environmentRenderTarget;
     this.environmentRuntimeEntry = null;
     this.environmentEquirectangular = null;
-    if (!environmentScene) {
+    if (this.environmentPreset === 'none') {
       this.environmentTexture = null;
       this.environmentRenderTarget = null;
       this.scene.environment = null;
     } else {
-      this.environmentRenderTarget = this.pmremGenerator.fromScene(environmentScene, 0.04);
+      const sourceTexture = proceduralTexture(this.environmentPreset);
+      this.environmentRenderTarget = this.pmremGenerator.fromEquirectangular(sourceTexture);
       this.environmentTexture = this.environmentRenderTarget.texture;
-      if (environmentScene instanceof RoomEnvironment) environmentScene.dispose();
-      else disposeEnvironmentScene(environmentScene);
+      sourceTexture.dispose?.();
     }
     previous?.dispose?.();
     this.environmentDiagnostics = {
@@ -1438,14 +1450,14 @@ export class BoxScene {
       this.ensureEnvironment();
       this.setBackgroundMode('solid', '#e8eaeb', { render: false });
       this.hemisphereLight.visible = true;
-      this.hemisphereLight.intensity = 1.7;
+      this.hemisphereLight.intensity = this.hemisphereIntensity ?? 0.4;
       this.directionalLight.visible = true;
-      this.directionalLight.intensity = 2.6;
+      this.directionalLight.intensity = this.lightIntensity ?? 1.7;
       this.ground.visible = true;
       if (this.contactShadow) this.contactShadow.visible = true;
       this.applyEnvironment();
-      this.renderer.toneMapping = NoToneMapping;
-      this.renderer.toneMappingExposure = 1;
+      this.renderer.toneMapping = NeutralToneMapping;
+      this.renderer.toneMappingExposure = this.exposure ?? 0.85;
     }
     this.applyShadowIntensity();
     this.applyShadowSettings();
@@ -1472,13 +1484,21 @@ export class BoxScene {
   }
 
   applyLightDirection() {
+    const bounds = this.getBounds?.();
+    const radius = bounds?.radius || 100;
+    const centerX = bounds?.centerX || 0;
+    const centerY = bounds?.centerY || 0;
+    const centerZ = bounds?.centerZ || 0;
+    const distance = Math.max(radius * 4, 1);
     const elevation = this.lightElevation * Math.PI / 180;
     const azimuth = this.lightAzimuth * Math.PI / 180;
     this.directionalLight.position.set(
-      Math.sin(elevation) * Math.cos(azimuth),
-      Math.cos(elevation),
-      Math.sin(elevation) * Math.sin(azimuth),
+      centerX + Math.sin(elevation) * Math.cos(azimuth) * distance,
+      centerY + Math.cos(elevation) * distance,
+      centerZ + Math.sin(elevation) * Math.sin(azimuth) * distance,
     );
+    this.directionalLight.target.position.set(centerX, centerY, centerZ);
+    this.directionalLight.target.updateMatrixWorld?.(true);
     this.directionalLight.updateMatrixWorld();
   }
 
@@ -1639,7 +1659,8 @@ export class BoxScene {
   }
 
   setExposure(exposure) {
-    this.renderer.toneMappingExposure = Math.max(0.1, Math.min(3, Number(exposure) || 1));
+    this.exposure = Math.max(0.1, Math.min(3, Number(exposure) || 0.85));
+    this.renderer.toneMappingExposure = this.exposure;
     this.render();
   }
 
@@ -1650,6 +1671,19 @@ export class BoxScene {
 
   getCameraState() {
     const orientation = cameraHeadingElevation(this.camera.position, this.controls.target);
+    let horizontalPan = this.cameraHorizontalPan;
+    let verticalPan = this.cameraVerticalPan;
+    const bounds = this.getBounds();
+    if (bounds && this.controls?.target) {
+      const deltaX = this.controls.target.x - bounds.centerX;
+      const deltaY = this.controls.target.y - bounds.centerY;
+      const deltaZ = this.controls.target.z - bounds.centerZ;
+      const hRad = (orientation.heading || 0) * Math.PI / 180;
+      const rightX = Math.cos(hRad);
+      const rightZ = -Math.sin(hRad);
+      horizontalPan = deltaX * rightX + deltaZ * rightZ;
+      verticalPan = deltaY;
+    }
     return {
       preset: this.cameraPreset,
       projection: this.cameraProjection,
@@ -1658,8 +1692,8 @@ export class BoxScene {
       lens: cameraLensLabel(this.cameraFov),
       heading: orientation.heading,
       elevation: orientation.elevation,
-      horizontalPan: this.cameraHorizontalPan,
-      verticalPan: this.cameraVerticalPan,
+      horizontalPan,
+      verticalPan,
       cameraDistance: orientation.distance,
       frameHeight: this.orthographicHeight || visibleHeightForPerspective(this.perspectiveCamera, orientation.distance),
       orthographicHeight: this.orthographicHeight || 0,
@@ -1667,6 +1701,32 @@ export class BoxScene {
       keepVerticalsParallel: this.verticalCorrection,
       position: this.camera.position.toArray(),
       target: this.controls.target.toArray(),
+    };
+  }
+
+  getBounds() {
+    if (!this.boxRoot) return null;
+    this.boxRoot.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(this.boxRoot);
+    if (box.isEmpty()) return null;
+    const center = box.getCenter(new Vector3());
+    const size = box.getSize(new Vector3());
+    const sphere = box.getBoundingSphere({ center: new Vector3(), radius: 1 });
+    return {
+      minX: box.min.x,
+      maxX: box.max.x,
+      minY: box.min.y,
+      maxY: box.max.y,
+      minZ: box.min.z,
+      maxZ: box.max.z,
+      width: size.x,
+      height: size.y,
+      depth: size.z,
+      centerX: center.x,
+      centerY: center.y,
+      centerZ: center.z,
+      radius: sphere.radius,
+      units: 'mm',
     };
   }
 
@@ -1967,7 +2027,7 @@ export class BoxScene {
     if (render) this.render();
   }
 
-  fitCameraToFrame({ margin = CAMERA_MARGIN, aspect = null, render = true } = {}) {
+  fitCameraToFrame({ margin = CAMERA_MARGIN, aspect = null, tight = false, render = true } = {}) {
     this.boxRoot.updateMatrixWorld(true);
     const bounds = new Box3().setFromObject(this.boxRoot);
     const sphere = bounds.getBoundingSphere({ center: new Vector3(), radius: 1 });
@@ -1975,6 +2035,95 @@ export class BoxScene {
     const target = sphere.center.clone();
     const direction = this.camera.position.clone().sub(this.controls.target).normalize();
     const safeDirection = direction.lengthSq() > 0.0001 ? direction : CAMERA_PRESETS.isometric.direction;
+
+    const size = bounds.getSize(new Vector3());
+    const hasExtents = size.x > 0 && size.y > 0 && size.z > 0;
+
+    const canvasW = Math.max(1, this.container?.clientWidth || 1);
+    const canvasH = Math.max(1, this.container?.clientHeight || 1);
+    const canvasAspect = canvasW / canvasH;
+    const targetAspect = Number.isFinite(Number(aspect)) ? Number(aspect) : canvasAspect;
+
+    if (tight && hasExtents) {
+      const corners = [
+        new Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
+        new Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
+        new Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
+        new Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
+        new Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
+        new Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
+        new Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
+        new Vector3(bounds.max.x, bounds.max.y, bounds.max.z),
+      ];
+
+      const forward = safeDirection.clone();
+      const upWorld = this.camera.up || new Vector3(0, 1, 0);
+      let right = new Vector3().crossVectors(upWorld, forward).normalize();
+      if (right.lengthSq() < 1e-4) right = new Vector3(1, 0, 0);
+      const up = new Vector3().crossVectors(forward, right).normalize();
+
+      const frameFractionW = Math.min(1, targetAspect / canvasAspect);
+      const frameFractionH = Math.min(1, canvasAspect / targetAspect);
+      const H_limit = Math.max(0.01, frameFractionH);
+      const W_limit = Math.max(0.01, canvasAspect * frameFractionW);
+
+      const M = Math.max(1.02, Number(margin) || 1.08);
+      let maxRequiredDistance = 0;
+      let maxOrthographicHeight = 0;
+      const halfTanFov = Math.tan((this.perspectiveCamera.fov * Math.PI) / 360);
+
+      for (const corner of corners) {
+        const delta = corner.clone().sub(target);
+        const deltaX = delta.dot(right);
+        const deltaY = delta.dot(up);
+        const deltaZ = delta.dot(forward);
+
+        const normY = Math.abs(deltaY) / H_limit;
+        const normX = Math.abs(deltaX) / W_limit;
+        const maxNorm = Math.max(normY, normX);
+
+        const cornerDist = deltaZ + (maxNorm * M) / Math.max(0.01, halfTanFov);
+        if (cornerDist > maxRequiredDistance) {
+          maxRequiredDistance = cornerDist;
+        }
+
+        const orthoNorm = Math.max(Math.abs(deltaY) / H_limit, Math.abs(deltaX) / W_limit);
+        const requiredOrthoH = orthoNorm * 2 * M;
+        if (requiredOrthoH > maxOrthographicHeight) {
+          maxOrthographicHeight = requiredOrthoH;
+        }
+      }
+
+      if (this.camera.isPerspectiveCamera) {
+        const distance = Math.max(radius * 0.1, maxRequiredDistance);
+        this.camera.position.copy(target).addScaledVector(forward, distance);
+        this.perspectiveCamera.near = Math.max(0.01, radius / 1000);
+        this.perspectiveCamera.far = Math.max(1000, distance + radius * 10);
+        this.camera.lookAt(target);
+        this.perspectiveCamera.updateProjectionMatrix();
+        this.perspectiveCamera.updateMatrixWorld(true);
+        this.controls.target.copy(target);
+        this.controls.update();
+        this.cameraHorizontalPan = 0;
+        this.cameraVerticalPan = 0;
+        this.applyVerticalCorrection();
+        if (render) this.render();
+        return this.getCameraState();
+      }
+
+      this.setOrthographicHeight(Math.max(0.01, maxOrthographicHeight), targetAspect);
+      const distance = Math.max(radius * 4, this.camera.position.distanceTo(this.controls.target));
+      this.camera.position.copy(target).addScaledVector(forward, distance);
+      this.cameraHorizontalPan = 0;
+      this.cameraVerticalPan = 0;
+      this.controls.target.copy(target);
+      this.camera.lookAt(target);
+      this.controls.update();
+      this.applyVerticalCorrection();
+      if (render) this.render();
+      return this.getCameraState();
+    }
+
     const visibleHeight = radius * 2 * Math.max(1, Number(margin) || CAMERA_MARGIN);
     const frameAspect = Number.isFinite(Number(aspect)) ? Math.max(0.01, Number(aspect)) : null;
     if (this.camera.isPerspectiveCamera) {

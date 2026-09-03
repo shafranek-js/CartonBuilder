@@ -160,6 +160,9 @@ export class WebGLCartonRenderer {
   updateSettings(settings, { render = true } = {}) {
     const previous = this.currentSettings;
     const previousCameraObject = this.sceneController.renderSurface.camera;
+    if (!previous) {
+      this.sceneController.setToneMapping?.('neutral');
+    }
     if (!previous || previous.material.profile !== settings.material.profile) {
       this.sceneController.setMaterialProfile(settings.material.profile);
     }

@@ -169,7 +169,7 @@ export function applyRenderPreset(current, id, { preserveProjectSpecific = true 
     if (Array.isArray(current.camera.target) && !(current.camera.target[0] === 0 && current.camera.target[1] === 0 && current.camera.target[2] === 0)) {
       merged.camera.target = [...current.camera.target];
     }
-    if (Number(current.camera.cameraDistance) > 0 && Number(current.camera.cameraDistance) < 50) {
+    if (Number(current.camera.cameraDistance) > 0) {
       if (current.camera.fov && merged.camera.fov && Math.abs(current.camera.fov - merged.camera.fov) > 0.1) {
         const fovRatio = Math.tan((current.camera.fov * Math.PI) / 360) / Math.tan((merged.camera.fov * Math.PI) / 360);
         merged.camera.cameraDistance = current.camera.cameraDistance * fovRatio;
@@ -181,10 +181,16 @@ export function applyRenderPreset(current, id, { preserveProjectSpecific = true 
       && Number.isFinite(Number(merged.camera.elevation))
       && (id === 'left-view' || id === 'right-view' || merged.camera.preset === 'custom');
     if (hasCustomHeading) {
+      const isMillimeterScale = (Number(current.camera.cameraDistance) > 20)
+        || (Array.isArray(merged.camera.target) && Math.hypot(...merged.camera.target) > 5)
+        || (Array.isArray(current.camera.position) && Math.hypot(...current.camera.position) > 20);
+      const fallbackDistance = isMillimeterScale ? 420 : 4;
+      const effectiveDistance = merged.camera.cameraDistance || fallbackDistance;
+      merged.camera.cameraDistance = effectiveDistance;
       merged.camera.position = cameraPositionFromHeading({
         heading: merged.camera.heading,
         elevation: merged.camera.elevation,
-        distance: merged.camera.cameraDistance || 4,
+        distance: effectiveDistance,
         target: merged.camera.target,
       });
     } else {

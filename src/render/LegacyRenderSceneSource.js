@@ -74,7 +74,7 @@ export class LegacyRenderSceneSource extends RenderSceneSource {
   getResourceInfo(...args) { return this.boxScene.getResourceInfo(...args); }
   getGeometryDiagnostics(...args) { return this.boxScene.getGeometryDiagnostics(...args); }
   getDiagnostics() { return this.getResourceInfo(); }
-  getBounds() { return this.boxScene.boxModel?.getBounds?.() || null; }
+  getBounds() { return this.boxScene.getBounds?.() || this.boxScene.boxModel?.getBounds?.() || null; }
 
   dispose() {
     if (this.disposed) return false;
