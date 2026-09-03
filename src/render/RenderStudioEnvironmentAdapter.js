@@ -113,7 +113,11 @@ async function defaultEnvironmentTextureLoader(asset) {
     || asset.mimeType === 'image/x-exr'
     ? EXRLoader
     : HDRLoader;
-  return markEnvironmentTexture(new Loader().parse(bytes));
+  const loader = new Loader();
+  const texture = typeof loader.createDataTexture === 'function'
+    ? loader.createDataTexture(bytes)
+    : loader.parse(bytes);
+  return markEnvironmentTexture(texture);
 }
 
 function legacyPresetId(value) {
@@ -180,6 +184,7 @@ export class RenderStudioEnvironmentAdapter {
     this._environmentMap = sanitizeEnvironmentMap(environmentMap);
     this._environmentAsset = environmentAsset || null;
     this._currentTexture = null;
+    this._currentRuntimeTexture = null;
     this._activeKey = null;
     this._diagnostics = {
       source: this._environmentMap.source,
@@ -321,6 +326,7 @@ export class RenderStudioEnvironmentAdapter {
     const cached = this.cache.get(key);
     if (cached) {
       this._currentTexture = cached.texture;
+      this._currentRuntimeTexture = cached.runtimeTexture || cached.texture;
       this._activeKey = key;
       this._updateDiagnostics(map, cached, { cacheHit: true, fallbackReason: reason });
       return cached.texture;
@@ -344,15 +350,21 @@ export class RenderStudioEnvironmentAdapter {
     };
     this.cache.set(key, entry, key);
     this._currentTexture = texture;
+    this._currentRuntimeTexture = texture;
     this._activeKey = key;
     this._updateDiagnostics(map, entry, { fallbackReason: reason });
     return texture;
+  }
+
+  get currentRuntimeTexture() {
+    return this._currentRuntimeTexture || null;
   }
 
   _schedule(map, assetOverride = undefined) {
     const generation = ++this._generation;
     if (map.source === 'none' || map.presetId === 'no-reflections') {
       this._currentTexture = null;
+      this._currentRuntimeTexture = null;
       this._activeKey = null;
       this._updateDiagnostics(map, null);
       return Promise.resolve(null);
@@ -361,6 +373,7 @@ export class RenderStudioEnvironmentAdapter {
     const cached = this.cache.get(key);
     if (cached) {
       this._currentTexture = cached.texture;
+      this._currentRuntimeTexture = cached.runtimeTexture || cached.texture;
       this._activeKey = key;
       this._updateDiagnostics(map, cached, { cacheHit: true });
       return Promise.resolve(cached.texture);
@@ -375,6 +388,7 @@ export class RenderStudioEnvironmentAdapter {
         }
         this.cache.set(key, entry, key);
         this._currentTexture = entry.texture;
+        this._currentRuntimeTexture = entry.runtimeTexture;
         this._activeKey = key;
         this._updateDiagnostics(map, entry);
         return entry.texture;
@@ -421,6 +435,7 @@ export class RenderStudioEnvironmentAdapter {
     if (this.disposed) return false;
     this._generation += 1;
     this._currentTexture = null;
+    this._currentRuntimeTexture = null;
     this._activeKey = null;
     this._clearCacheBestEffort();
     return true;
@@ -436,6 +451,7 @@ export class RenderStudioEnvironmentAdapter {
     this.disposed = true;
     this._generation += 1;
     this._currentTexture = null;
+    this._currentRuntimeTexture = null;
     this._activeKey = null;
     let firstError = null;
     try {

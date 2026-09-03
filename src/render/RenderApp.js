@@ -455,6 +455,9 @@ export function createRenderApp({
     return backgroundAsset;
   }
 
+  let inFlightEnvironmentPromise = null;
+  let inFlightEnvironmentKey = null;
+
   async function ensureEnvironmentAsset({ surfaceError = false } = {}) {
     const environmentMap = state.lighting?.environmentMap || {};
     if (environmentMap.source === 'builtin') {
@@ -464,20 +467,34 @@ export function createRenderApp({
         return null;
       }
       if (environmentAsset?.source === 'builtin' && environmentAsset.presetId === preset.id) return environmentAsset;
-      const generation = ++environmentAssetLoadGeneration;
-      try {
-        const fetchFn = typeof windowRef.fetch === 'function'
-          ? windowRef.fetch.bind(windowRef)
-          : globalThis.fetch;
-        const asset = await loadBuiltInEnvironmentAsset(preset.id, fetchFn);
-        if (generation !== environmentAssetLoadGeneration || state.lighting?.environmentMap?.presetId !== preset.id) return null;
-        environmentAsset = asset;
-        return environmentAsset;
-      } catch (error) {
-        environmentAsset = null;
-        if (surfaceError) throw error;
-        return null;
+      const key = `${preset.id}:${environmentMap.resolutionCap || 2048}`;
+      if (inFlightEnvironmentKey === key && inFlightEnvironmentPromise) {
+        return inFlightEnvironmentPromise;
       }
+      const generation = ++environmentAssetLoadGeneration;
+      const promise = (async () => {
+        try {
+          const fetchFn = typeof windowRef.fetch === 'function'
+            ? windowRef.fetch.bind(windowRef)
+            : globalThis.fetch;
+          const asset = await loadBuiltInEnvironmentAsset(preset.id, fetchFn);
+          if (generation !== environmentAssetLoadGeneration || state.lighting?.environmentMap?.presetId !== preset.id) return null;
+          environmentAsset = asset;
+          return environmentAsset;
+        } catch (error) {
+          environmentAsset = null;
+          if (surfaceError) throw error;
+          return null;
+        } finally {
+          if (inFlightEnvironmentKey === key) {
+            inFlightEnvironmentPromise = null;
+            inFlightEnvironmentKey = null;
+          }
+        }
+      })();
+      inFlightEnvironmentPromise = promise;
+      inFlightEnvironmentKey = key;
+      return promise;
     }
 
     const assetId = environmentMap.assetId;
@@ -510,13 +527,21 @@ export function createRenderApp({
     next.lighting.environmentMap = {
       ...next.lighting.environmentMap,
       source: 'custom',
+      presetId: 'custom',
       assetId: asset.assetId,
     };
+    if (next.background.mode === 'environment') {
+      next.lighting.environmentMap.usage = 'both';
+    }
     updateState(next);
+    await renderer?.setEnvironmentAsset?.(asset);
+    updateControls();
+    renderer?.render?.();
     return clone(asset);
   }
 
   function clearEnvironmentMap() {
+    if (elements.environmentMapFile) elements.environmentMapFile.value = '';
     environmentAssetLoadGeneration += 1;
     environmentAsset = null;
     const next = clone(state);
@@ -556,6 +581,7 @@ export function createRenderApp({
   }
 
   function clearBackgroundImage() {
+    if (elements.backgroundFile) elements.backgroundFile.value = '';
     backgroundAsset = null;
     const next = clone(state);
     next.background.mode = 'solid';
@@ -2357,34 +2383,51 @@ export function createRenderApp({
   elements.environmentMapFile?.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    elements.status.textContent = t('renderEnvironmentLoading');
     try {
       await setEnvironmentMapFile(file);
       elements.status.textContent = t('renderEnvironmentLoaded');
     } catch (error) {
-      elements.status.textContent = getUserErrorMessage(error, 'renderEnvironmentInvalid');
-    } finally {
       event.target.value = '';
+      elements.status.textContent = getUserErrorMessage(error, 'renderEnvironmentInvalid');
     }
   });
   elements.clearEnvironmentMap?.addEventListener('click', clearEnvironmentMap);
-  elements.environmentMapUsage?.addEventListener('change', (event) => change((next) => { next.lighting.environmentMap.usage = event.target.value; }));
+  elements.environmentMapUsage?.addEventListener('change', (event) => change((next) => {
+    const usage = event.target.value;
+    next.lighting.environmentMap.usage = usage;
+    if ((usage === 'both' || usage === 'background') && next.background.mode !== 'environment') {
+      next.background.mode = 'environment';
+      if (elements.backgroundMode) elements.backgroundMode.value = 'environment';
+    } else if (usage === 'lighting' && next.background.mode === 'environment') {
+      next.background.mode = 'solid';
+      if (elements.backgroundMode) elements.backgroundMode.value = 'solid';
+    }
+  }));
   elements.environmentMapRotation?.addEventListener('input', (event) => change((next) => { next.lighting.environmentMap.rotation = Number(event.target.value); }));
   elements.environmentMapBackgroundIntensity?.addEventListener('input', (event) => change((next) => { next.lighting.environmentMap.backgroundIntensity = Number(event.target.value); }));
   elements.environmentMapBackgroundBlur?.addEventListener('input', (event) => change((next) => { next.lighting.environmentMap.backgroundBlur = Number(event.target.value); }));
   elements.environmentMapResolution?.addEventListener('change', (event) => change((next) => { next.lighting.environmentMap.resolutionCap = Number(event.target.value); }));
   elements.exposure.addEventListener('input', (event) => change((next) => { next.lighting.exposure = Number(event.target.value); }));
-  elements.backgroundMode.addEventListener('change', (event) => change((next) => { next.background.mode = event.target.value; }));
+  elements.backgroundMode.addEventListener('change', (event) => change((next) => {
+    const mode = event.target.value;
+    next.background.mode = mode;
+    if (mode === 'environment' && next.lighting.environmentMap.usage === 'lighting') {
+      next.lighting.environmentMap.usage = 'both';
+      if (elements.environmentMapUsage) elements.environmentMapUsage.value = 'both';
+    }
+  }));
   elements.backgroundColor.addEventListener('input', (event) => change((next) => { next.background.color = event.target.value; }));
   elements.backgroundFile?.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    elements.status.textContent = t('renderBackgroundLoading') || 'Loading background…';
     try {
       await setBackgroundImage(file);
       elements.status.textContent = t('renderBackgroundLoaded');
     } catch (error) {
-      elements.status.textContent = error?.message || t('renderBackgroundInvalid');
-    } finally {
       event.target.value = '';
+      elements.status.textContent = error?.message || t('renderBackgroundInvalid');
     }
   });
   elements.clearBackground?.addEventListener('click', clearBackgroundImage);
@@ -2618,6 +2661,9 @@ export function createRenderApp({
     runExportPreflight,
     render() {
       renderer?.render();
+    },
+    getRenderer() {
+      return renderer;
     },
     getDiagnostics() {
       const diagnostics = renderer?.getDiagnostics() || {

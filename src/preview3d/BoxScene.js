@@ -1173,7 +1173,7 @@ export class BoxScene {
     }
     const map = this.environmentMap || {};
     const usesLighting = map.source !== 'none' && (map.usage === 'lighting' || map.usage === 'both');
-    const usesBackground = map.usage === 'background' || map.usage === 'both';
+    const usesBackground = map.usage === 'background' || map.usage === 'both' || this.backgroundMode === 'environment';
     this.scene.environment = usesLighting ? this.environmentTexture : null;
     this.scene.environmentIntensity = Number(this.environmentIntensity ?? map.intensity) || 0;
     this.scene.environmentRotation?.set?.(0, Number(map.rotation || 0) * Math.PI / 180, 0);
@@ -1193,7 +1193,7 @@ export class BoxScene {
       }
     }
     if (this.backgroundMode === 'environment' && usesBackground) {
-      this.scene.background = this.environmentEquirectangular || this.scene.background || new Color(this.backgroundColor);
+      this.scene.background = this.environmentEquirectangular || this.environmentTexture || this.scene.background || new Color(this.backgroundColor);
       if (this.scene.background) {
         this.scene.backgroundIntensity = Number(map.backgroundIntensity ?? 1) || 1;
         this.scene.backgroundBlurriness = Number(map.backgroundBlur ?? 0) || 0;

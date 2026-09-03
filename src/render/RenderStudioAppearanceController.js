@@ -1,6 +1,7 @@
 import {
   Color,
   DirectionalLight,
+  EquirectangularReflectionMapping,
   Group,
   HemisphereLight,
   Mesh,
@@ -277,6 +278,7 @@ export class RenderStudioAppearanceController {
     this._floorGeometry = null;
     this._floorMaterial = null;
     this._environmentTexture = null;
+    this._environmentEquirectangular = null;
     this._backgroundTexture = null;
     this._environmentGeneration = 0;
     this._backgroundGeneration = 0;
@@ -442,11 +444,25 @@ export class RenderStudioAppearanceController {
   }
 
   _applyEnvironmentTexture(texture) {
-    if (texture === null) this._environmentTexture = null;
-    else if (texture) this._environmentTexture = texture;
+    if (texture === null) {
+      this._environmentTexture = null;
+      this._environmentEquirectangular = null;
+    } else if (texture) {
+      this._environmentTexture = texture;
+      this._environmentEquirectangular = this.environmentAdapter?.currentRuntimeTexture
+        || (texture?.mapping === EquirectangularReflectionMapping ? texture : null);
+    }
     this.surface.renderSurface.scene.environment = this._environmentTexture;
     if (this._backgroundMode === 'environment') {
-      this.surface.renderSurface.scene.background = this._environmentTexture;
+      const scene = this.surface.renderSurface.scene;
+      scene.background = this._environmentEquirectangular || this._environmentTexture;
+      if (this._environmentMap) {
+        scene.backgroundIntensity = Number(this._environmentMap.backgroundIntensity ?? 1) || 1;
+        scene.backgroundBlurriness = Number(this._environmentMap.backgroundBlur ?? 0) || 0;
+        if (scene.backgroundRotation?.set) {
+          scene.backgroundRotation.set(0, (Number(this._environmentMap.rotation) || 0) * Math.PI / 180, 0);
+        }
+      }
     }
     this.surface.render?.();
   }
@@ -606,7 +622,7 @@ export class RenderStudioAppearanceController {
     } else if (mode === 'image') {
       nextBackground = this._backgroundTexture;
     } else {
-      nextBackground = this._environmentTexture;
+      nextBackground = this._environmentEquirectangular || this._environmentTexture;
     }
 
     const scene = this.surface.renderSurface.scene;
@@ -615,6 +631,13 @@ export class RenderStudioAppearanceController {
     if (mode === 'transparent') renderer.setClearColor(0x000000, 0);
     else if (mode === 'solid') renderer.setClearColor(nextColor, 1);
     else renderer.setClearColor(0x000000, 1);
+    if (mode === 'environment' && this._environmentMap) {
+      scene.backgroundIntensity = Number(this._environmentMap.backgroundIntensity ?? 1) || 1;
+      scene.backgroundBlurriness = Number(this._environmentMap.backgroundBlur ?? 0) || 0;
+      if (scene.backgroundRotation?.set) {
+        scene.backgroundRotation.set(0, (Number(this._environmentMap.rotation) || 0) * Math.PI / 180, 0);
+      }
+    }
     this._backgroundMode = mode;
     this._backgroundColor = nextColor;
     this.reflectionAdapter.setBackgroundMode?.(mode);
