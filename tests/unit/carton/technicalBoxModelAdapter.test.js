@@ -228,4 +228,33 @@ describe('technical artwork compatibility model', () => {
     expect(side2.x + side2.width).toBeLessThanOrEqual(backBody.x + 0.1);
     expect(backBody.x + backBody.width).toBeLessThanOrEqual(glueFlap.x + 0.1);
   });
+
+  it('updates artwork reference frame and panel face names when front and back are swapped', async () => {
+    const document = await TechnicalCartonDocument.create(loadFixture('rte'));
+    const adapter = createTechnicalBoxModelAdapter(document);
+
+    const frameBefore = adapter.getArtworkReferenceFrame();
+    const panelsBefore = adapter.getPanels();
+    const frontPanelBefore = panelsBefore.find((p) => p.id === 'body.front');
+    const backPanelBefore = panelsBefore.find((p) => p.id === 'body.back');
+
+    expect(frontPanelBefore.faceName).toBe('Front');
+    expect(backPanelBefore.faceName).toBe('Back');
+    expect(frameBefore.origin).toEqual({ x: frontPanelBefore.x, y: frontPanelBefore.y });
+
+    document.setFrontBackSwapped(true);
+    const adapterSwapped = createTechnicalBoxModelAdapter(document);
+
+    const frameAfter = adapterSwapped.getArtworkReferenceFrame();
+    const panelsAfter = adapterSwapped.getPanels();
+    const frontPanelAfter = panelsAfter.find((p) => p.id === 'body.front');
+    const backPanelAfter = panelsAfter.find((p) => p.id === 'body.back');
+
+    expect(frontPanelAfter.faceName).toBe('Back');
+    expect(backPanelAfter.faceName).toBe('Front');
+    // Reference frame now points to the new Front panel (body.back)
+    expect(frameAfter.origin).toEqual({ x: backPanelAfter.x, y: backPanelAfter.y });
+    expect(frameAfter.bounds.width).toBe(backPanelAfter.width);
+    expect(frameAfter.bounds.height).toBe(backPanelAfter.height);
+  });
 });

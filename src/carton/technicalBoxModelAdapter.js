@@ -21,7 +21,8 @@ function boundsOf(points) {
 }
 
 function createArtworkReferenceFrame(surfaces) {
-  const front = surfaces.find((surface) => surface.id === 'body.front');
+  const front = surfaces.find((surface) => surface.role === 'BODY.FRONT' || surface.label === 'Front')
+    || surfaces.find((surface) => surface.id === 'body.front');
   const bounds = front?.bounds;
   const values = [
     bounds?.minX,
@@ -142,6 +143,8 @@ export function createTechnicalBoxModelAdapter(document) {
     getCanonicalSemanticSvg: () => document.getCanonicalSemanticSvg(),
     getSourceIdentity: () => document.getSourceIdentity(),
     toJSON: () => document.serialize(),
+    get isFrontBackSwapped() { return Boolean(document.isFrontBackSwapped); },
+    setFrontBackSwapped: (swapped) => document.setFrontBackSwapped?.(swapped),
     setBoardCaliper: () => false,
     setBoardConstruction: () => false,
     updateDimensions: () => { throw new Error('Technical carton dimensions are edited in Packaging Box Designer.'); },

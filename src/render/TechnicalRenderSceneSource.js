@@ -62,6 +62,7 @@ function normalizeBuildRequest(input, positionalArtworkAtlas, positionalMaps, po
     artworkAtlas: request.artworkAtlas ?? request.atlas ?? positionalArtworkAtlas,
     maps: request.maps ?? request.materialMaps ?? positionalMaps ?? {},
     name: request.name || semanticSvgSource?.fileName || positionalName || 'technical-carton.svg',
+    frontBackSwapped: Boolean(request.frontBackSwapped ?? bundle?.frontBackSwapped),
   };
 }
 
@@ -314,6 +315,9 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
         throw new Error('Technical runtime did not return a Three.js model root.');
       }
 
+      if (request.frontBackSwapped && candidateModel.rotation) {
+        candidateModel.rotation.y = Math.PI;
+      }
       candidateModel.updateMatrixWorld?.(true);
       this._renderSurface.scene.add(candidateModel);
       this.runtime.setFoldProgress(1);

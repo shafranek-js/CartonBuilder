@@ -78,7 +78,10 @@ export async function createCartonDocument(cartonSource, technicalAssets = null,
       };
     }
 
-    return TechnicalCartonDocument.create(bundle, options);
+    return TechnicalCartonDocument.create(bundle, {
+      ...options,
+      frontBackSwapped: Boolean(cartonSource.frontBackSwapped),
+    });
   }
 
   throw new AppError('unsupportedCartonMode', { mode });

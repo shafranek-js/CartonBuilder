@@ -122,6 +122,9 @@
               <strong data-i18n="technicalWorkflowTitle">Technical Dieline</strong>
               <span id="technicalHostStatus" class="technical-host-status" role="status" aria-live="polite" data-i18n="technicalPluginLoading">Loading Packaging Box Designer…</span>
             </div>
+            <div class="technical-toolbar-actions">
+              <button type="button" class="technical-toolbar-btn" id="technicalSwapFrontBackBtn" data-i18n="swapFrontBack" title="Swap Front and Back panel designations without changing geometry" data-i18n-title="swapFrontBackTooltip">Swap Front/Back</button>
+            </div>
             <span id="technicalHostValidation" class="technical-host-validation" role="status" aria-live="polite" data-i18n="technicalValidationWaiting">Structural — · Geometry — · Contract —</span>
           </header>
           <iframe id="technicalHostFrame" class="technical-host-frame" title="Packaging Box Designer" sandbox="allow-scripts" data-src="./plugins/packaging-box-designer/1.2.0/index.html"></iframe>
@@ -421,7 +424,10 @@
                 </div>
               </div>
               <div id="frontRelativeCoordinates" class="front-relative-coordinates" hidden aria-live="polite">
-                <span class="front-relative-label" data-i18n="frontRelativeLabel">Front-relative</span>
+                <div class="front-relative-header">
+                  <span class="front-relative-label" data-i18n="frontRelativeLabel">Front-relative</span>
+                  <button type="button" class="swap-front-back-btn" id="artworkSwapFrontBackBtn" data-i18n="swapFrontBack" title="Swap Front and Back panel designations without changing geometry" data-i18n-title="swapFrontBackTooltip">Swap Front/Back</button>
+                </div>
                 <div class="front-relative-fields">
                   <span class="front-relative-axis" data-i18n="frontRelativeXLabel">Front X</span>
                   <output id="frontRelativeX" aria-label="Front X" data-i18n-aria-label="frontRelativeXLabel">—</output>

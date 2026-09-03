@@ -81,21 +81,32 @@ export class TechnicalCartonDocument extends CartonDocument {
     }
 
     // Use verified model returned directly from validateCartonWorkflowBundle
-    return new TechnicalCartonDocument(bundle, validation.model);
+    const frontBackSwapped = Boolean(trustOptions.frontBackSwapped);
+    return new TechnicalCartonDocument(bundle, validation.model, { frontBackSwapped });
   }
 
   /**
    * @param {Record<string, unknown>} bundle
    * @param {Record<string, unknown>} validatedModel
+   * @param {object} [options]
    */
-  constructor(bundle, validatedModel) {
+  constructor(bundle, validatedModel, { frontBackSwapped = false } = {}) {
     super();
     this._bundle = deepFreeze(clone(bundle));
     this._model = deepFreeze(clone(validatedModel));
+    this._frontBackSwapped = Boolean(frontBackSwapped);
   }
 
   get mode() {
     return 'technical';
+  }
+
+  get isFrontBackSwapped() {
+    return this._frontBackSwapped;
+  }
+
+  setFrontBackSwapped(swapped) {
+    this._frontBackSwapped = Boolean(swapped);
   }
 
   get isComplete() {
@@ -214,11 +225,23 @@ export class TechnicalCartonDocument extends CartonDocument {
       const minY = ys.length ? Math.min(...ys) : 0;
       const maxY = ys.length ? Math.max(...ys) : 0;
 
+      let role = region.role;
+      let label = region.label || region.id;
+      if (this._frontBackSwapped) {
+        if (region.id === 'body.front' || region.role === 'BODY.FRONT') {
+          role = 'BODY.BACK';
+          label = 'Back';
+        } else if (region.id === 'body.back' || region.role === 'BODY.BACK') {
+          role = 'BODY.FRONT';
+          label = 'Front';
+        }
+      }
+
       surfaces.push({
         id: region.id,
-        role: region.role,
+        role,
         kind: region.kind || 'PANEL',
-        label: region.label || region.id,
+        label,
         polygon: points,
         contour: {
           segments,
@@ -355,6 +378,7 @@ export class TechnicalCartonDocument extends CartonDocument {
       semanticSvgAssetId: this._bundle.semanticSvg?.assetId,
       modelSha256: this._bundle.modelJson?.sha256,
       svgSha256: this._bundle.semanticSvg?.sha256,
+      frontBackSwapped: this._frontBackSwapped,
     };
   }
 }

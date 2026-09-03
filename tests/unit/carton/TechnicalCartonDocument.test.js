@@ -257,3 +257,66 @@ describe('TechnicalCartonDocument negative security & integrity tests', () => {
     });
   });
 });
+
+describe('TechnicalCartonDocument Front/Back swap', () => {
+  it('swaps front and back surface labels and roles without changing geometry', async () => {
+    const bundle = loadFixture('rte');
+    const doc = await TechnicalCartonDocument.create(bundle);
+
+    expect(doc.isFrontBackSwapped).toBe(false);
+    const surfacesBefore = doc.getArtworkSurfaces();
+    const frontBefore = surfacesBefore.find((s) => s.id === 'body.front');
+    const backBefore = surfacesBefore.find((s) => s.id === 'body.back');
+    const side1Before = surfacesBefore.find((s) => s.id === 'body.side1');
+
+    expect(frontBefore.label).toBe('Front');
+    expect(frontBefore.role).toBe('BODY.FRONT');
+    expect(backBefore.label).toBe('Back');
+    expect(backBefore.role).toBe('BODY.BACK');
+    expect(side1Before.label).toBe('Side 1');
+
+    doc.setFrontBackSwapped(true);
+    expect(doc.isFrontBackSwapped).toBe(true);
+
+    const surfacesAfter = doc.getArtworkSurfaces();
+    const frontAfter = surfacesAfter.find((s) => s.id === 'body.front');
+    const backAfter = surfacesAfter.find((s) => s.id === 'body.back');
+    const side1After = surfacesAfter.find((s) => s.id === 'body.side1');
+
+    // Labels and roles are swapped
+    expect(frontAfter.label).toBe('Back');
+    expect(frontAfter.role).toBe('BODY.BACK');
+    expect(backAfter.label).toBe('Front');
+    expect(backAfter.role).toBe('BODY.FRONT');
+
+    // Geometry, polygons, and other panels remain 100% identical
+    expect(frontAfter.bounds).toEqual(frontBefore.bounds);
+    expect(frontAfter.polygon).toEqual(frontBefore.polygon);
+    expect(backAfter.bounds).toEqual(backBefore.bounds);
+    expect(backAfter.polygon).toEqual(backBefore.polygon);
+    expect(side1After).toEqual(side1Before);
+
+    // Serialization preserves frontBackSwapped
+    const serialized = doc.serialize();
+    expect(serialized.frontBackSwapped).toBe(true);
+
+    // Round-trip through createCartonDocument preserves frontBackSwapped
+    const cartonSource = {
+      mode: 'technical',
+      source: bundle.source,
+      modelSha256: bundle.modelJson.sha256,
+      svgSha256: bundle.semanticSvg.sha256,
+      semanticSvgAssetId: bundle.semanticSvg.assetId,
+      frontBackSwapped: true,
+    };
+    const technicalAssets = {
+      modelBlob: new Blob([bundle.modelJson.text], { type: 'application/json' }),
+      svgBlob: new Blob([bundle.semanticSvg.markup], { type: 'image/svg+xml' }),
+    };
+    const restoredDoc = await createCartonDocument(cartonSource, technicalAssets);
+    expect(restoredDoc.isFrontBackSwapped).toBe(true);
+    const restoredSurfaces = restoredDoc.getArtworkSurfaces();
+    expect(restoredSurfaces.find((s) => s.id === 'body.front').label).toBe('Back');
+    expect(restoredSurfaces.find((s) => s.id === 'body.back').label).toBe('Front');
+  });
+});

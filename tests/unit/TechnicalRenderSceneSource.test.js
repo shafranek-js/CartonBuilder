@@ -28,6 +28,7 @@ function createModel(id = 'technical-model') {
   return {
     id,
     scale,
+    rotation: { x: 0, y: 0, z: 0 },
     updateMatrixWorld: vi.fn(),
     parent: null,
   };
@@ -373,5 +374,15 @@ describe('TechnicalRenderSceneSource', () => {
       roughness: { id: 'roughness-map' },
       metalness: { id: 'metalness-map' },
     });
+  });
+
+  it('rotates the model by 180 degrees around Y when frontBackSwapped is true', () => {
+    const { source, runtime } = createSource();
+    source.buildScene({
+      semanticSvg: CANONICAL_SVG,
+      artworkAtlas: ARTWORK_ATLAS,
+      frontBackSwapped: true,
+    });
+    expect(runtime.model.rotation.y).toBe(Math.PI);
   });
 });

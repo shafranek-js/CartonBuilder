@@ -117,12 +117,16 @@ export function createTechnicalRenderSceneSource({
       throw new TypeError('Technical render source factory must return a source with dispose().');
     }
 
-    source.buildScene({
+    const buildRequest = {
       bundle,
       artworkAtlas,
       maps: materialMaps,
       name,
-    });
+    };
+    if (technicalDocument.isFrontBackSwapped) {
+      buildRequest.frontBackSwapped = true;
+    }
+    source.buildScene(buildRequest);
     return source;
   } catch (error) {
     let sourceCleanupSucceeded = false;

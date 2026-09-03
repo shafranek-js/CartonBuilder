@@ -408,6 +408,41 @@ const quickPreviewActions = document.getElementById('quickPreviewActions');
 const quickPreviewContent = document.getElementById('quickPreviewContent');
 const openRenderButton = document.getElementById('openRenderButton');
 const presetTriggerBtn = document.getElementById('presetTriggerBtn');
+const technicalSwapFrontBackBtn = document.getElementById('technicalSwapFrontBackBtn');
+const artworkSwapFrontBackBtn = document.getElementById('artworkSwapFrontBackBtn');
+
+function updateSwapFrontBackButtonState() {
+  const isTechnical = workflowMode === 'technical';
+  const isSwapped = Boolean(technicalDocument?.isFrontBackSwapped);
+
+  if (technicalSwapFrontBackBtn) {
+    technicalSwapFrontBackBtn.dataset.swapped = String(isSwapped);
+    technicalSwapFrontBackBtn.disabled = !isTechnical || !technicalDocument;
+  }
+  if (artworkSwapFrontBackBtn) {
+    artworkSwapFrontBackBtn.dataset.swapped = String(isSwapped);
+    artworkSwapFrontBackBtn.disabled = !isTechnical || !technicalDocument;
+  }
+}
+
+function handleFrontBackSwap() {
+  if (!technicalDocument || workflowMode !== 'technical') return;
+  const nextSwapped = !technicalDocument.isFrontBackSwapped;
+  technicalDocument.setFrontBackSwapped(nextSwapped);
+
+  const nextAdapter = createTechnicalBoxModelAdapter(technicalDocument);
+  setActiveCartonModel(nextAdapter, technicalDocument);
+
+  updateSwapFrontBackButtonState();
+  artworkApp?.render?.();
+  artworkApp?.scheduleSave?.();
+
+  renderApp?.syncScene?.({ force: true });
+
+  if (currentStep === 'preview') {
+    void refreshTechnicalPreview();
+  }
+}
 
 function technicalSourceSnapshot() {
   if (!technicalDocument) return null;
@@ -423,6 +458,7 @@ function technicalSourceSnapshot() {
     modelSha256: serialized.modelSha256,
     svgSha256: serialized.svgSha256,
     semanticSvgAssetId: serialized.semanticSvgAssetId,
+    frontBackSwapped: Boolean(serialized.frontBackSwapped),
   };
 }
 
@@ -608,6 +644,18 @@ async function createTechnicalViewerPayload() {
   const canonicalSvg = technicalDocument.getCanonicalSemanticSvg();
   const artworkPayload = await createTechnicalArtworkPayload();
   const sourceIdentity = technicalDocument.getSourceIdentity();
+  let state = technicalViewerState;
+  if (technicalDocument.isFrontBackSwapped) {
+    const baseCamera = state?.camera || {};
+    const baseHeading = Number.isFinite(baseCamera.heading) ? baseCamera.heading : 0;
+    state = {
+      ...(state || {}),
+      camera: {
+        ...baseCamera,
+        heading: (baseHeading + 180) % 360,
+      },
+    };
+  }
   return {
     semanticSvg: {
       text: canonicalSvg.markup,
@@ -616,7 +664,7 @@ async function createTechnicalViewerPayload() {
     },
     ...artworkPayload,
     exportGlb: false,
-    state: technicalViewerState,
+    state,
     name: `${sourceIdentity.cartonType || 'technical'}-technical.svg`,
     finishMetadata: {
       cartonType: sourceIdentity.cartonType || null,
@@ -727,6 +775,7 @@ async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAsset
     updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
   }
   updateStepNavigationStates();
+  updateSwapFrontBackButtonState();
   return document;
 }
 
@@ -749,6 +798,7 @@ function applyWorkflowModeUi() {
   if (workflowChosen && workflowMode === 'technical') ensurePbdHost()?.start();
   updateTechnicalPreviewUi();
   updateStepNavigationStates();
+  updateSwapFrontBackButtonState();
 }
 
 async function acceptTechnicalCarton() {
@@ -825,6 +875,7 @@ async function acceptTechnicalCarton() {
     updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
     updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
     updateStepNavigationStates();
+    updateSwapFrontBackButtonState();
     return true;
   } catch (error) {
     updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
@@ -882,6 +933,7 @@ function showStep(step) {
 
   updateStepNavigationStates();
   updateTechnicalPreviewUi();
+  updateSwapFrontBackButtonState();
 
   const stepOrder = ['workflow', 'box', 'artwork', 'preview', 'render'];
   const currentIndex = stepOrder.indexOf(step);
@@ -1232,6 +1284,8 @@ for (const button of stepButtons) {
 }
 
 document.getElementById('openRenderButton')?.addEventListener('click', () => void transitionToStep('render'));
+technicalSwapFrontBackBtn?.addEventListener('click', handleFrontBackSwap);
+artworkSwapFrontBackBtn?.addEventListener('click', handleFrontBackSwap);
 
 void restoreStartupProject({
   restoreAutosave: () => artworkApp.restoreAutosave(),
