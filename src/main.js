@@ -13,6 +13,7 @@ import {
 } from './model/geometry.js';
 import { createLazyPreview3DFacade } from './preview3d/lazyPreview3d.js';
 import { composeArtworkTexture } from './preview3d/textureComposer.js';
+import { resolveArtworkDpi } from './artwork/artworkRasterizer.js';
 import { createBoxNetApp } from './ui/app.js';
 import { createSettingsModal } from './ui/SettingsModal.js';
 import { createFileMenu } from './ui/FileMenu.js';
@@ -601,11 +602,31 @@ async function createTechnicalArtworkPayload() {
   const hasFinishes = artworks.some((entry) => (
     (entry?.outputRole && entry.outputRole !== 'print') || entry?.finish || entry?.model?.finish
   ));
+  const bounds = cartonModelBridge.getCanonicalViewBoxBounds?.() || cartonModelBridge.getBounds?.() || { width: 400, height: 300 };
+  const width = Math.max(1, technicalViewerFrame?.clientWidth || window.innerWidth || 1);
+  const height = Math.max(1, technicalViewerFrame?.clientHeight || window.innerHeight || 1);
+  const requiredDpi = Math.max(
+    300,
+    Math.min(600, Math.max(width / bounds.width, height / bounds.height) * 25.4 * 1.25),
+  );
+  const targetDpi = Math.max(
+    300,
+    ...(artworks || []).map((entry) => resolveArtworkDpi(entry?.model?.quality?.preview, {
+      purpose: 'preview',
+      requiredDpi,
+    })),
+  );
   const composed = await composeArtworkTexture({
     boxModel: cartonModelBridge,
     artworks,
     documentRef: document,
     purpose: 'preview',
+    targetDpi,
+    useNativeSourceResolution: true,
+    getEntryTargetDpi: (entry) => resolveArtworkDpi(entry?.model?.quality?.preview, {
+      purpose: 'preview',
+      requiredDpi: targetDpi,
+    }),
     includeFinishMaps: hasFinishes,
     materialProfile: 'matte',
   });

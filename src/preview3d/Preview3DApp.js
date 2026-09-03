@@ -73,11 +73,11 @@ function getPreviewTextureDpi(boxModel, artworks, canvas) {
   const width = Math.max(1, canvas?.clientWidth || canvas?.width || 1);
   const height = Math.max(1, canvas?.clientHeight || canvas?.height || 1);
   const requiredDpi = Math.max(
-    150,
+    300,
     Math.min(600, Math.max(width / bounds.width, height / bounds.height) * 25.4 * 1.25),
   );
   return Math.max(
-    150,
+    300,
     ...(artworks || []).map((entry) => resolveArtworkDpi(entry?.model?.quality?.preview, {
       purpose: 'preview',
       requiredDpi,
@@ -522,6 +522,7 @@ export function createPreview3DApp({
         documentRef,
         purpose: 'preview',
         targetDpi,
+        useNativeSourceResolution: true,
         getEntryTargetDpi: (entry) => resolveArtworkDpi(entry?.model?.quality?.preview, {
           purpose: 'preview',
           requiredDpi: targetDpi,
