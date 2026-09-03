@@ -2224,18 +2224,12 @@ export function createRenderApp({
   elements.fitCamera?.addEventListener('click', () => {
     const dimensions = getRenderOutputDimensions(state);
     const aspect = dimensions.width / dimensions.height;
-    const availableWidth = Math.max(1, elements.viewportOverlay?.clientWidth || elements.canvas?.clientWidth || 1);
-    const availableHeight = Math.max(1, elements.viewportOverlay?.clientHeight || elements.canvas?.clientHeight || 1);
-    let frameWidth = availableWidth;
-    let frameHeight = frameWidth / aspect;
-    if (frameHeight > availableHeight) {
-      frameHeight = availableHeight;
-      frameWidth = frameHeight * aspect;
-    }
-    const frameFraction = Math.min(frameWidth / availableWidth, frameHeight / availableHeight);
-    const margin = 1.2 / Math.max(0.1, frameFraction);
 
-    renderer?.fitCameraToFrame?.({ margin });
+    renderer?.fitCameraToFrame?.({
+      tight: true,
+      aspect,
+      margin: 1.08,
+    });
     const camera = renderer?.getCameraState?.();
     if (camera) change((next) => {
       next.camera = { ...next.camera, ...camera, preset: 'custom' };

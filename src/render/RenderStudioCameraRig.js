@@ -527,7 +527,7 @@ export class RenderStudioCameraRig {
     return assertBounds(this.boundsProvider());
   }
 
-  _validateFitOptions({ margin = DEFAULT_MARGIN, aspect = null } = {}) {
+  _validateFitOptions({ margin = DEFAULT_MARGIN, aspect = null, tight = false } = {}) {
     if (aspect !== null && (!isFiniteNumber(aspect) || !(aspect > 0))) {
       throw new TypeError('RenderStudioCameraRig fit aspect must be finite and greater than zero.');
     }
@@ -535,20 +535,119 @@ export class RenderStudioCameraRig {
     return {
       margin: numericMargin || DEFAULT_MARGIN,
       aspect,
+      tight: Boolean(tight),
     };
   }
 
-  _fitValidatedBounds(bounds, { margin, aspect }) {
+  _fitValidatedBounds(bounds, { margin, aspect, tight = false }) {
     const current = this._readCameraState();
     const camera = this.surface.renderSurface.camera;
     const target = new Vector3(bounds.centerX, bounds.centerY, bounds.centerZ);
     const currentPosition = vectorFromArray(current.position);
     const currentTarget = vectorFromArray(current.target);
     const direction = normalizedDirection(currentPosition, currentTarget);
-    const frameAspect = aspect ?? safeCameraOptics(this.surface).aspect;
-    const visibleHeight = bounds.radius * 2 * margin * Math.max(1, 1 / frameAspect);
+    const canvasAspect = safeCameraOptics(this.surface).aspect;
+    const frameAspect = aspect ?? canvasAspect;
     const fov = current.fov;
 
+    const hasExtents = Number.isFinite(bounds.minX)
+      && Number.isFinite(bounds.maxX)
+      && Number.isFinite(bounds.minY)
+      && Number.isFinite(bounds.maxY)
+      && Number.isFinite(bounds.minZ)
+      && Number.isFinite(bounds.maxZ);
+
+    if (tight && hasExtents) {
+      const corners = [
+        new Vector3(bounds.minX, bounds.minY, bounds.minZ),
+        new Vector3(bounds.minX, bounds.minY, bounds.maxZ),
+        new Vector3(bounds.minX, bounds.maxY, bounds.minZ),
+        new Vector3(bounds.minX, bounds.maxY, bounds.maxZ),
+        new Vector3(bounds.maxX, bounds.minY, bounds.minZ),
+        new Vector3(bounds.maxX, bounds.minY, bounds.maxZ),
+        new Vector3(bounds.maxX, bounds.maxY, bounds.minZ),
+        new Vector3(bounds.maxX, bounds.maxY, bounds.maxZ),
+      ];
+
+      const forward = direction.clone();
+      const upWorld = camera.up || new Vector3(0, 1, 0);
+      let right = new Vector3().crossVectors(upWorld, forward).normalize();
+      if (right.lengthSq() < 1e-4) right = new Vector3(1, 0, 0);
+      const up = new Vector3().crossVectors(forward, right).normalize();
+
+      const frameFractionW = Math.min(1, frameAspect / canvasAspect);
+      const frameFractionH = Math.min(1, canvasAspect / frameAspect);
+      const H_limit = Math.max(0.01, frameFractionH);
+      const W_limit = Math.max(0.01, canvasAspect * frameFractionW);
+
+      const M = Math.max(1.02, Number(margin) || 1.08);
+      let maxRequiredDistance = 0;
+      let maxOrthographicHeight = 0;
+      const halfTanFov = Math.tan((fov * Math.PI) / 360);
+
+      for (const corner of corners) {
+        const delta = corner.clone().sub(target);
+        const deltaX = delta.dot(right);
+        const deltaY = delta.dot(up);
+        const deltaZ = delta.dot(forward);
+
+        const normY = Math.abs(deltaY) / H_limit;
+        const normX = Math.abs(deltaX) / W_limit;
+        const maxNorm = Math.max(normY, normX);
+
+        const cornerDist = deltaZ + (maxNorm * M) / Math.max(0.01, halfTanFov);
+        if (cornerDist > maxRequiredDistance) {
+          maxRequiredDistance = cornerDist;
+        }
+
+        const cornerOrthoH = 2 * maxNorm * M;
+        if (cornerOrthoH > maxOrthographicHeight) {
+          maxOrthographicHeight = cornerOrthoH;
+        }
+      }
+
+      if (current.projection === 'perspective') {
+        camera.aspect = canvasAspect;
+        const distance = Math.max(bounds.radius * 0.1, maxRequiredDistance);
+        camera.position.copy(target).addScaledVector(forward, distance);
+        camera.near = Math.max(0.005, (distance - bounds.radius) / 2);
+        camera.far = Math.max(100, distance + bounds.radius * 10);
+        camera.lookAt(target);
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld(true);
+        this._target.copy(target);
+        if (this.controls) {
+          this.controls.target.copy(target);
+          this.controls.update();
+        }
+        return;
+      }
+
+      const orthoHeight = Math.max(0.01, maxOrthographicHeight);
+      this.surface.setOrthographicHeight(orthoHeight);
+      this._orthographicHeight = orthoHeight;
+      const halfH = orthoHeight / 2;
+      const halfW = halfH * canvasAspect;
+      camera.left = -halfW;
+      camera.right = halfW;
+      camera.top = halfH;
+      camera.bottom = -halfH;
+      const distance = Math.max(bounds.radius * 4, currentPosition.distanceTo(currentTarget));
+      camera.position.copy(target).addScaledVector(forward, distance);
+      camera.near = Math.max(0.01, bounds.radius / 1000);
+      camera.far = Math.max(1000, distance + bounds.radius * 10);
+      camera.lookAt(target);
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+      this._target.copy(target);
+      if (this.controls) {
+        this.controls.target.copy(target);
+        this.controls.update();
+      }
+      return;
+    }
+
+    const visibleHeight = bounds.radius * 2 * margin * Math.max(1, 1 / frameAspect);
     if (current.projection === 'perspective') {
       camera.aspect = frameAspect;
       const distance = distanceForPerspective(fov, visibleHeight);
@@ -583,9 +682,9 @@ export class RenderStudioCameraRig {
     }
   }
 
-  fitCameraToFrame({ margin = DEFAULT_MARGIN, aspect = null, render = true } = {}) {
+  fitCameraToFrame({ margin = DEFAULT_MARGIN, aspect = null, tight = false, render = true } = {}) {
     if (this.disposed) return false;
-    const fitOptions = this._validateFitOptions({ margin, aspect });
+    const fitOptions = this._validateFitOptions({ margin, aspect, tight });
     const bounds = this._getValidatedBounds();
     const before = this._readCameraState();
     this._fitValidatedBounds(bounds, fitOptions);

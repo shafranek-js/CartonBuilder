@@ -376,4 +376,42 @@ describe('RenderStudioCameraRig portrait framing', () => {
 
     disposeRig(context);
   });
+
+  it('calculates optimal camera distance individually for box dimensions when tight is true', () => {
+    // Tall box: width 0.1, height 0.2, depth 0.05
+    const boxBounds = {
+      minX: -0.05, maxX: 0.05,
+      minY: -0.10, maxY: 0.10,
+      minZ: -0.025, maxZ: 0.025,
+      centerX: 0, centerY: 0, centerZ: 0,
+      radius: Math.hypot(0.1, 0.2, 0.05) / 2,
+    };
+    const context = makeRig({ boundsProvider: vi.fn(() => boxBounds) });
+    const { rig, surface } = context;
+
+    rig.setCameraState({
+      projection: 'perspective',
+      position: [0, 0, 2],
+      target: [0, 0, 0],
+      fov: 35,
+    }, { render: false, notify: false });
+
+    // With tight: true, margin 1.08, aspect 4/3
+    expect(rig.fitCameraToFrame({ margin: 1.08, aspect: 4 / 3, tight: true, render: false })).toBe(true);
+
+    const tightDistance = rig.getCameraState().cameraDistance;
+    expect(tightDistance).toBeGreaterThan(0);
+    // Tight distance should be closer than generic bounding sphere fit
+    // Sphere fit would use diagonal ~0.229m * 1.2
+    expect(tightDistance).toBeLessThan(1.0);
+
+    // Verify all 8 corners are within the frustum
+    const camera = surface.renderSurface.camera;
+    const tanFov = Math.tan((35 * Math.PI) / 360);
+    const visibleHalfHeightAtOrigin = tightDistance * tanFov;
+    // Box half height is 0.10, so with margin 1.08 it should fit neatly inside visibleHalfHeight
+    expect(0.10 * 1.08).toBeLessThanOrEqual(visibleHalfHeightAtOrigin * 1.01);
+
+    disposeRig(context);
+  });
 });
