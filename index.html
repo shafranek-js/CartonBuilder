@@ -3,12 +3,202 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Create Basic Box</title>
+  <title>CartonBuilder</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="shortcut icon" href="/favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/styles/main.css">
+  <style>
+    /* Prevent FOUC: Ensure background is immediately dark */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #343434;
+      overflow: hidden;
+    }
+
+    /* Hide app shell until fully ready */
+    .app-shell {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    body.app-ready .app-shell {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Splash Screen Styles */
+    .app-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 45%, #3c3c3c 0%, #252525 100%);
+      font-family: 'Public Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #ffffff;
+      opacity: 1;
+      transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.35s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .app-splash.app-splash-fade-out {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .app-splash-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 320px;
+      max-width: 90vw;
+      padding: 36px 28px;
+      border-radius: 16px;
+      background: rgba(30, 30, 30, 0.78);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
+    }
+    .app-splash-logo-wrap {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(175, 202, 66, 0.18), rgba(175, 202, 66, 0.04));
+      border: 1px solid rgba(175, 202, 66, 0.35);
+      box-shadow: 0 8px 24px -4px rgba(175, 202, 66, 0.22);
+    }
+    .app-splash-logo-icon {
+      width: 32px;
+      height: 32px;
+      color: #afca42;
+      filter: drop-shadow(0 2px 8px rgba(175, 202, 66, 0.4));
+    }
+    .app-splash-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+    .app-splash-subtitle {
+      font-size: 12px;
+      color: #9ca3af;
+      font-weight: 300;
+      margin-bottom: 22px;
+      letter-spacing: 0.01em;
+    }
+    .app-splash-progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .app-splash-progress-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 20%;
+      background: linear-gradient(90deg, #8ea82d, #afca42, #d8ef79);
+      border-radius: 999px;
+      transition: width 0.25s ease-out;
+      box-shadow: 0 0 12px rgba(175, 202, 66, 0.6);
+    }
+    .app-splash-status {
+      font-size: 11px;
+      color: #8a8f98;
+      font-weight: 400;
+      min-height: 16px;
+      transition: color 0.15s ease;
+    }
+  </style>
+  <script>
+    (function() {
+      try {
+        const theme = localStorage.getItem('carton-builder-theme');
+        if (theme === 'midnight-oled') {
+          document.documentElement.style.backgroundColor = '#0f1115';
+        } else if (theme === 'cyberpunk-neon') {
+          document.documentElement.style.backgroundColor = '#0d0a17';
+        } else if (theme === 'clean-light') {
+          document.documentElement.style.backgroundColor = '#e5e7eb';
+        }
+      } catch (e) {}
+
+      window.__updateSplash = function(pct, text) {
+        const bar = document.getElementById('appSplashProgressBar');
+        const status = document.getElementById('appSplashStatus');
+        if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+        if (status && text) status.textContent = text;
+      };
+
+      window.__dismissSplash = function() {
+        const splash = document.getElementById('appSplash');
+        document.body.classList.add('app-ready');
+        if (splash && !splash.classList.contains('app-splash-fade-out')) {
+          splash.classList.add('app-splash-fade-out');
+          setTimeout(function() {
+            splash.hidden = true;
+          }, 380);
+        }
+      };
+
+      // Safety timeout: ensure interface is shown after 8 seconds even if something hangs
+      setTimeout(function() {
+        if (window.__dismissSplash) window.__dismissSplash();
+      }, 8000);
+    })();
+  </script>
 </head>
 <body>
+  <div id="appSplash" class="app-splash" role="progressbar" aria-label="Loading application">
+    <div class="app-splash-card">
+      <div class="app-splash-logo-wrap">
+        <svg class="app-splash-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+          <path d="m3.3 7 8.7 5 8.7-5"/>
+          <path d="M12 22V12"/>
+        </svg>
+      </div>
+      <div class="app-splash-title">CartonBuilder</div>
+      <div class="app-splash-subtitle">Packaging Design &amp; 3D Studio</div>
+      <div class="app-splash-progress-track">
+        <div class="app-splash-progress-bar" id="appSplashProgressBar"></div>
+      </div>
+      <div class="app-splash-status" id="appSplashStatus">Loading workspace...</div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      try {
+        const loc = localStorage.getItem('carton-builder-locale');
+        if (loc === 'ru') {
+          const el = document.getElementById('appSplashStatus');
+          if (el) el.textContent = 'Загрузка рабочей среды...';
+        }
+      } catch (e) {}
+    })();
+  </script>
+
   <main class="app-shell" id="appShell">
     <section class="app-content">
       <nav class="stepper" aria-label="Workflow" data-i18n-aria-label="workflowLabel">

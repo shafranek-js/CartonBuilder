@@ -52,6 +52,8 @@ import {
 
 initializeI18n();
 applyTheme(getSavedTheme());
+const startupLocale = (document.getElementById('localePicker')?.value || 'en');
+window.__updateSplash?.(40, startupLocale === 'ru' ? 'Загрузка рабочей среды...' : 'Loading workspace...');
 initSectionStatePersistence();
 initSliderSteppers();
 
@@ -1311,6 +1313,8 @@ document.getElementById('openRenderButton')?.addEventListener('click', () => voi
 technicalSwapFrontBackBtn?.addEventListener('click', handleFrontBackSwap);
 artworkSwapFrontBackBtn?.addEventListener('click', handleFrontBackSwap);
 
+window.__updateSplash?.(75, startupLocale === 'ru' ? 'Восстановление проекта...' : 'Restoring project...');
+
 void restoreStartupProject({
   restoreAutosave: () => artworkApp.restoreAutosave(),
   restoreExample: () => artworkApp.restoreProjectFromUrl(
@@ -1336,6 +1340,11 @@ void restoreStartupProject({
   workflowMode = workflowBootstrap.mode;
   applyWorkflowModeUi();
   showStep('workflow');
+}).finally(() => {
+  window.__updateSplash?.(100, startupLocale === 'ru' ? 'Готово' : 'Ready');
+  setTimeout(() => {
+    window.__dismissSplash?.();
+  }, 180);
 });
 window.addEventListener('beforeunload', () => {
   preview3dFacade.dispose();

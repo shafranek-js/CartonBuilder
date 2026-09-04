@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#262b33" />
+      <stop offset="100%" stop-color="#15181d" />
+    </linearGradient>
+    <linearGradient id="topFace" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#afd035" />
+      <stop offset="100%" stop-color="#c9ea4c" />
+    </linearGradient>
+    <linearGradient id="leftFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8fa928" />
+      <stop offset="100%" stop-color="#73891d" />
+    </linearGradient>
+    <linearGradient id="rightFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6e8419" />
+      <stop offset="100%" stop-color="#556710" />
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle rounded background -->
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="url(#bgGrad)" stroke="#383e4a" stroke-width="1.5" />
+
+  <!-- 3D Isometric Carton Box -->
+  <!-- Top Face -->
+  <path d="M32 13 L49 22.8 L32 32.6 L15 22.8 Z" fill="url(#topFace)" />
+
+  <!-- Left Face -->
+  <path d="M15 22.8 L32 32.6 L32 51 L15 41.2 Z" fill="url(#leftFace)" />
+
+  <!-- Right Face -->
+  <path d="M32 32.6 L49 22.8 L49 41.2 L32 51 Z" fill="url(#rightFace)" />
+
+  <!-- Center Crease Highlight -->
+  <path d="M32 13 L32 32.6" stroke="rgba(255, 255, 255, 0.45)" stroke-width="1.2" stroke-linecap="round" />
+  
+  <!-- Subtle dieline fold notches / creases -->
+  <path d="M15 22.8 L32 32.6 L49 22.8" stroke="rgba(255, 255, 255, 0.35)" stroke-width="1" fill="none" />
+  <path d="M32 32.6 L32 51" stroke="rgba(0, 0, 0, 0.3)" stroke-width="1.2" />
+
+  <!-- Top Flap Dieline Crease Hint -->
+  <path d="M26 16.5 L38 23.4" stroke="rgba(255, 255, 255, 0.65)" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="2 1.5" />
+</svg>

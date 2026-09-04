@@ -204,10 +204,55 @@ function serveBundledExample() {
   };
 }
 
+function serveFavicons() {
+  const faviconFiles = {
+    '/favicon.svg': { path: resolve('public/favicon.svg'), type: 'image/svg+xml' },
+    '/favicon.ico': { path: resolve('public/favicon.ico'), type: 'image/x-icon' },
+    '/favicon-32x32.png': { path: resolve('public/favicon-32x32.png'), type: 'image/png' },
+    '/favicon-16x16.png': { path: resolve('public/favicon-16x16.png'), type: 'image/png' },
+    '/apple-touch-icon.png': { path: resolve('public/apple-touch-icon.png'), type: 'image/png' },
+  };
+
+  return {
+    name: 'serve-favicons',
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const file = faviconFiles[request.url?.split('?')[0]];
+        if (!file || (request.method !== 'GET' && request.method !== 'HEAD')) {
+          next();
+          return;
+        }
+        try {
+          const bytes = readFileSync(file.path);
+          response.statusCode = 200;
+          response.setHeader('Content-Type', file.type);
+          response.setHeader('Content-Length', bytes.byteLength);
+          response.setHeader('Cache-Control', 'public, max-age=86400');
+          if (request.method === 'HEAD') response.end();
+          else response.end(bytes);
+        } catch {
+          next();
+        }
+      });
+    },
+    generateBundle() {
+      for (const [url, file] of Object.entries(faviconFiles)) {
+        try {
+          this.emitFile({
+            type: 'asset',
+            fileName: url.slice(1),
+            source: readFileSync(file.path),
+          });
+        } catch {}
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
   publicDir: 'vendor',
-  plugins: [serveBundledExample(), serveRenderEnvironments(), serveShowcase()],
+  plugins: [serveBundledExample(), serveRenderEnvironments(), serveShowcase(), serveFavicons()],
   server: {
     host: '127.0.0.1',
     watch: {
