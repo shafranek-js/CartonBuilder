@@ -39,6 +39,7 @@ import { restoreStartupProject } from './project/firstRunExample.js';
 import { TechnicalCartonDocument } from './carton/TechnicalCartonDocument.js';
 import { createCartonDocument } from './carton/createCartonDocument.js';
 import { createTechnicalBoxModelAdapter } from './carton/technicalBoxModelAdapter.js';
+import { normalizeTechnicalViewerSemanticSvg } from './carton/technicalPresentation.js';
 import { createPbdHost } from './host/pbdHostProtocol.js';
 import { createViewerHost } from './host/viewerHostProtocol.js';
 import { normalizeTechnicalViewerState } from './project/technicalViewerState.js';
@@ -673,6 +674,7 @@ async function createTechnicalViewerPayload() {
     throw new Error('Technical Preview requires an accepted technical dieline.');
   }
   const canonicalSvg = technicalDocument.getCanonicalSemanticSvg();
+  const viewerSemanticSvg = normalizeTechnicalViewerSemanticSvg(canonicalSvg.markup);
   const artworkPayload = await createTechnicalArtworkPayload();
   const sourceIdentity = technicalDocument.getSourceIdentity();
   let state = technicalViewerState;
@@ -689,9 +691,7 @@ async function createTechnicalViewerPayload() {
   }
   return {
     semanticSvg: {
-      text: canonicalSvg.markup,
-      byteLength: canonicalSvg.byteLength,
-      sha256: canonicalSvg.sha256,
+      text: viewerSemanticSvg,
     },
     ...artworkPayload,
     exportGlb: false,

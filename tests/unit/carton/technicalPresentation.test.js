@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createTechnicalPresentationProjection,
   normalizePresentationTransform,
+  normalizeTechnicalViewerSemanticSvg,
   presentationTransformFromSvg,
 } from '../../../src/carton/technicalPresentation.js';
 
@@ -57,5 +58,35 @@ describe('technical presentation projection', () => {
     expect(projection.determinant).toBe(-1);
     expect(projection.transformClockwise(true)).toBe(true);
     expect(projection.geometryBounds).toMatchObject({ width: 100, height: 50 });
+  });
+
+  it('reverses signed fold angles in the technical viewer after a reflected presentation', () => {
+    const metadata = {
+      folding: {
+        foldGraph: [
+          { foldId: 'fold.left', targetAngleDeg: 90 },
+          { foldId: 'fold.right', targetAngleDeg: -45 },
+        ],
+      },
+    };
+    const encodeMetadata = (value) => JSON.stringify(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+    const markup = `<svg data-presentation-transform="-1,0,0,1"><metadata id="cartonbuilder-metadata">${encodeMetadata(metadata)}</metadata><g id="folds"><path id="fold.left" data-target-angle-deg="90"/><path id="fold.right" data-target-angle-deg="-45"/></g></svg>`;
+
+    const normalized = normalizeTechnicalViewerSemanticSvg(markup);
+    const metadataText = normalized.match(/<metadata id="cartonbuilder-metadata">([\s\S]*?)<\/metadata>/i)[1]
+      .replaceAll('&quot;', '"')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
+    const normalizedMetadata = JSON.parse(metadataText);
+
+    expect(normalizedMetadata.folding.foldGraph.map((fold) => fold.targetAngleDeg))
+      .toEqual([-90, 45]);
+    expect(normalized).toContain('id="fold.left" data-target-angle-deg="-90"');
+    expect(normalized).toContain('id="fold.right" data-target-angle-deg="45"');
   });
 });

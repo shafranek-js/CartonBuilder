@@ -31,6 +31,72 @@ export function presentationTransformFromSvg(svgMarkup) {
     : IDENTITY_PRESENTATION_TRANSFORM);
 }
 
+function decodeXmlText(value) {
+  return String(value || '')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&');
+}
+
+function encodeXmlText(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+/**
+ * Prepare the reflected semantic SVG for the technical viewer's 3D solver.
+ *
+ * PBD presentation reflections mirror the 2D net but retain the original
+ * signed fold angles. An orientation-reversing transform changes the handedness
+ * of the plane, so the equivalent 3D rotations must use the opposite signs.
+ * The canonical accepted bundle is left untouched; this returns a viewer-only
+ * derived markup copy.
+ */
+export function normalizeTechnicalViewerSemanticSvg(svgMarkup) {
+  const source = String(svgMarkup || '');
+  const transform = presentationTransformFromSvg(source);
+  const determinant = transform.a * transform.d - transform.b * transform.c;
+  if (determinant >= 0) return source;
+
+  const metadataMatch = source.match(/(<metadata\b[^>]*\bid="cartonbuilder-metadata"[^>]*>)([\s\S]*?)(<\/metadata>)/i);
+  if (!metadataMatch) return source;
+
+  let metadata;
+  try {
+    metadata = JSON.parse(decodeXmlText(metadataMatch[2]));
+  } catch {
+    return source;
+  }
+
+  const foldAngles = new Map();
+  for (const fold of metadata?.folding?.foldGraph || []) {
+    const foldId = String(fold?.foldId || '');
+    const targetAngleDeg = Number(fold?.targetAngleDeg);
+    if (!foldId || !Number.isFinite(targetAngleDeg)) continue;
+    const normalizedAngleDeg = -targetAngleDeg;
+    fold.targetAngleDeg = normalizedAngleDeg;
+    foldAngles.set(foldId, normalizedAngleDeg);
+  }
+  if (!foldAngles.size) return source;
+
+  const metadataMarkup = `${metadataMatch[1]}${encodeXmlText(JSON.stringify(metadata))}${metadataMatch[3]}`;
+  let normalized = source.replace(metadataMatch[0], metadataMarkup);
+  normalized = normalized.replace(/<path\b[^>]*>/gi, (pathTag) => {
+    const foldId = pathTag.match(/\bid="([^"]+)"/i)?.[1];
+    const normalizedAngleDeg = foldAngles.get(foldId);
+    if (normalizedAngleDeg === undefined) return pathTag;
+    return pathTag.replace(
+      /(\bdata-target-angle-deg=")[^"]*(")/i,
+      `$1${normalizedAngleDeg}$2`,
+    );
+  });
+  return normalized;
+}
+
 function boundsOf(points) {
   const xs = points.map((point) => point.x);
   const ys = points.map((point) => point.y);

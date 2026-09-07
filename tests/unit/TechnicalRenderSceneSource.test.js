@@ -73,6 +73,7 @@ function createSource({
 
 const CANONICAL_SVG = '<svg data-canonical="true" />';
 const ARTWORK_ATLAS = { id: 'atlas' };
+const REFLECTED_SVG = '<svg data-presentation-transform="-1,0,0,1"><metadata id="cartonbuilder-metadata">{&quot;folding&quot;:{&quot;foldGraph&quot;:[{&quot;foldId&quot;:&quot;fold.left&quot;,&quot;targetAngleDeg&quot;:90}]}}</metadata><g id="folds"><path id="fold.left" data-target-angle-deg="90"/></g></svg>';
 
 describe('TechnicalRenderSceneSource', () => {
   it('requires injected runtime and render surface dependencies', () => {
@@ -112,6 +113,22 @@ describe('TechnicalRenderSceneSource', () => {
       renderUnits: 'm',
       unitScale: 0.001,
     });
+  });
+
+  it('regression: normalizes reflected fold angles before loading the technical render runtime', () => {
+    const { source, runtime } = createSource();
+
+    source.buildScene({ semanticSvg: REFLECTED_SVG, artworkAtlas: ARTWORK_ATLAS });
+
+    const loadedSvg = runtime.loadSemanticSvgText.mock.calls[0][0];
+    const metadataText = loadedSvg.match(/<metadata id="cartonbuilder-metadata">([\s\S]*?)<\/metadata>/i)[1]
+      .replaceAll('&quot;', '"')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
+
+    expect(JSON.parse(metadataText).folding.foldGraph[0].targetAngleDeg).toBe(-90);
+    expect(loadedSvg).toContain('id="fold.left" data-target-angle-deg="-90"');
   });
 
   it('replaces artwork through the runtime without rebuilding model or fold graph', () => {

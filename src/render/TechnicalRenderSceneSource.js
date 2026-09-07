@@ -1,4 +1,5 @@
 import { RenderSceneSource } from './RenderSceneSource.js';
+import { normalizeTechnicalViewerSemanticSvg } from '../carton/technicalPresentation.js';
 
 const TECHNICAL_UNIT_SCALE = 0.001;
 const SUPPORTED_BOUNDS_UNITS = new Set(['mm', 'cm', 'm', 'in', 'pt']);
@@ -307,7 +308,8 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
     let candidateModel = null;
 
     try {
-      const runtimeResult = this.runtime.loadSemanticSvgText(request.semanticSvg, request.name);
+      const runtimeSemanticSvg = normalizeTechnicalViewerSemanticSvg(request.semanticSvg);
+      const runtimeResult = this.runtime.loadSemanticSvgText(runtimeSemanticSvg, request.name);
       candidateModel = runtimeResult?.model
         || (isModel(runtimeResult) ? runtimeResult : null)
         || this.runtime.getModel?.();
@@ -322,7 +324,7 @@ export class TechnicalRenderSceneSource extends RenderSceneSource {
       this._renderSurface.scene.add(candidateModel);
       this.runtime.setFoldProgress(1);
       this.runtime.setArtworkAtlas(request.artworkAtlas, filterRuntimeMaps(request.maps));
-      const bounds = this._resolveBounds(runtimeResult, candidateModel, request.semanticSvg);
+      const bounds = this._resolveBounds(runtimeResult, candidateModel, runtimeSemanticSvg);
       const foldGraph = runtimeResult?.foldGraph
         || runtimeResult?.parsed?.foldGraph
         || runtimeResult?.parsed?.folds
