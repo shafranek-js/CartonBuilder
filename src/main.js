@@ -53,7 +53,14 @@ import {
 initializeI18n();
 applyTheme(getSavedTheme());
 const startupLocale = (document.getElementById('localePicker')?.value || 'en');
-window.__updateSplash?.(40, startupLocale === 'ru' ? 'Загрузка рабочей среды...' : 'Loading workspace...');
+const splashLoadingMap = {
+  ru: 'Загрузка рабочей среды...',
+  uk: 'Завантаження робочого простору...',
+  cs: 'Načítání pracovního prostoru...',
+  de: 'Arbeitsbereich wird geladen...',
+  en: 'Loading workspace...',
+};
+window.__updateSplash?.(40, splashLoadingMap[startupLocale] || splashLoadingMap.en);
 initSectionStatePersistence();
 initSliderSteppers();
 
@@ -108,7 +115,7 @@ const handleNewProject = async () => {
 
   const dialog = document.getElementById('unsavedChangesDialog');
   if (!dialog) {
-    if (window.confirm('Create new project? Unsaved changes will be cleared.')) {
+    if (window.confirm(t('newProjectConfirm'))) {
       await resetAndReload();
     }
     return;
@@ -341,6 +348,7 @@ const panelDock = createPanelDock({
   rightPin: document.getElementById('pinRightPanel'),
 });
 
+let boxApp;
 let artworkApp;
 let preview3dFacade;
 let renderApp;
@@ -802,6 +810,27 @@ async function restoreTechnicalCarton({ snapshot, technicalAssets: restoredAsset
   return document;
 }
 
+function updatePresetButtonVisibility() {
+  const presetWrap = document.querySelector('.preset-picker-wrap');
+  const isAllowedStep = currentStep === 'box' || currentStep === 'artwork';
+  const shouldShow = Boolean(workflowChosen && isAllowedStep);
+
+  if (presetWrap) {
+    presetWrap.hidden = !shouldShow;
+  }
+  if (presetTriggerBtn) {
+    presetTriggerBtn.hidden = !shouldShow;
+    presetTriggerBtn.disabled = !shouldShow;
+    presetTriggerBtn.title = shouldShow ? t('presetsTitle') : (workflowChosen ? '' : t('workflowSelectionRequired'));
+  }
+  if (!shouldShow) {
+    boxApp?.presetPicker?.close?.();
+    const popover = document.getElementById('presetPopover');
+    if (popover) popover.hidden = true;
+    if (presetTriggerBtn) presetTriggerBtn.setAttribute('aria-expanded', 'false');
+  }
+}
+
 function applyWorkflowModeUi() {
   for (const card of workflowModeCards) {
     const active = workflowChosen && card.dataset.workflowMode === workflowMode;
@@ -814,11 +843,9 @@ function applyWorkflowModeUi() {
   }
   if (quickWorkflowEditor) quickWorkflowEditor.hidden = !workflowChosen || workflowMode !== 'quick';
   if (technicalWorkflowEditor) technicalWorkflowEditor.hidden = !workflowChosen || workflowMode !== 'technical';
-  if (presetTriggerBtn) {
-    presetTriggerBtn.disabled = !workflowChosen || workflowMode !== 'quick';
-    presetTriggerBtn.title = !workflowChosen ? t('workflowSelectionRequired') : 'Box Presets Library';
-  }
   if (workflowChosen && workflowMode === 'technical') ensurePbdHost()?.start();
+  boxApp?.presetPicker?.setWorkflowMode?.(workflowMode);
+  updatePresetButtonVisibility();
   updateTechnicalPreviewUi();
   updateStepNavigationStates();
   updateSwapFrontBackButtonState();
@@ -827,11 +854,13 @@ function applyWorkflowModeUi() {
 async function acceptTechnicalCarton() {
   const host = ensurePbdHost();
   if (!host?.getState().initialized) {
+    if (technicalDocument) return true;
     updateTechnicalHostStatus(t('technicalPluginNotReady'), 'error');
     return false;
   }
   updateTechnicalHostStatus(t('technicalBundleRequesting'));
   let checkpointCreated = false;
+  let replacementStarted = false;
   try {
     const bundle = await host.requestCarton();
     const nextDocument = await TechnicalCartonDocument.create(bundle, {
@@ -857,6 +886,7 @@ async function acceptTechnicalCarton() {
       return false;
     }
 
+    replacementStarted = true;
     try {
       await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-model-replacement' });
       checkpointCreated = true;
@@ -901,6 +931,11 @@ async function acceptTechnicalCarton() {
     updateSwapFrontBackButtonState();
     return true;
   } catch (error) {
+    if (technicalDocument && !replacementStarted) {
+      updateStepNavigationStates();
+      updateSwapFrontBackButtonState();
+      return true;
+    }
     updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
     return false;
   }
@@ -955,6 +990,7 @@ function showStep(step) {
   renderStep.hidden = step !== 'render';
 
   updateStepNavigationStates();
+  updatePresetButtonVisibility();
   updateTechnicalPreviewUi();
   updateSwapFrontBackButtonState();
 
@@ -1022,8 +1058,95 @@ function showStep(step) {
   return true;
 }
 
-const boxApp = createBoxNetApp({
+async function handleApplyTechnicalPreset(preset) {
+  if (!preset?.bundle) {
+    artworkApp?.showToast?.('Preset bundle is missing.');
+    return false;
+  }
+
+  const host = ensurePbdHost();
+  host?.start();
+  updateTechnicalHostStatus(t('technicalPluginLoading'));
+
+  let checkpointCreated = false;
+  try {
+    const nextDocument = await TechnicalCartonDocument.create(preset.bundle, {
+      expectedProducer: 'packaging-box-designer',
+      expectedArtifactSha256: FROZEN_PBD_ARTIFACT_SHA256,
+      expectedArtifactVersion: '1.2.0',
+    });
+
+    if (technicalDocument && artworkApp?.artwork?.hasArtwork
+      && !window.confirm(t('workflowChangeClearsArtwork'))) {
+      updateTechnicalHostStatus(t('technicalBundleRejected'), 'error');
+      return false;
+    }
+
+    try {
+      await artworkApp?.createProjectCheckpoint?.({ reason: 'technical-preset-apply' });
+      checkpointCreated = true;
+    } catch (error) {
+      updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
+      return false;
+    }
+
+    try {
+      if (technicalDocument && artworkApp?.artwork?.hasArtwork) {
+        await runTechnicalReplacementPhase('clear-artwork', () => {
+          artworkApp.clearArtworkForCartonChange?.();
+        });
+      }
+      await runTechnicalReplacementPhase('activate-model', () => {
+        technicalViewerState = null;
+        setActiveCartonModel(createTechnicalBoxModelAdapter(nextDocument), nextDocument);
+      });
+      await runTechnicalReplacementPhase('update-technical-assets', () => {
+        technicalAssets = technicalAssetBlobs(nextDocument);
+      });
+      await runTechnicalReplacementPhase('reset-preview', () => {
+        preview3dFacade?.resetForProject?.();
+      });
+      await runTechnicalReplacementPhase('reset-render', () => {
+        renderApp?.resetForProject?.();
+      });
+      await runTechnicalReplacementPhase('final-save', () => artworkApp.commitProjectSave('box'));
+    } catch (error) {
+      if (checkpointCreated) {
+        try {
+          await artworkApp?.restoreProjectCheckpoint?.({ schedule: false });
+        } catch (rollbackError) {
+          error.rollbackError = rollbackError;
+        }
+      }
+      throw error;
+    }
+
+    try {
+      await host?.loadCarton?.(preset.bundle);
+    } catch (loadErr) {
+      console.warn('PBD loadCarton error:', loadErr);
+    }
+
+    updateTechnicalHostStatus(t('technicalBundleAccepted'), 'success');
+    updateTechnicalValidation({ structural: 'VALID', geometry: 'VALID', contract: 'VALID' });
+    updateStepNavigationStates();
+    updateSwapFrontBackButtonState();
+    artworkApp?.showToast?.(`Applied preset: ${preset.name}`);
+    return true;
+  } catch (error) {
+    updateTechnicalHostStatus(error?.message || t('technicalBundleRejected'), 'error');
+    artworkApp?.showToast?.(error?.message || 'Failed to apply technical preset');
+    return false;
+  }
+}
+
+boxApp = createBoxNetApp({
   model,
+  getWorkflowMode: () => workflowMode,
+  getCurrentTechnicalDocument: () => technicalDocument,
+  onApplyTechnicalPreset: (preset) => {
+    void handleApplyTechnicalPreset(preset);
+  },
   onContinue: () => {
     updateStepNavigationStates();
     void transitionToStep('artwork');
@@ -1313,7 +1436,14 @@ document.getElementById('openRenderButton')?.addEventListener('click', () => voi
 technicalSwapFrontBackBtn?.addEventListener('click', handleFrontBackSwap);
 artworkSwapFrontBackBtn?.addEventListener('click', handleFrontBackSwap);
 
-window.__updateSplash?.(75, startupLocale === 'ru' ? 'Восстановление проекта...' : 'Restoring project...');
+const splashRestoringMap = {
+  ru: 'Восстановление проекта...',
+  uk: 'Відновлення проєкту...',
+  cs: 'Obnovování projektu...',
+  de: 'Projekt wird wiederhergestellt...',
+  en: 'Restoring project...',
+};
+window.__updateSplash?.(75, splashRestoringMap[startupLocale] || splashRestoringMap.en);
 
 void restoreStartupProject({
   restoreAutosave: () => artworkApp.restoreAutosave(),
@@ -1341,7 +1471,14 @@ void restoreStartupProject({
   applyWorkflowModeUi();
   showStep('workflow');
 }).finally(() => {
-  window.__updateSplash?.(100, startupLocale === 'ru' ? 'Готово' : 'Ready');
+  const splashReadyMap = {
+    ru: 'Готово',
+    uk: 'Готово',
+    cs: 'Hotovo',
+    de: 'Bereit',
+    en: 'Ready',
+  };
+  window.__updateSplash?.(100, splashReadyMap[startupLocale] || splashReadyMap.en);
   setTimeout(() => {
     window.__dismissSplash?.();
   }, 180);

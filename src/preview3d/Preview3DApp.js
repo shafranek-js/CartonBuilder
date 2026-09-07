@@ -792,7 +792,7 @@ export function createPreview3DApp({
   async function handleDeleteScenePreset() {
     const preset = selectedScenePreset();
     if (!preset) return;
-    if (!windowRef.confirm(`Delete scene preset "${preset.name}"?`)) return;
+    if (!windowRef.confirm(t('deleteScenePresetConfirm', { name: preset.name }))) return;
     await deleteScenePreset(preset.id);
     await refreshScenePresets();
     elements.scenePresetStatus.textContent = t('scenePresetDeleted');

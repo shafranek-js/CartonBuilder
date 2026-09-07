@@ -66,12 +66,16 @@ export function createSettingsModal({
 
   function renderContent() {
     const currentThemeId = getSavedTheme();
-    const isRu = getLocale() === 'ru';
+    const loc = getLocale();
     const showHistory = getShowHistory(windowRef);
 
     const themeOptionsHtml = COLOR_THEMES.map((theme) => {
       const selected = theme.id === currentThemeId ? 'selected' : '';
-      const name = isRu ? theme.nameRu : theme.nameEn;
+      let name = theme.nameEn;
+      if (loc === 'ru') name = theme.nameRu || theme.nameEn;
+      else if (loc === 'uk') name = theme.nameUk || theme.nameRu || theme.nameEn;
+      else if (loc === 'cs') name = theme.nameCs || theme.nameEn;
+      else if (loc === 'de') name = theme.nameDe || theme.nameEn;
       return `<option value="${theme.id}" ${selected}>${name}</option>`;
     }).join('');
 
@@ -101,7 +105,7 @@ export function createSettingsModal({
         <label class="settings-label">
           <span>CartonBuilder v1.0.0</span>
         </label>
-        <p class="settings-desc">Interactive 2D/3D Carton Packaging Dieline & Artwork Studio.</p>
+        <p class="settings-desc">${t('settingsAppDesc') || 'Interactive 2D/3D Carton Packaging Dieline & Artwork Studio.'}</p>
       </div>
 
       <div class="settings-group">
@@ -191,7 +195,7 @@ export function createSettingsModal({
   }
 
   async function handleClearData() {
-    if (!windowRef.confirm('Are you sure you want to clear saved project state and reset to clean defaults?')) {
+    if (!windowRef.confirm(t('clearProjectDataConfirm'))) {
       return;
     }
 
@@ -199,12 +203,18 @@ export function createSettingsModal({
       await clearCurrentProject();
       clearSceneSettings(windowRef.localStorage);
       clearRenderSettings(windowRef.localStorage);
-      showToast('Project data cleared. Reloading...');
+      showToast(t('projectDataCleared'));
       windowRef.setTimeout(() => windowRef.location.reload(), 600);
     } catch {
-      showToast('Could not clear project data.');
+      showToast(t('clearProjectDataFailed'));
     }
   }
+
+  documentRef.addEventListener('carton-locale-changed', () => {
+    if (isOpen) {
+      renderContent();
+    }
+  });
 
   triggerButton.addEventListener('click', (e) => {
     e.stopPropagation();

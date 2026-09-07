@@ -26,9 +26,16 @@ export function createViewMenu({
 
   function renderContent() {
     const overlays = getPrepressOverlayState() || {};
+    const overlayKeyMap = {
+      trim: 'overlayTrim',
+      bleed: 'overlayBleed',
+      safe: 'overlaySafe',
+      dieline: 'overlayDieline',
+      marks: 'overlayMarks',
+    };
     const overlayItems = ['trim', 'bleed', 'safe', 'dieline', 'marks'].map((name) => `
       <button type="button" class="file-menu-item view-menu-toggle prepress-overlay-toggle" id="menuPrepressOverlay${name}" role="menuitemcheckbox" aria-checked="${Boolean(overlays[name])}">
-        <span class="file-menu-item-title">${name[0].toUpperCase() + name.slice(1)} overlay</span><span class="file-menu-shortcut">${overlays[name] ? '✓' : ''}</span>
+        <span class="file-menu-item-title">${t(overlayKeyMap[name]) || (name[0].toUpperCase() + name.slice(1) + ' overlay')}</span><span class="file-menu-shortcut">${overlays[name] ? '✓' : ''}</span>
       </button>`).join('');
     if (isOverprintAvailable()) {
       const enabled = isOverprintEnabled();
@@ -42,7 +49,7 @@ export function createViewMenu({
           <span class="file-menu-item-title">${t('separations') || 'Separations…'}</span>
         </button>
         <div class="file-menu-divider"></div>
-        <div class="view-menu-note" role="note">Prepress overlays</div>
+        <div class="view-menu-note" role="note">${t('prepressOverlaysNote') || 'Prepress overlays'}</div>
         ${overlayItems}
         <div class="view-menu-note" id="overprintProofNote" role="note">
           ${t('overprintProofNote') || 'Monitor preview is not a contract color proof.'}
@@ -100,6 +107,12 @@ export function createViewMenu({
     e.stopPropagation();
     if (!isOpen) onOpen();
     togglePopover();
+  });
+
+  documentRef.addEventListener('carton-locale-changed', () => {
+    if (isOpen) {
+      renderContent();
+    }
   });
 
   documentRef.addEventListener('click', (e) => {

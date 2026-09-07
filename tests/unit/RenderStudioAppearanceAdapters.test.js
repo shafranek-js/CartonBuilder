@@ -156,12 +156,13 @@ describe('Render Studio production appearance adapters', () => {
   it('uses the environment LRU and disposes each cached entry exactly once', async () => {
     const renderSurface = makeSurface();
     const targets = [];
+    const pmremGeneratorFactory = makePmremFactory(targets);
     const adapter = new RenderStudioEnvironmentAdapter({
       renderSurface,
       cacheLimit: 2,
       textureLoader: vi.fn(async () => makeEnvironmentTexture(1)),
       proceduralTextureFactory: vi.fn(() => makeEnvironmentTexture(0.5)),
-      pmremGeneratorFactory: makePmremFactory(targets),
+      pmremGeneratorFactory,
     });
 
     await adapter.setEnvironmentMap({ source: 'builtin', presetId: 'neutral-softbox', resolutionCap: 1024 });
@@ -173,8 +174,10 @@ describe('Render Studio production appearance adapters', () => {
     expect(targets[0].source.dispose).toBeTypeOf('function');
     expect(adapter.getDiagnostics().cacheHit).toBe(true);
     expect(adapter.getDiagnostics().cacheEntries).toBe(2);
+    expect(pmremGeneratorFactory).toHaveBeenCalledTimes(1);
     adapter.dispose();
     adapter.dispose();
+    expect(pmremGeneratorFactory.mock.results[0].value.dispose).toHaveBeenCalledTimes(1);
     for (const entry of targets) {
       expect(entry.target.dispose).toHaveBeenCalledTimes(1);
       expect(entry.source.dispose).toHaveBeenCalledTimes(1);

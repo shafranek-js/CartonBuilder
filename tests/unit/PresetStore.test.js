@@ -2,16 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { BoxNetModel } from '../../src/model/BoxNetModel.js';
 import {
   BUILT_IN_PRESETS,
+  BUILT_IN_TECHNICAL_PRESETS,
   deletePreset,
   exportPresetsJson,
   formatPresetDimensions,
+  getBuiltInPresets,
   getUserPresets,
   importPresetsFromJson,
   savePreset,
 } from '../../src/project/PresetStore.js';
 
 describe('PresetStore', () => {
-  it('provides built-in presets', () => {
+  it('provides built-in presets for quick workflow', () => {
     expect(BUILT_IN_PRESETS.length).toBeGreaterThanOrEqual(5);
     expect(BUILT_IN_PRESETS[0]).toMatchObject({
       id: 'preset-standard',
@@ -20,6 +22,39 @@ describe('PresetStore', () => {
       isBuiltIn: true,
     });
     expect(BUILT_IN_PRESETS.find((preset) => preset.id === 'preset-tuck')?.name).toBe('Small Box');
+    expect(getBuiltInPresets('quick')).toEqual(BUILT_IN_PRESETS);
+  });
+
+  it('provides built-in presets for technical workflow', () => {
+    expect(BUILT_IN_TECHNICAL_PRESETS.length).toBe(3);
+    const rte = BUILT_IN_TECHNICAL_PRESETS.find((p) => p.cartonType === 'RTE');
+    expect(rte).toBeDefined();
+    expect(rte.bundle?.contractVersion).toBe('carton-workflow.v1');
+    expect(getBuiltInPresets('technical')).toEqual(BUILT_IN_TECHNICAL_PRESETS);
+  });
+
+  it('strictly isolates quick and technical user presets', async () => {
+    const quickPreset = await savePreset({
+      name: 'My Quick Box',
+      dimensions: { width: 110, height: 70, depth: 30 },
+    }, 'quick');
+
+    const techPreset = await savePreset({
+      name: 'My Technical Box',
+      cartonType: 'RTE',
+      dimensions: { width: 130, height: 170, depth: 65 },
+    }, 'technical');
+
+    const quickList = await getUserPresets('quick');
+    expect(quickList.some((p) => p.id === quickPreset.id)).toBe(true);
+    expect(quickList.some((p) => p.id === techPreset.id)).toBe(false);
+
+    const techList = await getUserPresets('technical');
+    expect(techList.some((p) => p.id === techPreset.id)).toBe(true);
+    expect(techList.some((p) => p.id === quickPreset.id)).toBe(false);
+
+    await deletePreset(quickPreset.id);
+    await deletePreset(techPreset.id);
   });
 
   it('formats dimensions into readable strings', () => {

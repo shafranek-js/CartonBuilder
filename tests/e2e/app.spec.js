@@ -688,6 +688,7 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('carton-builder-first-run-example-v1', 'true');
   });
   await page.reload();
+  await page.locator('#appSplash').waitFor({ state: 'hidden', timeout: 30_000 });
 });
 
 test('opens a neutral transient workflow step before any project is chosen', async ({ page }) => {
@@ -2409,7 +2410,6 @@ test('adds multiple artworks with named sublayers, reorders and renames them', a
   await expect(page.locator('#artworkSublayers .artwork-sublayer').nth(0)).toHaveText('second.png');
   await expect(page.locator('#artworkSublayers .artwork-sublayer').nth(1)).toHaveText('renamed.png');
 });
-
 
 
 

@@ -183,6 +183,7 @@ export function createRenderApp({
   )) {
     throw new TypeError('RenderApp workflowExportRouter does not implement the required export contract.');
   }
+  const renderBtn = documentRef.getElementById('renderButton') || documentRef.getElementById('renderPngButton');
   const elements = {
     panel: documentRef.getElementById('renderPanel'),
     canvas: documentRef.getElementById('renderCanvas'),
@@ -191,8 +192,9 @@ export function createRenderApp({
     recoveryMessage: documentRef.getElementById('renderRecoveryMessage'),
     retry: documentRef.getElementById('retryRenderButton'),
     status: documentRef.getElementById('renderStatus'),
-    png: documentRef.getElementById('renderPngButton'),
-    jpg: documentRef.getElementById('renderJpgButton'),
+    render: renderBtn,
+    png: renderBtn,
+    jpg: documentRef.getElementById('renderJpgButton') || renderBtn,
     back: documentRef.getElementById('backToPreviewButton'),
     cameraPreset: documentRef.getElementById('renderCameraPreset'),
     projection: documentRef.getElementById('renderProjection'),
@@ -613,8 +615,9 @@ export function createRenderApp({
   function setBusy(value) {
     elements.panel?.setAttribute('aria-busy', String(value));
     if (elements.busy) elements.busy.hidden = !value;
-    if (elements.png) elements.png.disabled = value;
-    if (elements.jpg) elements.jpg.disabled = value;
+    if (elements.render) elements.render.disabled = value;
+    if (elements.png && elements.png !== elements.render) elements.png.disabled = value;
+    if (elements.jpg && elements.jpg !== elements.render) elements.jpg.disabled = value;
   }
 
   async function runForegroundExport({ id, labelKey, work }) {
@@ -635,8 +638,9 @@ export function createRenderApp({
 
   function setExportAvailability(enabled) {
     const available = Boolean(enabled);
-    if (elements.png) elements.png.disabled = !available;
-    if (elements.jpg) elements.jpg.disabled = !available;
+    if (elements.render) elements.render.disabled = !available;
+    if (elements.png && elements.png !== elements.render) elements.png.disabled = !available;
+    if (elements.jpg && elements.jpg !== elements.render) elements.jpg.disabled = !available;
     if (elements.exportConfirm && !available) elements.exportConfirm.disabled = true;
   }
 
@@ -2606,8 +2610,12 @@ export function createRenderApp({
     elements.experimentalPathTracing.hidden = !isPathTracingEnabled();
     elements.experimentalPathTracing.addEventListener('click', runExperimentalPathTracing);
   }
-  elements.png.addEventListener('click', () => openExportDialog('png'));
-  elements.jpg.addEventListener('click', () => openExportDialog('jpg'));
+  if (elements.render) {
+    elements.render.addEventListener('click', () => openExportDialog());
+  } else {
+    elements.png?.addEventListener('click', () => openExportDialog('png'));
+    elements.jpg?.addEventListener('click', () => openExportDialog('jpg'));
+  }
   elements.exportKind?.addEventListener('change', (event) => {
     exportDialogDraftKind = event.target.value;
     updateExportDialog();

@@ -191,9 +191,12 @@
     (function() {
       try {
         const loc = localStorage.getItem('carton-builder-locale');
-        if (loc === 'ru') {
-          const el = document.getElementById('appSplashStatus');
-          if (el) el.textContent = 'Загрузка рабочей среды...';
+        const el = document.getElementById('appSplashStatus');
+        if (el) {
+          if (loc === 'ru') el.textContent = 'Загрузка рабочей среды...';
+          else if (loc === 'uk') el.textContent = 'Завантаження робочого простору...';
+          else if (loc === 'cs') el.textContent = 'Načítání pracovního prostoru...';
+          else if (loc === 'de') el.textContent = 'Arbeitsbereich wird geladen...';
         }
       } catch (e) {}
     })();
@@ -226,21 +229,21 @@
         <div class="stepper-center-steps">
           <button class="step active" type="button" data-step-target="workflow" aria-current="step" aria-label="Select Workflow" data-i18n-aria-label="selectWorkflowStepLabel" disabled><span>0</span><b data-i18n="selectWorkflowStep">Select Workflow</b></button>
           <button class="step" type="button" data-step-target="box" aria-label="Create Box" data-i18n-aria-label="createBox" disabled title="Choose a workflow first" data-i18n-title="workflowSelectionRequired"><span>1</span><b data-i18n="createBox">Create Box</b></button>
-          <button class="step" type="button" data-step-target="artwork" aria-label="Place Artwork" data-i18n-aria-label="placeArtwork" disabled title="Complete Step 1 to place artwork"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
-          <button class="step" type="button" data-step-target="preview" aria-label="Preview / Export" data-i18n-aria-label="previewExport" disabled title="Complete earlier steps to preview"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
-          <button class="step" type="button" data-step-target="render" aria-label="Render" data-i18n-aria-label="renderStep" disabled title="Complete earlier steps to render"><span>4</span><b data-i18n="renderStep">Render</b></button>
+          <button class="step" type="button" data-step-target="artwork" aria-label="Place Artwork" data-i18n-aria-label="placeArtwork" disabled title="Complete Step 1 to place artwork" data-i18n-title="stepArtworkDisabledHint"><span>2</span><b data-i18n="placeArtwork">Place Artwork</b></button>
+          <button class="step" type="button" data-step-target="preview" aria-label="Preview / Export" data-i18n-aria-label="previewExport" disabled title="Complete earlier steps to preview" data-i18n-title="stepPreviewDisabledHint"><span>3</span><b data-i18n="previewExport">Preview / Export</b></button>
+          <button class="step" type="button" data-step-target="render" aria-label="Render" data-i18n-aria-label="renderStep" disabled title="Complete earlier steps to render" data-i18n-title="stepRenderDisabledHint"><span>4</span><b data-i18n="renderStep">Render</b></button>
         </div>
         <div class="header-right-tools">
-          <div class="preset-picker-wrap">
-            <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library">
-              <span>📦 Presets</span>
+          <div class="preset-picker-wrap" hidden>
+            <button type="button" class="preset-trigger-btn" id="presetTriggerBtn" aria-haspopup="true" aria-expanded="false" title="Box Presets Library" data-i18n-title="presetsTitle">
+              <span data-i18n="presetsButton">📦 Presets</span>
               <svg class="dropdown-caret" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             </button>
             <div class="preset-popover" id="presetPopover" hidden></div>
           </div>
 
           <div class="file-menu-wrap contacts-menu-wrap">
-            <button type="button" class="file-menu-trigger-btn" id="contactsMenuTriggerBtn" aria-haspopup="true" aria-expanded="false">
+            <button type="button" class="file-menu-trigger-btn" id="contactsMenuTriggerBtn" aria-haspopup="true" aria-expanded="false" data-i18n="contactsMenu">
               Contacts
             </button>
             <div class="file-menu-popover contacts-menu-popover" id="contactsMenuPopover" hidden>
@@ -263,8 +266,11 @@
           <label class="language-picker">
             <span class="sr-only" data-i18n="language">Language</span>
             <select id="localePicker" aria-label="Language" data-i18n-aria-label="languageLabel">
-              <option value="en">EN</option>
-              <option value="ru">RU</option>
+              <option value="en" title="English">EN</option>
+              <option value="uk" title="Українська">UK</option>
+              <option value="cs" title="Čeština">CS</option>
+              <option value="de" title="Deutsch">DE</option>
+              <option value="ru" title="Русский">RU</option>
             </select>
           </label>
         </div>
@@ -328,27 +334,27 @@
             <div class="dimension-row">
               <label for="boxWidth" data-i18n="width">Width:</label>
               <span class="measure-input">
-                <input id="boxWidth" name="width" type="number" min="0.1" step="0.01" value="150" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)">
+                <input id="boxWidth" name="width" type="number" min="0.1" step="0.01" value="150" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)" data-i18n-title="boxStepHint">
               </span>
-              <svg class="dimension-icon width-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)">
+              <svg class="dimension-icon width-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)" data-i18n-title="scrubberWidthHint">
                 <path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
             <div class="dimension-row">
               <label for="boxHeight" data-i18n="height">Height:</label>
               <span class="measure-input">
-                <input id="boxHeight" name="height" type="number" min="0.1" step="0.01" value="90" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)">
+                <input id="boxHeight" name="height" type="number" min="0.1" step="0.01" value="90" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)" data-i18n-title="boxStepHint">
               </span>
-              <svg class="dimension-icon height-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)">
+              <svg class="dimension-icon height-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)" data-i18n-title="scrubberHeightHint">
                 <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
             <div class="dimension-row">
               <label for="boxDepth" data-i18n="depth">Depth:</label>
               <span class="measure-input">
-                <input id="boxDepth" name="depth" type="number" min="0.1" step="0.01" value="40" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)">
+                <input id="boxDepth" name="depth" type="number" min="0.1" step="0.01" value="40" inputmode="decimal" title="Step: 0.1 (Ctrl = 1, Alt = 0.01)" data-i18n-title="boxStepHint">
               </span>
-              <svg class="dimension-icon depth-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag diagonally to adjust Depth">
+              <svg class="dimension-icon depth-icon" viewBox="0 0 24 24" aria-hidden="true" title="Drag diagonally to adjust Depth" data-i18n-title="scrubberDepthHint">
                 <g transform="rotate(45 12 12)">
                   <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                 </g>
@@ -357,7 +363,7 @@
             <div class="dimension-row board-caliper-row">
               <label for="boardCaliper" data-i18n="boardCaliper">Board:</label>
               <span class="measure-input">
-                <input id="boardCaliper" name="boardCaliper" type="number" min="0.01" max="2" step="0.01" value="0.35" inputmode="decimal" title="Board caliper in mm (0.01–2.00)">
+                <input id="boardCaliper" name="boardCaliper" type="number" min="0.01" max="2" step="0.01" value="0.35" inputmode="decimal" title="Board caliper in mm (0.01–2.00)" data-i18n-title="boardCaliperHint">
               </span>
               <span class="dimension-unit">mm</span>
             </div>
@@ -398,21 +404,21 @@
               <div class="adobe-layers-table">
                 <!-- Artwork Layer -->
                 <div class="adobe-layer-row" data-layer-id="artwork">
-                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility" data-i18n-title="toggleVisibility">
                     <input id="layerArtwork" type="checkbox" checked class="sr-only">
                     <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                       <circle cx="12" cy="12" r="3"/>
                     </svg>
                   </label>
-                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock" data-i18n-title="toggleLock">
                     <input id="lockArtwork" type="checkbox" class="sr-only">
                     <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
                   </label>
-                  <button type="button" class="layer-twisty" id="artworkTwisty" aria-expanded="true" aria-label="Collapse Artwork group">
+                  <button type="button" class="layer-twisty" id="artworkTwisty" aria-expanded="true" aria-label="Collapse Artwork group" data-i18n-aria-label="collapseArtworkGroup">
                     <svg viewBox="0 0 8 8" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,1.5 5.5,4 2.5,6.5" /></svg>
                   </button>
                   <span class="layer-thumbnail">
@@ -435,14 +441,14 @@
 
                 <!-- Dieline Layer -->
                 <div class="adobe-layer-row" data-layer-id="dieline">
-                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility" data-i18n-title="toggleVisibility">
                     <input id="layerDieline" type="checkbox" checked class="sr-only">
                     <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                       <circle cx="12" cy="12" r="3"/>
                     </svg>
                   </label>
-                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock" data-i18n-title="toggleLock">
                     <input id="lockDieline" type="checkbox" checked class="sr-only">
                     <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -459,14 +465,14 @@
 
                 <!-- Panel Names Layer -->
                 <div class="adobe-layer-row" data-layer-id="names">
-                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility" data-i18n-title="toggleVisibility">
                     <input id="layerNames" type="checkbox" checked class="sr-only">
                     <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                       <circle cx="12" cy="12" r="3"/>
                     </svg>
                   </label>
-                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock" data-i18n-title="toggleLock">
                     <input id="lockNames" type="checkbox" checked class="sr-only">
                     <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -481,14 +487,14 @@
 
                 <!-- Highlights Layer -->
                 <div class="adobe-layer-row" data-layer-id="highlights">
-                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility">
+                  <label class="layer-toggle-cell eye-cell" title="Toggle Visibility" data-i18n-title="toggleVisibility">
                     <input id="layerHighlights" type="checkbox" checked class="sr-only">
                     <svg class="layer-eye-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                       <circle cx="12" cy="12" r="3"/>
                     </svg>
                   </label>
-                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock">
+                  <label class="layer-toggle-cell lock-cell" title="Toggle Lock" data-i18n-title="toggleLock">
                     <input id="lockHighlights" type="checkbox" checked class="sr-only">
                     <svg class="layer-lock-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -723,31 +729,31 @@
             </details>
 
             <details open class="tool-section" id="prepressSection">
-              <summary>Prepress</summary>
-              <p class="quality-help">Production-assist dieline. Not PDF/X certified or a contract color proof.</p>
+              <summary data-i18n="prepressHeading">Prepress</summary>
+              <p class="quality-help" data-i18n="prepressHelp">Production-assist dieline. Not PDF/X certified or a contract color proof.</p>
               <div class="artwork-quality-fields">
-                <label class="field"><span>Preset</span><select id="prepressPreset"><option value="">—</option></select></label>
-                <label class="field"><span>Mode</span><select id="prepressMode"><option value="technical-proof">Technical proof</option><option value="production-assist">Production assist</option></select></label>
-                <label class="field"><span>Profile</span><select id="prepressProfile"><option value="generic-folding-carton">Generic folding carton</option><option value="custom">Custom</option></select></label>
-                <label class="field"><span>Bleed (mm)</span><input id="prepressBleed" type="number" min="0" max="20" step="0.1"></label>
-                <label class="field"><span>Safe (mm)</span><input id="prepressSafe" type="number" min="0" max="20" step="0.1"></label>
-                <label class="field"><span>Slug (mm)</span><input id="prepressSlug" type="number" min="0" max="30" step="0.1"></label>
-                <label class="field"><span>Required DPI</span><input id="prepressDpi" type="number" min="30" max="1200" step="1"></label>
-                <label class="field"><span>Cut offset (mm)</span><input id="prepressCutOffset" type="number" min="-5" max="5" step="0.1"></label>
-                <label class="field"><span>Crease offset (mm)</span><input id="prepressCreaseOffset" type="number" min="-5" max="5" step="0.1"></label>
-                <label class="field"><span>Glue delta (mm)</span><input id="prepressGlueDelta" type="number" min="-10" max="10" step="0.1"></label>
-                <label class="field"><span>Tuck clearance (mm)</span><input id="prepressTuckDelta" type="number" min="-10" max="10" step="0.1"></label>
-                <label class="field"><span>Crop marks</span><input id="prepressCropMarks" type="checkbox"></label>
-                <label class="field"><span>Registration marks</span><input id="prepressRegistrationMarks" type="checkbox"></label>
-                <label class="field"><span>Slug</span><input id="prepressSlugMark" type="checkbox"></label>
+                <label class="field"><span data-i18n="prepressPreset">Preset</span><select id="prepressPreset"><option value="">—</option></select></label>
+                <label class="field"><span data-i18n="prepressMode">Mode</span><select id="prepressMode"><option value="technical-proof" data-i18n="prepressModeProof">Technical proof</option><option value="production-assist" data-i18n="prepressModeAssist">Production assist</option></select></label>
+                <label class="field"><span data-i18n="prepressProfile">Profile</span><select id="prepressProfile"><option value="generic-folding-carton" data-i18n="prepressProfileGeneric">Generic folding carton</option><option value="custom" data-i18n="prepressProfileCustom">Custom</option></select></label>
+                <label class="field"><span data-i18n="prepressBleed">Bleed (mm)</span><input id="prepressBleed" type="number" min="0" max="20" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressSafe">Safe (mm)</span><input id="prepressSafe" type="number" min="0" max="20" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressSlug">Slug (mm)</span><input id="prepressSlug" type="number" min="0" max="30" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressDpi">Required DPI</span><input id="prepressDpi" type="number" min="30" max="1200" step="1"></label>
+                <label class="field"><span data-i18n="prepressCutOffset">Cut offset (mm)</span><input id="prepressCutOffset" type="number" min="-5" max="5" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressCreaseOffset">Crease offset (mm)</span><input id="prepressCreaseOffset" type="number" min="-5" max="5" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressGlueDelta">Glue delta (mm)</span><input id="prepressGlueDelta" type="number" min="-10" max="10" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressTuckDelta">Tuck clearance (mm)</span><input id="prepressTuckDelta" type="number" min="-10" max="10" step="0.1"></label>
+                <label class="field"><span data-i18n="prepressCropMarks">Crop marks</span><input id="prepressCropMarks" type="checkbox"></label>
+                <label class="field"><span data-i18n="prepressRegistrationMarks">Registration marks</span><input id="prepressRegistrationMarks" type="checkbox"></label>
+                <label class="field"><span data-i18n="prepressSlugMark">Slug</span><input id="prepressSlugMark" type="checkbox"></label>
               </div>
               <p class="quality-summary" id="prepressStatus" role="status"></p>
               <div class="button-row">
-                <button type="button" id="prepressReset">Reset</button>
-                <button type="button" id="prepressSavePreset">Save preset</button>
-                <button type="button" id="prepressRun">Run preflight</button>
-                <button type="button" id="prepressReport">JSON report</button>
-                <button type="button" id="prepressExport">Prepress PDF</button>
+                <button type="button" id="prepressReset" data-i18n="prepressReset">Reset</button>
+                <button type="button" id="prepressSavePreset" data-i18n="prepressSavePreset">Save preset</button>
+                <button type="button" id="prepressRun" data-i18n="prepressRun">Run preflight</button>
+                <button type="button" id="prepressReport" data-i18n="prepressReport">JSON report</button>
+                <button type="button" id="prepressExport" data-i18n="prepressExport">Prepress PDF</button>
               </div>
             </details>
 
@@ -823,7 +829,7 @@
                     <div class="box-dim-control">
                       <span class="measure-input"><input id="artworkBoxWidth" type="number" min="0.1" step="0.01"></span>
                       <svg class="dimension-icon dim-scrubber width-icon" data-dim="width" viewBox="0 0 24 24" aria-hidden="true"
-                           title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)">
+                           title="Drag horizontally to adjust Width (Ctrl = 1, Alt = 0.01)" data-i18n-title="scrubberWidthHint">
                         <path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </div>
@@ -833,7 +839,7 @@
                     <div class="box-dim-control">
                       <span class="measure-input"><input id="artworkBoxHeight" type="number" min="0.1" step="0.01"></span>
                       <svg class="dimension-icon dim-scrubber height-icon" data-dim="height" viewBox="0 0 24 24" aria-hidden="true"
-                           title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)">
+                           title="Drag vertically to adjust Height (Ctrl = 1, Alt = 0.01)" data-i18n-title="scrubberHeightHint">
                         <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </div>
@@ -843,7 +849,7 @@
                     <div class="box-dim-control">
                       <span class="measure-input"><input id="artworkBoxDepth" type="number" min="0.1" step="0.01"></span>
                       <svg class="dimension-icon dim-scrubber depth-icon" data-dim="depth" viewBox="0 0 24 24" aria-hidden="true"
-                           title="Drag diagonally to adjust Depth">
+                           title="Drag diagonally to adjust Depth" data-i18n-title="scrubberDepthHint">
                         <g transform="rotate(45 12 12)">
                           <path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         </g>
@@ -1096,8 +1102,13 @@
         <div class="render-toolbar">
           <span class="render-status" id="renderStatus" role="status" aria-live="polite"></span>
           <div class="render-toolbar-actions">
-            <button id="renderPngButton" type="button" data-i18n="renderPng">Render PNG</button>
-            <button id="renderJpgButton" type="button" data-i18n="renderJpg">Render JPG</button>
+            <button id="renderButton" class="render-action-btn" type="button" data-i18n-title="renderAction" title="Render">
+              <svg class="render-action-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14.5 11.5a1.2 1.2 0 0 1-1.2 1.2H2.7a1.2 1.2 0 0 1-1.2-1.2v-5.6a1.2 1.2 0 0 1 1.2-1.2h2.2l1.1-1.5a1 1 0 0 1 .8-.4h2.4a1 1 0 0 1 .8.4l1.1 1.5h2.2a1.2 1.2 0 0 1 1.2 1.2v5.6z"/>
+                <circle cx="8" cy="8.7" r="2.3"/>
+              </svg>
+              <span data-i18n="renderAction">Render</span>
+            </button>
           </div>
         </div>
         <div class="render-main-row">

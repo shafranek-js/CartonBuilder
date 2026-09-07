@@ -3,6 +3,9 @@ export const COLOR_THEMES = Object.freeze([
     id: 'dark-studio',
     nameEn: 'Dark Studio (Classic)',
     nameRu: 'Dark Studio (Классика)',
+    nameUk: 'Dark Studio (Класика)',
+    nameCs: 'Dark Studio (Klasika)',
+    nameDe: 'Dark Studio (Klassisch)',
     colors: {
       bodyBg: '#343434',
       appBg: '#535353',

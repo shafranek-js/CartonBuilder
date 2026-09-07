@@ -10,6 +10,9 @@ export function createBoxNetApp({
   model,
   documentRef = document,
   windowRef = window,
+  getWorkflowMode = () => 'quick',
+  getCurrentTechnicalDocument = () => null,
+  onApplyTechnicalPreset = () => {},
   onContinue = () => {},
   onDimensionReset = () => {},
   onLayoutReset = () => {},
@@ -74,6 +77,9 @@ export function createBoxNetApp({
         triggerButton: presetTriggerBtn,
         popoverContainer: presetPopover,
         model,
+        getWorkflowMode,
+        getCurrentTechnicalDocument,
+        onApplyTechnicalPreset,
         onApplyPreset: (preset) => {
           const normalized = preset.netState
             ? normalizeQuickBoxState(preset.netState).box
@@ -377,6 +383,7 @@ export function createBoxNetApp({
 
   const publicApi = {
     model,
+    presetPicker,
     render,
     addPanel,
     deletePanel,

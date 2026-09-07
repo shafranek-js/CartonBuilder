@@ -1232,8 +1232,9 @@ export class BoxScene {
         && this.environmentAsset?.source === 'builtin'
         && this.environmentAsset?.presetId === builtIn.id
         && this.environmentEquirectangular;
-      if (!usesPackagedTexture) this.ensureEnvironment();
-      else if (previousResolution !== this.environmentMap.resolutionCap) {
+      if (builtIn.kind !== 'packaged') {
+        this.ensureEnvironment();
+      } else if (usesPackagedTexture && previousResolution !== this.environmentMap.resolutionCap) {
         // A cap change must rebuild/reuse the runtime entry even when the
         // selected asset id is unchanged.
         this.setEnvironmentAsset(this.environmentAsset, { render: false });

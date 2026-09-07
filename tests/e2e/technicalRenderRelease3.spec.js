@@ -12,6 +12,9 @@ const sequenceDownloadTimeout = process.env.CI ? 300_000 : 180_000;
 async function resetProject(page) {
   await page.goto('/');
   await page.evaluate(async () => {
+    // Stop a pending autosave before clearing IndexedDB; otherwise the live
+    // page can recreate the just-deleted current project before reload.
+    window.cartonBuilderApp?.artwork?.dispose?.();
     const request = indexedDB.open('carton-builder', 6);
     await new Promise((resolve) => {
       request.onsuccess = () => {
@@ -30,6 +33,7 @@ async function resetProject(page) {
     localStorage.setItem('carton-builder-first-run-example-v1', 'true');
   });
   await page.reload();
+  await page.locator('#appSplash').waitFor({ state: 'hidden', timeout: 30_000 });
   await expect(page.locator('#workflowStep')).toBeVisible();
 }
 
@@ -269,7 +273,7 @@ test.describe('Release 3 Technical Render acceptance', () => {
     await page.locator('#renderLongEdge').selectOption('2048');
     await page.locator('#renderBackgroundMode').selectOption('transparent');
     await page.locator('#renderTransparentShadow').uncheck();
-    await page.locator('#renderPngButton').click();
+    await page.locator('#renderButton, #renderPngButton').click();
     await expect(page.locator('#renderExportDialog')).toBeVisible();
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: exportDownloadTimeout }),
@@ -281,7 +285,7 @@ test.describe('Release 3 Technical Render acceptance', () => {
 
   test('exports and reopens Technical turntable and GLB payloads', async ({ page }) => {
     await openTechnicalRender(page);
-    await page.locator('#renderPngButton').click();
+    await page.locator('#renderButton, #renderPngButton').click();
     await page.locator('#renderExportKind').selectOption('sequence');
     await page.locator('#renderExportSequenceFrames').selectOption('24');
     await page.locator('#renderExportSequenceLongEdge').selectOption('512');
@@ -300,7 +304,7 @@ test.describe('Release 3 Technical Render acceptance', () => {
     await zip.close();
     expect(firstFrame.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
 
-    await page.locator('#renderPngButton').click();
+    await page.locator('#renderButton, #renderPngButton').click();
     await page.locator('#renderExportKind').selectOption('glb');
     await page.locator('#renderExportGlbTextureSize').selectOption('1024');
     const [glbDownload] = await Promise.all([

@@ -1024,14 +1024,15 @@ export function createArtworkApp({
     }
     if (controls.prepressStatus) {
       if (technicalPrepressBlocked) {
-        controls.prepressStatus.textContent = 'Production-assist export is unavailable for technical curved dielines. Exact flat SVG, PDF and raster export remain available.';
+        controls.prepressStatus.textContent = t('prepressStatusCurvedBlocked');
         controls.prepressStatus.classList.add('is-error');
         return;
       }
       const production = buildProductionDieline(boxModel, prepress);
+      const modeLabel = prepress.mode === 'production-assist' ? t('prepressModeAssist') : t('prepressModeProof');
       controls.prepressStatus.textContent = production.diagnostics.valid
-        ? `${prepress.mode === 'production-assist' ? 'Production assist' : 'Technical proof'} · ${production.diagnostics.elementCount} elements · ${production.diagnostics.bleedBounds.width.toFixed(1)} × ${production.diagnostics.bleedBounds.height.toFixed(1)} mm`
-        : 'Prepress contour needs review';
+        ? `${modeLabel} · ${production.diagnostics.elementCount} elements · ${production.diagnostics.bleedBounds.width.toFixed(1)} × ${production.diagnostics.bleedBounds.height.toFixed(1)} mm`
+        : t('prepressContourNeedsReview');
       controls.prepressStatus.classList.toggle('is-error', !production.diagnostics.valid);
     }
   }
@@ -3665,8 +3666,8 @@ export function createArtworkApp({
     lastPreflight = { signature: getPreflightSignature(), report };
     if (controls.prepressStatus) {
       controls.prepressStatus.textContent = report.valid
-        ? `Preflight passed with ${report.warnings.length} warnings and ${report.manualReview.length} manual checks.`
-        : `Preflight blocked: ${report.blocking.length} blocking issue(s).`;
+        ? t('preflightPassed', { warnings: report.warnings.length, checks: report.manualReview.length })
+        : t('preflightBlocked', { blocking: report.blocking.length });
       controls.prepressStatus.classList.toggle('is-error', !report.valid);
     }
     return report;
@@ -4133,6 +4134,7 @@ export function createArtworkApp({
   documentRef.addEventListener('carton-locale-changed', () => {
     render();
     renderCurrentError();
+    renderPrepressControls();
   });
 
   function dispose() {

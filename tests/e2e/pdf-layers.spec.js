@@ -79,8 +79,8 @@ async function waitForPixels(page, predicate) {
 }
 
 test('imports a PDF-based Illustrator file with an .ai extension', async ({ page }) => {
-  await page.goto('http://127.0.0.1:4173');
-  await page.waitForTimeout(1200);
+  await page.goto('/');
+  await page.locator('#appSplash').waitFor({ state: 'hidden', timeout: 30_000 });
   await buildReferenceNet(page);
   await page.locator('.step[data-step-target="artwork"]').click();
 
@@ -96,8 +96,9 @@ test('imports a PDF-based Illustrator file with an .ai extension', async ({ page
   await expect(page.locator('#pdfLayersList')).toContainText('BlueLayer');
 });
 
-test('exposes PDF optional content layers and re-renders the preview when toggled', async ({ page }) => {  await page.goto('http://127.0.0.1:4173');
-  await page.waitForTimeout(1200);
+test('exposes PDF optional content layers and re-renders the preview when toggled', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#appSplash').waitFor({ state: 'hidden', timeout: 30_000 });
   await buildReferenceNet(page);
   await page.locator('.step[data-step-target="artwork"]').click();
 
@@ -168,8 +169,8 @@ function buildBoxPdf() {
 }
 
 test('lets the user switch the rendered page box and re-renders the preview', async ({ page }) => {
-  await page.goto('http://127.0.0.1:4173');
-  await page.waitForTimeout(1200);
+  await page.goto('/');
+  await page.locator('#appSplash').waitFor({ state: 'hidden', timeout: 30_000 });
   await buildReferenceNet(page);
   await page.locator('.step[data-step-target="artwork"]').click();
 

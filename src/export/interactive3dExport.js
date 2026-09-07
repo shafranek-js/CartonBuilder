@@ -157,10 +157,35 @@ const VIEWER_SCRIPT = `
       presentation: 'Настройки презентации', resetLighting: 'Сбросить свет', exportSettings: 'Экспорт настроек',
       importSettings: 'Импорт настроек', exportStandalone: 'Экспорт standalone', hint: 'Тяните для вращения · колесо — масштаб · правая кнопка — панорамирование',
     },
+    uk: {
+      brand: 'CartonBuilder · 3D-перегляд', models: 'Моделі', settings: 'Налаштування', fullscreen: 'На весь екран',
+      controls: '⚙ Керування', autoRotateOn: 'Автообертання: увімк.', autoRotateOff: 'Автообертання: вимк.', reset: 'Скинути вигляд',
+      open: 'Розгорнути', fold: 'Згорнути', camera: 'Камера: ', background: 'Фон', modelsTitle: 'Моделі',
+      procedural: 'Процедурна коробка', embedded: 'Вбудована GLB-коробка', openGlb: 'Відкрити GLB', close: 'Закрити',
+      presentation: 'Налаштування презентації', resetLighting: 'Скинути світло', exportSettings: 'Експорт налаштувань',
+      importSettings: 'Імпорт налаштувань', exportStandalone: 'Експорт standalone', hint: 'Тягніть для обертання · коліщатко — масштаб · права кнопка — панорамування',
+    },
+    cs: {
+      brand: 'CartonBuilder · 3D prohlížeč', models: 'Modely', settings: 'Nastavení', fullscreen: 'Celá obrazovka',
+      controls: '⚙ Ovládání', autoRotateOn: 'Automatické otáčení: Zap', autoRotateOff: 'Automatické otáčení: Vyp', reset: 'Obnovit pohled',
+      open: 'Rozložit', fold: 'Složit', camera: 'Kamera: ', background: 'Pozadí', modelsTitle: 'Modely',
+      procedural: 'Procedurální krabička', embedded: 'Vložená GLB krabička', openGlb: 'Otevřít GLB', close: 'Zavřít',
+      presentation: 'Nastavení prezentace', resetLighting: 'Resetovat osvětlení', exportSettings: 'Exportovat nastavení',
+      importSettings: 'Importovat nastavení', exportStandalone: 'Exportovat standalone', hint: 'Tažením otáčejte · kolečkem přibližujte · pravým tlačítkem posouvejte',
+    },
+    de: {
+      brand: 'CartonBuilder · 3D-Betrachter', models: 'Modelle', settings: 'Einstellungen', fullscreen: 'Vollbild',
+      controls: '⚙ Steuerung', autoRotateOn: 'Auto-Rotation: Ein', autoRotateOff: 'Auto-Rotation: Aus', reset: 'Ansicht zurücksetzen',
+      open: 'Entfalten', fold: 'Falten', camera: 'Kamera: ', background: 'Hintergrund', modelsTitle: 'Modelle',
+      procedural: 'Prozedurale Schachtel', embedded: 'Eingebettete GLB-Schachtel', openGlb: 'GLB öffnen', close: 'Schließen',
+      presentation: 'Präsentationseinstellungen', resetLighting: 'Beleuchtung zurücksetzen', exportSettings: 'Einstellungen exportieren',
+      importSettings: 'Einstellungen importieren', exportStandalone: 'Exportieren standalone', hint: 'Ziehen zum Drehen · Mausrad zum Zoomen · Rechtsklick zum Schwenken',
+    },
   };
 
   function applyLocale() {
-    const copy = UI_COPY[state.locale === 'ru' ? 'ru' : 'en'];
+    const loc = ['ru', 'uk', 'cs', 'de'].includes(state.locale) ? state.locale : 'en';
+    const copy = UI_COPY[loc] || UI_COPY.en;
     const text = {
       brand: copy.brand, modelsButton: copy.models, settingsButton: copy.settings, fullscreen: copy.fullscreen,
       panelToggle: copy.controls, reset: copy.reset, open: copy.open, close: copy.fold,
@@ -175,7 +200,7 @@ const VIEWER_SCRIPT = `
     }
     autoRotateBtn.textContent = autoRotateEnabled ? copy.autoRotateOn : copy.autoRotateOff;
     cameraToggle.textContent = copy.camera + projection;
-    document.documentElement.lang = state.locale === 'ru' ? 'ru' : 'en';
+    document.documentElement.lang = loc;
   }
 
   const nodes = new Map(DATA.nodes.map((node) => [node.id, node]));
@@ -1286,7 +1311,7 @@ const VIEWER_SCRIPT = `
     const serialized = JSON.stringify(nextData).replace(/</g, '\\u003c');
     const source = document.documentElement.outerHTML
       .replace(/(<script id="embeddedViewerData"[^>]*>)[\s\S]*?(<\/script>)/i, '$1' + serialized + '$2')
-      .replace(/<html lang="[^"]*"/i, '<html lang="' + (state.locale === 'ru' ? 'ru' : 'en') + '"');
+      .replace(/<html lang="[^"]*"/i, '<html lang="' + (['ru', 'uk', 'cs', 'de'].includes(state.locale) ? state.locale : 'en') + '"');
     const blob = new Blob(['<!doctype html>\\n', source], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1781,7 +1806,7 @@ export async function createInteractive3dHtml({
   }
 
   const presentationId = stablePresentationId(boxModel, entries);
-  const normalizedLocale = locale === 'ru' ? 'ru' : 'en';
+  const normalizedLocale = ['ru', 'uk', 'cs', 'de'].includes(locale) ? locale : 'en';
   const appearance = sanitizeBoardAppearance({
     ...(boardAppearance && typeof boardAppearance === 'object' ? boardAppearance : {}),
     thicknessMm: boxModel.board?.caliperMm ?? boardAppearance?.thicknessMm,

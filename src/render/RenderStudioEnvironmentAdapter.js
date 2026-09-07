@@ -176,6 +176,7 @@ export class RenderStudioEnvironmentAdapter {
     }
     this.proceduralTextureFactory = proceduralTextureFactory;
     this.pmremGeneratorFactory = pmremGeneratorFactory;
+    this._pmremGenerator = null;
     this.gpuBudgetBytes = gpuBudgetBytes;
     this.maxTextureSize = maxTextureSize;
     this.cache = cache || new EnvironmentRuntimeCache(cacheLimit, disposeEnvironmentEntry);
@@ -265,7 +266,6 @@ export class RenderStudioEnvironmentAdapter {
     const { texture: sourceTexture, asset } = await this._loadSourceTexture(map, assetOverride);
     let preparedTexture = null;
     let target = null;
-    let pmrem = null;
     try {
       const prepared = prepareEnvironmentTexture(
         sourceTexture,
@@ -274,10 +274,12 @@ export class RenderStudioEnvironmentAdapter {
       preparedTexture = prepared.texture;
       if (!preparedTexture) throw new Error('Environment map has no viable runtime resolution.');
 
-      pmrem = this.pmremGeneratorFactory(this.renderSurface.renderer);
+      const pmrem = this._pmremGenerator
+        || this.pmremGeneratorFactory(this.renderSurface.renderer);
       if (!isObjectLike(pmrem) || typeof pmrem.fromEquirectangular !== 'function') {
         throw new TypeError('Environment PMREM factory must provide fromEquirectangular().');
       }
+      this._pmremGenerator = pmrem;
       pmrem.compileEquirectangularShader?.();
       target = pmrem.fromEquirectangular(preparedTexture);
       if (!target?.texture) throw new Error('Environment PMREM did not return a texture.');
@@ -291,11 +293,8 @@ export class RenderStudioEnvironmentAdapter {
         dimensions: prepared.dimensions,
         disposed: false,
       };
-      pmrem.dispose?.();
-      pmrem = null;
       return entry;
     } catch (error) {
-      try { pmrem?.dispose?.(); } catch { /* preserve build error */ }
       try {
         disposeOnce([target, preparedTexture, sourceTexture]);
       } catch {
@@ -437,6 +436,8 @@ export class RenderStudioEnvironmentAdapter {
     this._currentTexture = null;
     this._currentRuntimeTexture = null;
     this._activeKey = null;
+    try { this._pmremGenerator?.dispose?.(); } catch { /* context loss is already terminal for these resources */ }
+    this._pmremGenerator = null;
     this._clearCacheBestEffort();
     return true;
   }
@@ -454,6 +455,12 @@ export class RenderStudioEnvironmentAdapter {
     this._currentRuntimeTexture = null;
     this._activeKey = null;
     let firstError = null;
+    try {
+      this._pmremGenerator?.dispose?.();
+    } catch (error) {
+      firstError ||= error;
+    }
+    this._pmremGenerator = null;
     try {
       this._clearCacheBestEffort((error) => { firstError ||= error; });
     } catch (error) {
