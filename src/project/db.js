@@ -12,10 +12,25 @@ export const RENDER_VIEW_PRESETS_STORE = 'renderViewPresets';
 export const PRESET_THUMBNAILS_STORE = 'presetThumbnails';
 
 let databasePromise = null;
+let databaseHandle = null;
+
+function invalidateDatabase(expectedPromise = null) {
+  if (expectedPromise && databasePromise !== expectedPromise) return;
+  databasePromise = null;
+  databaseHandle = null;
+}
+
+export function resetDatabase() {
+  const database = databaseHandle;
+  invalidateDatabase();
+  database?.close?.();
+}
 
 export function getDatabase() {
   if (!databasePromise) {
-    databasePromise = openDB(DATABASE_NAME, DATABASE_VERSION, {
+    let opening;
+    let openingHandle = null;
+    opening = openDB(DATABASE_NAME, DATABASE_VERSION, {
       upgrade(database) {
         if (!database.objectStoreNames.contains(PROJECTS_STORE)) {
           database.createObjectStore(PROJECTS_STORE);
@@ -39,7 +54,22 @@ export function getDatabase() {
           database.createObjectStore(PRESET_THUMBNAILS_STORE, { keyPath: 'id' });
         }
       },
+      blocking() {
+        openingHandle?.close?.();
+        invalidateDatabase(opening);
+      },
+      terminated() {
+        invalidateDatabase(opening);
+      },
     });
+    databasePromise = opening;
+    opening.then(
+      (database) => {
+        openingHandle = database;
+        if (databasePromise === opening) databaseHandle = database;
+      },
+      () => invalidateDatabase(opening),
+    );
   }
   return databasePromise;
 }

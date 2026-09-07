@@ -815,6 +815,7 @@ export function createArtworkApp({
       .then(async () => {
         if (disposed) return false;
         await saveCurrentProject(payload);
+        if (currentErrorFallback === 'autosaveFailed') clearError();
         return true;
       })
       .catch((error) => {
