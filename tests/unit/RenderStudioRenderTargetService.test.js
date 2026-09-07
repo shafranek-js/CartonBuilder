@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SRGBColorSpace } from 'three';
+import { HalfFloatType, SRGBColorSpace } from 'three';
 
 import { RenderStudioRenderTargetService } from '../../src/render/RenderStudioRenderTargetService.js';
 
@@ -247,6 +247,32 @@ describe('RenderStudioRenderTargetService', () => {
     const syncOutput = await syncResult.service.renderToPixels({ width: 4, height: 3 });
     expect(syncResult.surface.renderer.readRenderTargetPixels).toHaveBeenCalledTimes(1);
     expect(syncOutput.pixels[0]).toBe(7);
+  });
+
+  it('uses a typed readback buffer for half-float post-processing targets', async () => {
+    const halfFloatTarget = makeTarget(4, 3, {});
+    halfFloatTarget.texture.type = HalfFloatType;
+    const result = makeService({
+      renderTargetFactory: vi.fn(() => halfFloatTarget),
+    });
+    result.surface.renderer.readRenderTargetPixelsAsync = vi.fn(async (
+      target,
+      x,
+      y,
+      width,
+      height,
+      pixels,
+    ) => {
+      expect(target).toBe(halfFloatTarget);
+      expect([x, y, width, height]).toEqual([0, 0, 4, 3]);
+      expect(pixels).toBeInstanceOf(Uint16Array);
+      pixels.fill(0x3c00); // IEEE-754 half-float 1.0
+    });
+
+    const output = await result.service.renderToPixels({ width: 4, height: 3 });
+
+    expect(output.pixels).toBeInstanceOf(Uint8Array);
+    expect([...output.pixels]).toEqual(new Array(4 * 3 * 4).fill(255));
   });
 
   it('uses the requested output aspect for perspective and orthographic cameras', async () => {

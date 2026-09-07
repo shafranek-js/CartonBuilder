@@ -1,5 +1,11 @@
 import {
+  FloatType,
+  HalfFloatType,
+  RedFormat,
+  RGFormat,
+  RGBFormat,
   SRGBColorSpace,
+  UnsignedByteType,
   Vector2,
   WebGLRenderTarget,
 } from 'three';
@@ -198,6 +204,91 @@ function resolveOverrideTarget(overrideResult, fallback) {
   );
 }
 
+function readbackChannelCount(format) {
+  if (format === RedFormat) return 1;
+  if (format === RGFormat) return 2;
+  if (format === RGBFormat) return 3;
+  return 4;
+}
+
+function decodeHalfFloat(value) {
+  const sign = (value & 0x8000) === 0 ? 1 : -1;
+  const exponent = (value >> 10) & 0x1f;
+  const fraction = value & 0x03ff;
+  if (exponent === 0) return sign * 2 ** -14 * (fraction / 1024);
+  if (exponent === 0x1f) return fraction === 0 ? sign * Infinity : Number.NaN;
+  return sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
+}
+
+function toByte(value) {
+  if (!Number.isFinite(value)) return value === Infinity ? 255 : 0;
+  return Math.max(0, Math.min(255, Math.round(value * 255)));
+}
+
+function createPixelReadback(target, width, height) {
+  const channels = readbackChannelCount(target?.texture?.format);
+  const type = target?.texture?.type;
+  const sampleCount = width * height * channels;
+  if (type === HalfFloatType) {
+    const buffer = new Uint16Array(sampleCount);
+    return {
+      buffer,
+      toRgba: () => {
+        const rgba = new Uint8Array(width * height * 4);
+        for (let pixel = 0; pixel < width * height; pixel += 1) {
+          const sourceOffset = pixel * channels;
+          const targetOffset = pixel * 4;
+          for (let channel = 0; channel < Math.min(channels, 3); channel += 1) {
+            rgba[targetOffset + channel] = toByte(decodeHalfFloat(buffer[sourceOffset + channel]));
+          }
+          rgba[targetOffset + 3] = channels === 4
+            ? toByte(decodeHalfFloat(buffer[sourceOffset + 3]))
+            : 255;
+        }
+        return rgba;
+      },
+    };
+  }
+  if (type === FloatType) {
+    const buffer = new Float32Array(sampleCount);
+    return {
+      buffer,
+      toRgba: () => {
+        const rgba = new Uint8Array(width * height * 4);
+        for (let pixel = 0; pixel < width * height; pixel += 1) {
+          const sourceOffset = pixel * channels;
+          const targetOffset = pixel * 4;
+          for (let channel = 0; channel < Math.min(channels, 3); channel += 1) {
+            rgba[targetOffset + channel] = toByte(buffer[sourceOffset + channel]);
+          }
+          rgba[targetOffset + 3] = channels === 4 ? toByte(buffer[sourceOffset + 3]) : 255;
+        }
+        return rgba;
+      },
+    };
+  }
+
+  const buffer = new Uint8Array(sampleCount);
+  if (channels === 4 || type === UnsignedByteType || type === undefined) {
+    return { buffer, toRgba: () => buffer };
+  }
+  return {
+    buffer,
+    toRgba: () => {
+      const rgba = new Uint8Array(width * height * 4);
+      for (let pixel = 0; pixel < width * height; pixel += 1) {
+        const sourceOffset = pixel * channels;
+        const targetOffset = pixel * 4;
+        for (let channel = 0; channel < Math.min(channels, 3); channel += 1) {
+          rgba[targetOffset + channel] = buffer[sourceOffset + channel];
+        }
+        rgba[targetOffset + 3] = 255;
+      }
+      return rgba;
+    },
+  };
+}
+
 /**
  * Owns short-lived offscreen render targets for Render Studio stills and
  * turntable frames. Surface and appearance controller remain caller-owned.
@@ -306,7 +397,7 @@ export class RenderStudioRenderTargetService {
       if (!overrideResult) renderer.render(renderSurface.scene, this.surface.renderSurface.camera);
 
       const pixelsTarget = resolveOverrideTarget(overrideResult, target);
-      const pixels = new Uint8Array(outputWidth * outputHeight * 4);
+      const readback = createPixelReadback(pixelsTarget, outputWidth, outputHeight);
       if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
         await renderer.readRenderTargetPixelsAsync(
           pixelsTarget,
@@ -314,7 +405,7 @@ export class RenderStudioRenderTargetService {
           0,
           outputWidth,
           outputHeight,
-          pixels,
+          readback.buffer,
         );
       } else {
         renderer.readRenderTargetPixels(
@@ -323,12 +414,12 @@ export class RenderStudioRenderTargetService {
           0,
           outputWidth,
           outputHeight,
-          pixels,
+          readback.buffer,
         );
       }
       assertNotAborted(signal);
       return {
-        pixels,
+        pixels: readback.toRgba(),
         width: outputWidth,
         height: outputHeight,
       };
