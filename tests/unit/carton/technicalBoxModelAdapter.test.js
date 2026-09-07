@@ -37,6 +37,13 @@ function withPresentationTransform(document, transform) {
   };
 }
 
+function signedPolygonArea(polygon) {
+  return polygon.reduce((area, point, index) => {
+    const next = polygon[(index + 1) % polygon.length];
+    return area + point.x * next.y - next.x * point.y;
+  }, 0) / 2;
+}
+
 describe('technical artwork compatibility model', () => {
   it('projects semantic surfaces into the persisted SVG presentation without changing the source document', async () => {
     const bundle = loadFixture('rte');
@@ -133,6 +140,28 @@ describe('technical artwork compatibility model', () => {
       });
     }
   }
+
+  it('keeps every artwork cap on the exterior after rotation or reflection', async () => {
+    const document = await TechnicalCartonDocument.create(loadFixture('rte'));
+    const identityAdapter = createTechnicalBoxModelAdapter(withPresentationTransform(
+      document,
+      presentationTransforms.identity,
+    ));
+    const identityAreas = new Map(identityAdapter.getArtworkSurfaces().map((surface) => [
+      surface.id,
+      signedPolygonArea(surface.polygon),
+    ]));
+
+    for (const transform of Object.values(presentationTransforms)) {
+      const adapter = createTechnicalBoxModelAdapter(withPresentationTransform(document, transform));
+      for (const surface of adapter.getArtworkSurfaces()) {
+        const identityArea = identityAreas.get(surface.id);
+        const projectedArea = signedPolygonArea(surface.polygon);
+        expect(Math.abs(projectedArea)).toBeCloseTo(Math.abs(identityArea), 6);
+        expect(Math.sign(projectedArea)).toBe(Math.sign(identityArea));
+      }
+    }
+  });
 
   it('fails closed when body.front is absent or its projected bounds are invalid', async () => {
     const document = await TechnicalCartonDocument.create(loadFixture('rte'));

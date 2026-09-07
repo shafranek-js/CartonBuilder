@@ -77,12 +77,16 @@ export function createTechnicalBoxModelAdapter(document) {
   });
   const transformSurface = (surface) => {
     const polygon = surfacePolygon(surface).map(presentation.projectPoint);
+    // A reflection reverses winding even though the presentation transform is
+    // not allowed to change which cap is the physical exterior face. Restore
+    // the source winding before consumers triangulate the artwork cap.
+    const outsidePolygon = presentation.determinant < 0 ? polygon.reverse() : polygon;
     const contour = {
       ...(surface.contour || {}),
       segments: (surface.contour?.segments || []).map(transformSegment),
       closed: surface.contour?.closed !== false,
     };
-    return { ...surface, polygon, contour, bounds: boundsOf(polygon) };
+    return { ...surface, polygon: outsidePolygon, contour, bounds: boundsOf(outsidePolygon) };
   };
   const transformedSurfaces = document.getArtworkSurfaces().map(transformSurface);
   const artworkReferenceFrame = createArtworkReferenceFrame(transformedSurfaces);
